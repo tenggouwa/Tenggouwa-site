@@ -99,13 +99,34 @@ class PtySession:
         except OSError:
             logger.debug("resize failed", exc_info=True)
 
-    def kill(self) -> None:
+    async def kill_async(self) -> None:
+        """异步杀掉 pty 子进程，绝不阻塞 event loop。
+
+        老版本直接在 event loop 上调 `self.proc.wait()`，如果 shell 里挂了
+        SIGTERM 吃不动的前台进程（vim / claude / nvm 等），wait 永远不返回，
+        整个 agent 就僵尸了：进程活着、socket 早被 OS 关掉、零日志。
+        """
+        if not self.proc.isalive():
+            return
+        loop = asyncio.get_running_loop()
         try:
-            if self.proc.isalive():
-                self.proc.kill(signal.SIGTERM)
-                self.proc.wait()
+            await loop.run_in_executor(None, self.proc.kill, signal.SIGTERM)
         except Exception:  # noqa: BLE001
-            pass
+            logger.exception("SIGTERM failed")
+        for _ in range(10):
+            await asyncio.sleep(0.1)
+            if not self.proc.isalive():
+                break
+        else:
+            logger.warning("pty did not exit after SIGTERM, escalating to SIGKILL")
+            try:
+                await loop.run_in_executor(None, self.proc.kill, signal.SIGKILL)
+            except Exception:  # noqa: BLE001
+                logger.exception("SIGKILL failed")
+        try:
+            await asyncio.wait_for(loop.run_in_executor(None, self.proc.wait), timeout=2.0)
+        except (TimeoutError, Exception):  # noqa: BLE001
+            logger.warning("pty reap timed out; leaving as zombie for init to handle")
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +221,13 @@ class Agent:
                         return
             except asyncio.CancelledError:
                 pass
+            except Exception:  # noqa: BLE001
+                # 不能让心跳静默死，否则就回到老 bug：进程活但没人监工
+                logger.exception("heartbeat task crashed; closing ws to force reconnect")
+                try:
+                    await ws.close(code=4001, reason="heartbeat crashed")
+                except Exception:  # noqa: BLE001
+                    pass
 
         def ensure_pty() -> PtySession:
             nonlocal pty, pty_task
@@ -217,7 +245,8 @@ class Agent:
             if pty_task is not None and not pty_task.done():
                 pty_task.cancel()
             if pty is not None:
-                pty.kill()
+                # fire-and-forget；kill_async 自己带 timeout，不会卡 event loop
+                asyncio.create_task(pty.kill_async())
                 asyncio.create_task(report_pty(False))
             pty = None
             pty_task = None
