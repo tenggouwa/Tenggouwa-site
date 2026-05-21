@@ -1,6 +1,8 @@
 fastapi:
   port: 10095
-  workers: 2
+  # 必须 1：终端 broker 是 per-worker 内存状态，多 worker 会出现
+  # agent 连 A、admin/console 连 B 找不到对方的情况。横向扩需要换 Redis pubsub。
+  workers: 1
   cors_allow_origins:
     - "https://tenggouwa.github.io"
 
