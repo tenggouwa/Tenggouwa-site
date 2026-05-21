@@ -3,6 +3,7 @@ import {
   Button,
   Form,
   Input,
+  InputTag,
   Message,
   Modal,
   Popconfirm,
@@ -10,8 +11,19 @@ import {
   Table,
   Tag,
 } from '@arco-design/web-react';
+import MDEditor from '@uiw/react-md-editor';
+import '@uiw/react-md-editor/markdown-editor.css';
 import { http } from '../lib/api';
 import type { Post, PostCreate } from '../lib/types';
+
+function slugify(title: string): string {
+  // 只保留 ASCII：中文标题留个手输的余地（提示文案里说了）
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
 
 export default function PostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -39,6 +51,7 @@ export default function PostsPage() {
     form.resetFields();
     setOpen(true);
   }
+
   function openEdit(row: Post) {
     setEditing(row);
     form.setFieldsValue({
@@ -51,13 +64,21 @@ export default function PostsPage() {
     setOpen(true);
   }
 
+  // 创建模式下，slug 还没被用户改过时，跟着 title 自动联想
+  function onTitleChange(value: string) {
+    if (editing) return;
+    const current = form.getFieldValue('slug') as string | undefined;
+    if (current && current !== slugify((form.getFieldValue('title') as string) ?? '')) {
+      return;
+    }
+    form.setFieldValue('slug', slugify(value));
+  }
+
   async function submit() {
     const values = await form.validate();
     const payload: PostCreate = {
       ...values,
-      tags: typeof values.tags === 'string'
-        ? (values.tags as unknown as string).split(',').map((t) => t.trim()).filter(Boolean)
-        : values.tags,
+      tags: values.tags ?? [],
     };
     if (editing) {
       await http.put(`/api/admin/posts/${editing.id}`, payload);
@@ -134,29 +155,49 @@ export default function PostsPage() {
         visible={open}
         onCancel={() => setOpen(false)}
         onOk={submit}
-        style={{ width: 720 }}
+        style={{ width: 'min(1100px, 95vw)', top: 32 }}
+        unmountOnExit
       >
         <Form form={form} layout="vertical">
-          <Form.Item field="slug" label="Slug" rules={[{ required: true }]}>
-            <Input placeholder="my-first-post" />
-          </Form.Item>
-          <Form.Item field="title" label="标题" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
+          <div className="grid grid-cols-2 gap-4">
+            <Form.Item field="title" label="标题" rules={[{ required: true }]}>
+              <Input
+                placeholder="文章标题"
+                onChange={onTitleChange}
+              />
+            </Form.Item>
+            <Form.Item
+              field="slug"
+              label="Slug (URL 路径)"
+              extra="只允许 a-z 0-9 -；中文标题需手输"
+              rules={[
+                { required: true },
+                { match: /^[a-z0-9][a-z0-9-]*$/, message: '格式不对' },
+              ]}
+            >
+              <Input placeholder="my-first-post" />
+            </Form.Item>
+          </div>
           <Form.Item field="summary" label="摘要">
-            <Input.TextArea autoSize={{ minRows: 2, maxRows: 3 }} />
+            <Input.TextArea autoSize={{ minRows: 2, maxRows: 3 }} maxLength={500} showWordLimit />
+          </Form.Item>
+          <Form.Item field="tags" label="标签" triggerPropName="value">
+            <InputTag placeholder="回车确认每个标签" allowClear />
           </Form.Item>
           <Form.Item
-            field="tags"
-            label="标签（逗号分隔）"
-            normalize={(v: unknown) =>
-              Array.isArray(v) ? v.join(',') : (v as string | undefined)
-            }
+            field="content"
+            label="正文 Markdown"
+            rules={[{ required: true, message: '正文不能为空' }]}
+            triggerPropName="value"
           >
-            <Input placeholder="react, vite" />
-          </Form.Item>
-          <Form.Item field="content" label="正文 Markdown" rules={[{ required: true }]}>
-            <Input.TextArea autoSize={{ minRows: 10, maxRows: 20 }} />
+            <MDEditor
+              height={520}
+              preview="live"
+              data-color-mode="light"
+              previewOptions={{
+                // GFM 表格 / 任务列表已默认启用
+              }}
+            />
           </Form.Item>
         </Form>
       </Modal>

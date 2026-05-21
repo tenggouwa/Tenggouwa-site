@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@arco-design/web-react": "^2.66.1",
+    "@uiw/react-md-editor": "^4.0.5",
     "axios": "^1.7.7",
     "clsx": "^2.1.1",
     "react": "^18.3.1",
