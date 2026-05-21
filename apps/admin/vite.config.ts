@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiTarget,
           changeOrigin: true,
+          // 转发 WebSocket（终端 / 未来的实时接口需要）
+          ws: true,
         },
       },
     },

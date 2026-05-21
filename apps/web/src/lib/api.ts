@@ -41,6 +41,8 @@ async function apiRequest<T>(
       ...(init?.headers ?? {}),
     },
     body: body == null ? undefined : JSON.stringify(body),
+    // 跨站请求带上 cookie（console 流程需要 tg_trust 7d 信任 cookie）
+    credentials: 'include',
     ...init,
   });
   if (!res.ok) {

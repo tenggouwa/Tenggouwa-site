@@ -7,6 +7,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import PostsPage from './pages/PostsPage';
 import InspirationsPage from './pages/InspirationsPage';
 import SettingsPage from './pages/SettingsPage';
+import TerminalPage from './pages/TerminalPage';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="posts" element={<PostsPage />} />
           <Route path="inspirations" element={<InspirationsPage />} />
+          <Route path="terminal" element={<TerminalPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

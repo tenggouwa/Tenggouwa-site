@@ -52,6 +52,73 @@ class InspirationRow(Base):
     __table_args__ = (Index("ix_inspiration_created_at", "created_at"),)
 
 
+class AdminTotpRow(Base):
+    """每个管理员一行；secret 已存就是已生成，enrolled_at 不为 NULL 才算正式启用。"""
+
+    __tablename__ = "admin_totp"
+
+    username: Mapped[str] = mapped_column(String(64), primary_key=True)
+    secret_b32: Mapped[str] = mapped_column(String(64), nullable=False)
+    enrolled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    disabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+class AgentRow(Base):
+    """终端 agent（一台 Mac 一个）。token 只存哈希。"""
+
+    __tablename__ = "agent"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    owner: Mapped[str] = mapped_column(String(64), nullable=False)  # admin 用户名
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+
+class TerminalSessionRow(Base):
+    """每次终端开启一行，便于审计。"""
+
+    __tablename__ = "terminal_session"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_id: Mapped[int] = mapped_column(nullable=False)
+    owner: Mapped[str] = mapped_column(String(64), nullable=False)
+    opened_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    bytes_in: Mapped[int] = mapped_column(nullable=False, default=0)
+    bytes_out: Mapped[int] = mapped_column(nullable=False, default=0)
+    unlock_method: Mapped[str] = mapped_column(String(16), nullable=False)  # 'voice' | 'totp'
+    voice_transcript: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client_ua: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
 class PageViewRow(Base):
     """埋点 PV 表。每个页面浏览写一行；UV 通过 (visitor_hash, ts::date) 去重得出。"""
 

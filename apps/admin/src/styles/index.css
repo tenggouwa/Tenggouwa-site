@@ -12,3 +12,8 @@ body,
 body {
   margin: 0;
 }
+
+/* 隐藏快捷键栏的横向滚动条（webkit），保持触屏可滑*/
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

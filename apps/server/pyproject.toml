@@ -21,6 +21,7 @@ dependencies = [
     "psutil==7.0.0",
     "pydantic==2.11.7",
     "PyJWT==2.10.1",
+    "pyotp==2.9.0",
     "python-dotenv==1.1.1",
     "python-multipart==0.0.20",
     "redis==6.1.0",

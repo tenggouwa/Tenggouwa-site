@@ -37,5 +37,9 @@ __pycache__/
 *.swp
 *.swo
 
+# nvm typo 误生成的奇葩文件
+1export
+**/1export
+
 # 服务器日志
 apps/server/logs/

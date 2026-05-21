@@ -7,6 +7,8 @@ const baseURL: string = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
 export const http = axios.create({
   baseURL,
   timeout: 15_000,
+  // 让 7d 信任 cookie (tg_trust) 自动跟随 admin 域 → api.tenggouwa.com 跨站请求
+  withCredentials: true,
 });
 
 http.interceptors.request.use((cfg) => {
@@ -17,6 +19,10 @@ http.interceptors.request.use((cfg) => {
   }
   return cfg;
 });
+
+// 某些 401 是"提权失败"而非"会话过期"——不要踢用户出去。
+// 后端配合：unlock 之类的失败应该用 403。这里再加一道保险，避免再有疏忽。
+const NO_LOGOUT_PATHS = ['/api/admin/terminal/unlock'];
 
 http.interceptors.response.use(
   (res) => {
@@ -31,7 +37,11 @@ http.interceptors.response.use(
     return body;
   },
   (err: AxiosError<{ detail?: string; message?: string }>) => {
-    if (err.response?.status === 401) {
+    const status = err.response?.status;
+    const url = err.config?.url ?? '';
+    const skipLogout = NO_LOGOUT_PATHS.some((p) => url.includes(p));
+
+    if (status === 401 && !skipLogout) {
       useAuth.getState().setToken(null);
       Message.error('登录已失效，请重新登录');
       if (!window.location.pathname.endsWith('/login')) {

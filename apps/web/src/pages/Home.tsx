@@ -54,6 +54,16 @@ export default function Home() {
           accent="text-terminal-pink"
         />
       </section>
+
+      {/* 入口很隐蔽：只有需要进 console 的人会留意，对一般访客只是一段闪光的命令 */}
+      <Link
+        to="/console"
+        className="block text-xs font-mono text-terminal-gray/60 hover:text-terminal-green transition-colors select-none"
+      >
+        <span className="text-terminal-pink">$</span>{' '}
+        ssh me@<span className="text-terminal-yellow">mac</span>{' '}
+        <span className="text-terminal-gray/40"># open console →</span>
+      </Link>
     </div>
   );
 }

@@ -1,0 +1,18 @@
+[project]
+name = "tenggouwa-mac-agent"
+version = "0.0.1"
+description = "Mac 侧常驻 daemon：把本地 pty 通过 WSS 暴露到 api.tenggouwa.com。"
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "websockets==13.1",
+    "ptyprocess==0.7.0",
+]
+
+[project.scripts]
+tenggouwa-agent = "agent.main:cli"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
