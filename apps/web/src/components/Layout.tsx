@@ -1,5 +1,7 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
+import { trackPageView } from '../lib/track';
 
 const NAV = [
   { to: '/', label: '~', exact: true },
@@ -10,6 +12,12 @@ const NAV = [
 ];
 
 export default function Layout() {
+  const loc = useLocation();
+  useEffect(() => {
+    // 路由切换 + 首次进入，都打一次 PV
+    trackPageView(loc.pathname);
+  }, [loc.pathname]);
+
   return (
     <div className="min-h-full flex flex-col">
       <header className="border-b border-terminal-line/60 backdrop-blur sticky top-0 z-50 bg-terminal-bg/70">

@@ -8,6 +8,7 @@ const Content = Layout.Content;
 const MenuItem = Menu.Item;
 
 const MENU = [
+  { key: 'analytics', label: '站点分析' },
   { key: 'posts', label: '文章管理' },
   { key: 'inspirations', label: '小灵感' },
   { key: 'settings', label: '站点设置' },

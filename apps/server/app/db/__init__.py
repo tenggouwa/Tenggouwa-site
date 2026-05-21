@@ -1,6 +1,6 @@
 """数据库层：Postgres async engine + ORM models。"""
 
-from .models import InspirationRow, PostRow
+from .models import InspirationRow, PageViewRow, PostRow
 from .pg import Base, async_pg, get_session
 
 __all__ = [
@@ -9,4 +9,5 @@ __all__ = [
     "get_session",
     "PostRow",
     "InspirationRow",
+    "PageViewRow",
 ]

@@ -50,3 +50,30 @@ class InspirationRow(Base):
     )
 
     __table_args__ = (Index("ix_inspiration_created_at", "created_at"),)
+
+
+class PageViewRow(Base):
+    """埋点 PV 表。每个页面浏览写一行；UV 通过 (visitor_hash, ts::date) 去重得出。"""
+
+    __tablename__ = "page_view"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    path: Mapped[str] = mapped_column(String(500), nullable=False)
+    referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(8), nullable=True)  # CF-IPCountry 两位国家码
+    browser: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    os: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_mobile: Mapped[bool] = mapped_column(nullable=False, default=False)
+    # sha256(ip + ua + YYYYMMDD)[:32]：当日 UV 去重用，不存 IP / UA
+    visitor_hash: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (
+        Index("ix_page_view_ts", "ts"),
+        Index("ix_page_view_path_ts", "path", "ts"),
+        Index("ix_page_view_visitor_hash", "visitor_hash"),
+    )
