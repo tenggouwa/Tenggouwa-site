@@ -3,6 +3,12 @@
 
 FROM python:3.12-slim
 
+# 国内构建用阿里云 PyPI 镜像，避免 files.pythonhosted.org 超时
+ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ \
+    PIP_TRUSTED_HOST=mirrors.aliyun.com \
+    UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ \
+    UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/
+
 # 安装 uv（极快的依赖管理）
 RUN pip install --no-cache-dir uv==0.4.27
 

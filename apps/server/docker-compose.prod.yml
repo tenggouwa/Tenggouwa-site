@@ -11,6 +11,9 @@
 #
 # 销库重来（注意 -v 会删数据卷）：
 #   docker compose -f docker-compose.prod.yml down -v
+#
+# 注意：app 服务用 `env_file:` 直接把 .env 喂进容器，不走 compose 的 ${VAR}
+# 插值——避免 bcrypt 哈希里的 $ 被 docker compose 当成变量引用导致值被吞。
 
 services:
   postgres:
@@ -36,11 +39,10 @@ services:
     image: tenggouwa-server:latest
     container_name: tenggouwa-app
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       ENV: prod
-      POSTGRES_DEFAULT_PASSWORD: ${POSTGRES_DEFAULT_PASSWORD}
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
-      ADMIN_TENGGOUWA_PASSWORD_HASH: ${ADMIN_TENGGOUWA_PASSWORD_HASH}
     depends_on:
       postgres:
         condition: service_healthy
