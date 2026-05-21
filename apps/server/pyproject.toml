@@ -3,7 +3,7 @@ name = "tenggouwa-server"
 version = "0.0.1"
 description = "Tenggouwa monorepo backend (FastAPI)."
 readme = "README.md"
-requires-python = "==3.12.11"
+requires-python = ">=3.12,<3.13"
 
 dependencies = [
     "PyYAML==6.0.2",
