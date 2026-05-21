@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Spin, Empty } from '@arco-design/web-react';
+import { Empty } from '@arco-design/web-react';
 import { apiGet } from '../lib/api';
+import TermLoading from '../components/TermLoading';
 import type { Inspiration } from '../lib/types';
 
 export default function Inspirations() {
@@ -22,11 +23,7 @@ export default function Inspirations() {
     );
   }
   if (list == null) {
-    return (
-      <div className="py-20 text-center">
-        <Spin tip="加载灵感中..." />
-      </div>
-    );
+    return <TermLoading tip={['tailing thoughts.log...', 'sorting by mood...']} />;
   }
   if (list.length === 0) {
     return <Empty description="脑袋空空 —— 还没有小灵感。" />;

@@ -20,7 +20,7 @@ const LINES = [
 export default function Home() {
   return (
     <div className="space-y-10">
-      <pre className="text-terminal-green text-[10px] md:text-xs leading-tight shadow-glow">
+      <pre className="text-terminal-green text-[10px] md:text-xs leading-tight shadow-glow overflow-x-auto">
         {ASCII}
       </pre>
 

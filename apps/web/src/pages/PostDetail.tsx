@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Spin, Tag } from '@arco-design/web-react';
+import { Tag } from '@arco-design/web-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { apiGet } from '../lib/api';
+import TermLoading from '../components/TermLoading';
 import type { Post } from '../lib/types';
 
 export default function PostDetail() {
@@ -36,11 +37,7 @@ export default function PostDetail() {
   }
 
   if (!post) {
-    return (
-      <div className="py-20 text-center">
-        <Spin tip="加载中..." />
-      </div>
-    );
+    return <TermLoading tip={['resolving slug...', 'fetching markdown...', 'rendering...']} />;
   }
 
   return (

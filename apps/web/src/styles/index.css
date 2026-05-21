@@ -11,6 +11,12 @@ body,
   height: 100%;
 }
 
+/* 兜底：任何子元素意外溢出宽度时，整页不再产生横向滚动条
+   （clip 不会创建滚动上下文，所以 sticky header 仍然有效）*/
+html {
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   background-color: #0b0f10;

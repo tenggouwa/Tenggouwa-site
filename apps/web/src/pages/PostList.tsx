@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Spin, Tag, Empty } from '@arco-design/web-react';
+import { Tag, Empty } from '@arco-design/web-react';
 import { apiGet } from '../lib/api';
+import TermLoading from '../components/TermLoading';
 import type { PostSummary } from '../lib/types';
 
 export default function PostList() {
@@ -24,11 +25,7 @@ export default function PostList() {
   }
 
   if (posts == null) {
-    return (
-      <div className="py-20 text-center">
-        <Spin tip="加载文章中..." />
-      </div>
-    );
+    return <TermLoading tip={['fetching posts...', 'parsing markdown...', 'almost there...']} />;
   }
 
   if (posts.length === 0) {
