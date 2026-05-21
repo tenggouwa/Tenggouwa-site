@@ -48,6 +48,11 @@ class AuthService:
         admins = config.get("auth.admins") or []
         for a in admins:
             if isinstance(a, dict) and a.get("username") == username:
+                # 允许通过环境变量 ADMIN_<USERNAME>_PASSWORD_HASH 注入哈希，
+                # 这样 config-prod.yml 不用提交密码哈希。
+                override = config.get(f"ADMIN_{username.upper()}_PASSWORD_HASH")
+                if override:
+                    return {**a, "password_hash": override}
                 return a
         return None
 
@@ -69,7 +74,8 @@ class AuthService:
 
     @staticmethod
     def _sign_jwt(username: str, ttl: int) -> str:
-        secret = config.get("auth.jwt_secret")
+        # 优先环境变量，再回退 yaml
+        secret = config.get("AUTH_JWT_SECRET") or config.get("auth.jwt_secret")
         if not secret:
             raise DetailedHTTPException(
                 status_code=500,

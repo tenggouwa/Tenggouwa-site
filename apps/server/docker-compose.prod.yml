@@ -1,0 +1,60 @@
+# 生产 stack：postgres + fastapi app + cloudflared tunnel
+# 全部走 docker，宿主机不需要装 Python / nginx / postgresql。
+#
+# 启动：
+#   cd ~/apps/Tenggouwa-server
+#   cp -n .env.prod.sample .env       # 第一次：填好所有 secret
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# 看日志：
+#   docker compose -f docker-compose.prod.yml logs -f app
+#
+# 销库重来（注意 -v 会删数据卷）：
+#   docker compose -f docker-compose.prod.yml down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tenggouwa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tenggouwa
+      POSTGRES_PASSWORD: ${POSTGRES_DEFAULT_PASSWORD}
+      POSTGRES_DB: tenggouwa
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tenggouwa -d tenggouwa"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tenggouwa-server:latest
+    container_name: tenggouwa-app
+    restart: unless-stopped
+    environment:
+      ENV: prod
+      POSTGRES_DEFAULT_PASSWORD: ${POSTGRES_DEFAULT_PASSWORD}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
+      ADMIN_TENGGOUWA_PASSWORD_HASH: ${ADMIN_TENGGOUWA_PASSWORD_HASH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # 端口不发布到宿主机：cloudflared 在同一个 docker 网络里通过 app:10095 转发
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: tenggouwa-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
+
+volumes:
+  pg_data:

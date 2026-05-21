@@ -27,7 +27,7 @@ async def current_admin(
         raise HTTPException(status_code=401, detail="missing bearer token")
 
     token = authorization.split(" ", 1)[1].strip()
-    secret = config.get("auth.jwt_secret")
+    secret = config.get("AUTH_JWT_SECRET") or config.get("auth.jwt_secret")
     if not secret:
         logger.error("auth.jwt_secret is not configured")
         raise HTTPException(status_code=500, detail="server auth misconfigured")

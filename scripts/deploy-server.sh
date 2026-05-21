@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# 把 apps/server 同步到阿里云（ssh openclaw）并重启服务。
+# 把 apps/server 同步到阿里云并用 docker compose 启动 / 升级。
 #
 # 远端约定：
+#   - 装了 docker + compose plugin
 #   - 部署目录：~/apps/Tenggouwa-server/
-#   - systemd user unit：tenggouwa-server.service（见 deploy/systemd/）
-#   - 远端已装 uv（curl -LsSf https://astral.sh/uv/install.sh | sh）
+#   - 第一次部署前，远端先放一份 .env（从 .env.prod.sample 复制并填好 secret）
 #
 # 用法：
 #   pnpm deploy:server
@@ -14,12 +14,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REMOTE="${REMOTE:-openclaw}"
 REMOTE_PATH="${REMOTE_PATH:-~/apps/Tenggouwa-server}"
-SERVICE="${SERVICE:-tenggouwa-server.service}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 
-echo "==> rsync apps/server → $REMOTE:$REMOTE_PATH"
-# shellcheck disable=SC2029
+echo "==> 确保远端目录存在"
 ssh "$REMOTE" "mkdir -p $REMOTE_PATH"
 
+echo "==> rsync apps/server → $REMOTE:$REMOTE_PATH"
 rsync -avz --delete \
   --exclude '.venv' \
   --exclude '__pycache__' \
@@ -29,15 +29,18 @@ rsync -avz --delete \
   --exclude '.env' \
   "$ROOT/apps/server/" "$REMOTE:$REMOTE_PATH/"
 
-echo "==> 远端 uv sync + 重启服务"
-# shellcheck disable=SC2029
+echo "==> 远端 docker compose 拉起 / 重建"
 ssh "$REMOTE" bash -lc "'
   set -e
   cd $REMOTE_PATH
-  uv sync --all-extras
-  systemctl --user daemon-reload
-  systemctl --user restart $SERVICE
-  systemctl --user status --no-pager $SERVICE | head -n 12
+  if [ ! -f .env ]; then
+    echo \"!! 远端缺少 .env，请先 cp .env.prod.sample .env 并填好 secret\"
+    exit 1
+  fi
+  docker compose -f $COMPOSE_FILE --env-file .env up -d --build
+  echo
+  echo \"--- 容器状态 ---\"
+  docker compose -f $COMPOSE_FILE ps
 '"
 
-echo "==> 部署完成。"
+echo "==> 部署完成。看日志：ssh $REMOTE 'cd $REMOTE_PATH && docker compose -f $COMPOSE_FILE logs -f app'"

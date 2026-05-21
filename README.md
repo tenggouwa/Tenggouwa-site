@@ -1,6 +1,6 @@
 # Tenggouwa-site
 
-腾构娃的个人 monorepo。
+Tenggouwa的个人 monorepo。
 
 ```
 apps/

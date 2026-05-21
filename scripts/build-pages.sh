@@ -20,12 +20,13 @@ echo "==> 清理 pages-dist/"
 rm -rf pages-dist
 mkdir -p pages-dist
 
-echo "==> 构建 apps/web (base=$WEB_BASE)"
-VITE_BASE="$WEB_BASE" pnpm --filter @tenggouwa/web build
+: "${VITE_API_BASE:=}"
+echo "==> 构建 apps/web (base=$WEB_BASE, api=${VITE_API_BASE:-<empty>})"
+VITE_BASE="$WEB_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/web build
 cp -R apps/web/dist/. pages-dist/
 
-echo "==> 构建 apps/admin (base=$ADMIN_BASE)"
-VITE_BASE="$ADMIN_BASE" pnpm --filter @tenggouwa/admin build
+echo "==> 构建 apps/admin (base=$ADMIN_BASE, api=${VITE_API_BASE:-<empty>})"
+VITE_BASE="$ADMIN_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/admin build
 mkdir -p pages-dist/admin
 cp -R apps/admin/dist/. pages-dist/admin/
 

@@ -40,6 +40,9 @@ jobs:
       - name: Build pages
         env:
           REPO_NAME: ${{ github.event.repository.name }}
+          # 在 repo Settings → Secrets and variables → Actions → Variables
+          # 加一个 VITE_API_BASE = https://api.<你的域名>
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
         run: bash scripts/build-pages.sh
 
       - uses: actions/configure-pages@v5
