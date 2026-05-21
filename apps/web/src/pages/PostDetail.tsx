@@ -61,7 +61,7 @@ export default function PostDetail() {
           ))}
         </div>
       </header>
-      <div className="prose prose-invert max-w-none text-terminal-gray leading-relaxed">
+      <div className="prose max-w-none">
         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
           {post.content}
         </ReactMarkdown>
