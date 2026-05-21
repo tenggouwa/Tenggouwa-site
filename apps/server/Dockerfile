@@ -24,7 +24,8 @@ COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh
+RUN chmod +x entrypoint.sh \
+    && mkdir -p logs  # logging_config.yml 里的 file handler 写 ../logs/，容器里 cwd=app 时落在 /srv/logs/
 
 ENV PYTHONUNBUFFERED=1
 ENV ENV=prod
