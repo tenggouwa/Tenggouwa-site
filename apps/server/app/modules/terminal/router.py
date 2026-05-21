@@ -315,7 +315,11 @@ def _extract_bearer(auth_header: str | None) -> str | None:
 
 
 def _decode_session_owner(token: str) -> str | None:
-    """校验 session JWT，返回 username；失败返回 None。"""
+    """校验 session JWT，返回 username；失败返回 None。
+
+    兼容旧 token（没有 type 字段，老后端签的）——视作 session。
+    新签的 token 都带 type=session；step / term / trust 都有显式 type，会被拒。
+    """
     secret = config.get("AUTH_JWT_SECRET") or config.get("auth.jwt_secret")
     if not secret:
         raise DetailedHTTPException(500, "server auth misconfigured", "no jwt secret")
@@ -323,7 +327,8 @@ def _decode_session_owner(token: str) -> str | None:
         payload = jwt.decode(token, str(secret), algorithms=["HS256"])
     except jwt.InvalidTokenError:
         return None
-    if payload.get("type") != "session":
+    tok_type = payload.get("type")
+    if tok_type not in (None, "session"):
         return None
     sub = payload.get("sub")
     return sub if isinstance(sub, str) and sub else None
