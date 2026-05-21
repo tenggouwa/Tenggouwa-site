@@ -206,7 +206,7 @@ function UnlockScreen({ onUnlocked }: { onUnlocked: (resp: UnlockResp) => void }
               maxLength={6}
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && submitTotp()}
-              className="w-full bg-terminal-panel/60 border border-terminal-line/70 focus:border-terminal-green/60 outline-none rounded-md px-4 py-3 text-center text-2xl tracking-[0.5em] font-mono text-terminal-green caret-terminal-green"
+              className="w-full box-border bg-terminal-panel/60 border border-terminal-line/70 focus:border-terminal-green/60 outline-none rounded-md px-4 py-3 text-center text-2xl tracking-[0.5em] font-mono text-terminal-green caret-terminal-green"
             />
             <button
               type="button"

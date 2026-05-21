@@ -7,6 +7,21 @@
     <meta name="description" content="腾构娃的极客小站：前端实验室、文章、小灵感。" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>tenggouwa · 极客小站</title>
+    <script>
+      // 配合 pages-dist/404.html：把刷新 deep link 时丢失的原始 URL 还原回 history
+      (function () {
+        try {
+          var r = sessionStorage.getItem('tg_spa_redirect');
+          if (!r) return;
+          sessionStorage.removeItem('tg_spa_redirect');
+          // 只接受 web 自己的 base，admin 路径让 admin SPA 处理
+          if (r.indexOf('/Tenggouwa-site/') !== 0) return;
+          if (r.indexOf('/Tenggouwa-site/admin/') === 0) return;
+          if (r === location.pathname + location.search + location.hash) return;
+          history.replaceState(null, '', r);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-terminal-bg text-terminal-gray font-mono">
     <div id="root"></div>
