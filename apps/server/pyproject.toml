@@ -1,0 +1,64 @@
+[project]
+name = "tenggouwa-server"
+version = "0.0.1"
+description = "Tenggouwa monorepo backend (FastAPI)."
+readme = "README.md"
+requires-python = "==3.12.11"
+
+dependencies = [
+    "PyYAML==6.0.2",
+    "SQLAlchemy==2.0.41",
+    "alembic==1.13.3",
+    "asyncpg==0.30.0",
+    "bcrypt==4.2.0",
+    "click==8.2.1",
+    "concurrent-log-handler==0.9.28",
+    "fastapi==0.115.14",
+    "greenlet==3.2.3",
+    "gunicorn==23.0.0",
+    "httpx[http2]==0.28.1",
+    "h2==4.2.0",
+    "psutil==7.0.0",
+    "pydantic==2.11.7",
+    "PyJWT==2.10.1",
+    "python-dotenv==1.1.1",
+    "python-multipart==0.0.20",
+    "redis==6.1.0",
+    "starlette==0.46.2",
+    "uvicorn[standard]==0.35.0",
+    "uvicorn-worker==0.3.0",
+    "uvloop==0.21.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.1",
+    "pytest-asyncio==1.0.0",
+    "ruff==0.12.1",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG", "SIM", "ICN", "PLW", "PLR", "PLE", "FIX"]
+ignore = ["E203", "PLR0913", "PLR0915", "PLR2004"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+log_cli = true
+log_cli_level = "INFO"
+addopts = "-v --tb=short --capture=no"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_mode = "auto"
+pythonpath = ["app"]

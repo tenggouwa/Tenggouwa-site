@@ -1,0 +1,24 @@
+# 部署到 ~/.config/systemd/user/tenggouwa-server.service
+# 启用：
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now tenggouwa-server.service
+# 让用户服务在登出后仍然运行：sudo loginctl enable-linger <username>
+
+[Unit]
+Description=Tenggouwa FastAPI server
+After=network.target
+
+[Service]
+Type=exec
+WorkingDirectory=%h/apps/Tenggouwa-server/app
+Environment=ENV=prod
+# 可选：传 jwt 密钥之类
+# Environment=AUTH_JWT_SECRET=replace-me
+ExecStart=%h/.local/bin/uv run --project %h/apps/Tenggouwa-server python main.py
+Restart=on-failure
+RestartSec=3
+StandardOutput=append:%h/apps/Tenggouwa-server/logs/stdout.log
+StandardError=append:%h/apps/Tenggouwa-server/logs/stderr.log
+
+[Install]
+WantedBy=default.target

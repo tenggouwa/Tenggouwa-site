@@ -1,0 +1,178 @@
+# 定义通用的过滤器
+common_filters: &common_filters
+  request_context_filter:
+    (): common.RouteTraceContextFilter
+
+# 定义通用的 formatters
+default_format: &default_format
+                  "%(asctime)s - %(process)d - %(thread)d - %(threadName)s - %(name)s - %(levelname)s - \"%(request_id)s\" \"%(user_id)s\" - %(module)s:%(funcName)s:%(lineno)d - %(message)s"
+default_access_format: &default_access_format
+                         "%(asctime)s - %(process)d - %(thread)d - %(threadName)s - %(name)s - %(levelname)s - %(remote_addr)s - %(remote_user)s - %(http_host)s \"%(request_line)s\" %(status)s \"%(request_id)s\" \"%(user_id)s\" %(request_length)s %(body_bytes_sent)s %(request_time)s \"%(http_referer)s\" \"%(http_user_agent)s\" %(request_params)s"
+common_formatters: &common_formatters
+  default_formatter:
+    (): uvicorn.logging.DefaultFormatter
+    format: *default_format
+    use_colors: False
+  colored_default_formatter:
+    (): uvicorn.logging.DefaultFormatter
+    format: *default_format
+    use_colors: True
+  access_formatter:
+    (): common.AccessFormatter
+    format: *default_access_format
+  colored_access_formatter:
+    (): common.AccessFormatter
+    format: *default_access_format
+    use_colors: True
+
+# 定义通用的 handlers
+common_handlers:
+  console_default: &console_default
+    class: logging.StreamHandler
+    filters: [ request_context_filter ]
+    formatter: colored_default_formatter
+    stream: ext://sys.stdout
+  console_access: &console_access
+    class: logging.StreamHandler
+    formatter: colored_access_formatter
+    stream: ext://sys.stdout
+  file_default: &file_default
+    class: concurrent_log_handler.ConcurrentTimedRotatingFileHandler
+    filters: [ request_context_filter ]
+    formatter: default_formatter
+    filename: ../logs/py-cli.log
+    when: MIDNIGHT
+    interval: 1
+    backupCount: 30
+    encoding: utf-8
+    delay: False
+    utc: False
+    maxBytes: 52428800
+    use_gzip: True
+  file_access: &file_access
+    class: concurrent_log_handler.ConcurrentTimedRotatingFileHandler
+    formatter: access_formatter
+    filename: ../logs/py-cli-access.log
+    when: MIDNIGHT
+    interval: 1
+    backupCount: 30
+    encoding: utf-8
+    delay: False
+    utc: False
+    maxBytes: 52428800
+    use_gzip: True
+
+environments:
+  dev:
+    version: 1
+    disable_existing_loggers: False
+
+    filters: *common_filters
+    formatters: *common_formatters
+
+    handlers:
+      console_default: *console_default
+      console_access: *console_access
+
+    loggers:
+      sqlalchemy.engine:
+        level: INFO
+        propagate: yes
+      uvicorn:
+        level: INFO
+        propagate: yes
+      uvicorn.access:
+        level: INFO
+        handlers: [ console_access ]
+        propagate: no
+      uvicorn.error:
+        level: INFO
+        propagate: yes
+      uvicorn.asgi:
+        level: INFO
+        propagate: yes
+      gunicorn.error:
+        level: INFO
+        propagate: yes
+      gunicorn.access:
+        level: INFO
+        propagate: yes
+      access:
+        level: INFO
+        handlers: [ console_access ]
+        propagate: no
+      httpx:
+        level: WARNING
+
+    root:
+      level: INFO
+      handlers: [ console_default ]
+
+  test:
+    version: 1
+    disable_existing_loggers: False
+
+    filters: *common_filters
+    formatters: *common_formatters
+
+    handlers:
+      console_default: *console_default
+      console_access: *console_access
+
+    loggers:
+      uvicorn:
+        level: INFO
+        propagate: yes
+      uvicorn.access:
+        level: INFO
+        handlers: [ console_access ]
+        propagate: no
+      access:
+        level: INFO
+        handlers: [ console_access ]
+        propagate: no
+      httpx:
+        level: WARNING
+
+    root:
+      level: INFO
+      handlers: [ console_default ]
+
+  prod:
+    version: 1
+    disable_existing_loggers: False
+
+    filters: *common_filters
+    formatters: *common_formatters
+
+    handlers:
+      file_default: *file_default
+      file_access: *file_access
+
+    loggers:
+      uvicorn:
+        level: INFO
+        propagate: yes
+      uvicorn.access:
+        level: INFO
+        handlers: [ file_access ]
+        propagate: no
+      uvicorn.error:
+        level: INFO
+        propagate: yes
+      gunicorn.error:
+        level: INFO
+        propagate: yes
+      gunicorn.access:
+        level: INFO
+        propagate: yes
+      access:
+        level: INFO
+        handlers: [ file_access ]
+        propagate: no
+      httpx:
+        level: WARNING
+
+    root:
+      level: INFO
+      handlers: [ file_default ]

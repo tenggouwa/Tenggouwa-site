@@ -1,0 +1,24 @@
+/* Arco Design 暗色主题变量覆盖：偏终端绿配色 */
+body[arco-theme='dark'],
+:root {
+  --color-bg-1: #0b0f10;
+  --color-bg-2: #11181c;
+  --color-bg-3: #16202a;
+  --color-text-1: #d4dadf;
+  --color-text-2: #8a9199;
+  --color-fill-1: rgba(255, 255, 255, 0.02);
+  --color-fill-2: rgba(255, 255, 255, 0.04);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-primary-light-1: #285c40;
+  --color-primary-light-2: #3a8059;
+  --color-primary-light-3: #4ca070;
+  --color-primary-light-4: #5af78e;
+  --arcoblue-6: #5af78e;
+  --arcoblue-5: #4ca070;
+  --arcoblue-7: #2bcf68;
+}
+
+/* 用 body[arco-theme='dark'] 让 Arco 切到暗色 */
+body {
+  background: transparent;
+}

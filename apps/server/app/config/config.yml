@@ -1,0 +1,38 @@
+logger:
+  config_path: config/logging_config.yml
+  route_trace_context:
+    headers:
+      request_id: x-request-id
+      user_id: x-user-id
+
+fastapi:
+  host: 0.0.0.0
+  port: 10095
+  root_path:
+  cors_allow_origins:
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"
+    - "http://localhost:5174"
+    - "http://127.0.0.1:5174"
+
+auth:
+  # 生产环境一定要在 config-prod.yml 或环境变量里覆盖
+  jwt_secret: change-me-to-a-long-random-string
+  token_ttl_seconds: 86400
+  admins:
+    - username: dev
+      password: dev123        # 仅 dev，明文；prod 用 password_hash (bcrypt)
+
+postgres:
+  default:
+    host: 127.0.0.1
+    port: 5432
+    db: tenggouwa
+    user: tenggouwa
+    # 密码读环境变量 POSTGRES_DEFAULT_PASSWORD（见 .env.sample）
+    sqlalchemy:
+      pool_size: 5
+      max_overflow: 5
+      pool_timeout: 30
+      pool_recycle: 1800
+      echo: false

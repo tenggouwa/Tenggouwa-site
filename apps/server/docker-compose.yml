@@ -1,0 +1,26 @@
+# 本地开发用 Postgres，只监听 127.0.0.1:5432，避免被局域网摸到。
+# 启动：docker compose up -d postgres
+# 停止：docker compose down
+# 销库重来：docker compose down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tenggouwa-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: tenggouwa
+      POSTGRES_PASSWORD: tenggouwa_dev_pwd
+      POSTGRES_DB: tenggouwa
+    volumes:
+      - tenggouwa_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tenggouwa -d tenggouwa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tenggouwa_pg_data:

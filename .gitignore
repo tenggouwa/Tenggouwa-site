@@ -1,0 +1,41 @@
+# Node
+node_modules/
+.pnpm-store/
+dist/
+build/
+.vite/
+.cache/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Pages 输出
+pages-dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.python-version
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+!.env.sample
+
+# 编辑器 / OS / agent runtime 本机状态
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.claude/
+.cursor/
+*.swp
+*.swo
+
+# 服务器日志
+apps/server/logs/
