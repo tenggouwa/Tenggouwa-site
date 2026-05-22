@@ -117,3 +117,57 @@ export interface TerminalSessionLog {
   voice_transcript: string | null;
   client_ip: string | null;
 }
+
+export interface VitalsMetricSummary {
+  metric: 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB';
+  p75: number;
+  p95: number;
+  good_ratio: number;
+  samples: number;
+}
+
+export interface VitalsTrendPoint {
+  date: string;
+  p75_lcp: number | null;
+  p75_cls: number | null;
+  p75_inp: number | null;
+}
+
+export interface VitalsOverview {
+  by_metric: VitalsMetricSummary[];
+  trend: VitalsTrendPoint[];
+  mobile_ratio: number;
+  samples_total: number;
+}
+
+export interface SearchUrlStat {
+  url: string;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchChannelOverview {
+  channel: 'google' | 'bing' | 'baidu';
+  snapshot_date: string | null;
+  impressions_total: number;
+  clicks_total: number;
+  ctr_avg: number;
+  position_avg: number;
+  indexed_count: number;
+  top_urls: SearchUrlStat[];
+}
+
+export interface KeywordStat {
+  query: string;
+  occurrences: number;
+}
+
+export interface IndexingStatus {
+  url: string;
+  google_indexed: boolean;
+  bing_indexed: boolean;
+  baidu_indexed: boolean;
+  last_checked: string | null;
+}

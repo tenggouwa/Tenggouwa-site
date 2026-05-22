@@ -9,6 +9,7 @@ const MenuItem = Menu.Item;
 
 const MENU = [
   { key: 'analytics', label: '站点分析' },
+  { key: 'seo', label: 'SEO 监控' },
   { key: 'posts', label: '文章管理' },
   { key: 'inspirations', label: '小灵感' },
   { key: 'terminal', label: '终端' },

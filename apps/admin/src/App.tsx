@@ -6,6 +6,7 @@ import RequireAuth from './components/RequireAuth';
 import AnalyticsPage from './pages/AnalyticsPage';
 import PostsPage from './pages/PostsPage';
 import InspirationsPage from './pages/InspirationsPage';
+import SeoPage from './pages/SeoPage';
 import SettingsPage from './pages/SettingsPage';
 import TerminalPage from './pages/TerminalPage';
 
@@ -23,6 +24,7 @@ export default function App() {
         >
           <Route index element={<Navigate to="analytics" replace />} />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="seo" element={<SeoPage />} />
           <Route path="posts" element={<PostsPage />} />
           <Route path="inspirations" element={<InspirationsPage />} />
           <Route path="terminal" element={<TerminalPage />} />
