@@ -6,17 +6,37 @@
 //   npx lhci autorun
 //
 // CI 里由 .github/workflows/deploy-pages.yml 触发。
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+// 详情页 / 标签聚合页要测的 slug 不能写死——cf-dist 是 prerender 从 prod API
+// 拉出来的，slug 在 git 里没法控制。改成读已生成的 sitemap.xml 选第一个详情页
+// + 第一个标签页，prod 里有什么就测什么。
+function pickUrlsFromSitemap() {
+  const sitemap = path.join(__dirname, 'cf-dist', 'sitemap.xml');
+  const fixed = [
+    'http://localhost/index.html',
+    'http://localhost/posts/index.html',
+  ];
+  if (!fs.existsSync(sitemap)) return fixed;
+  const xml = fs.readFileSync(sitemap, 'utf-8');
+  const all = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  const toLocal = (u) =>
+    'http://localhost' + new URL(u).pathname.replace(/\/$/, '/index.html');
+  const firstPost = all.find((u) => /\/posts\/[^/]+\/?$/.test(u));
+  const firstTag = all.find((u) => /\/tags\/[^/]+\/?$/.test(u));
+  const out = [...fixed];
+  if (firstPost) out.push(toLocal(firstPost));
+  if (firstTag) out.push(toLocal(firstTag));
+  return out;
+}
+
 module.exports = {
   ci: {
     collect: {
       staticDistDir: './cf-dist',
-      // 覆盖典型路径：首页（SPA）、列表页（静态）、详情页（静态）、标签聚合（静态）
-      url: [
-        'http://localhost/index.html',
-        'http://localhost/posts/index.html',
-        'http://localhost/posts/world-models/index.html',
-        'http://localhost/tags/ai/index.html',
-      ],
+      url: pickUrlsFromSitemap(),
       numberOfRuns: 1,
       settings: {
         // 默认 mobile 配置；性能 budget 也按 mobile 算（更严格）
