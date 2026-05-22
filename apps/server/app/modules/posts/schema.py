@@ -9,6 +9,7 @@ class PostCreate(BaseModel):
     summary: str = Field(default="", max_length=500)
     tags: list[str] = Field(default_factory=list)
     content: str = Field(..., min_length=1)
+    published_at: datetime | None = None
 
 
 class PostUpdate(BaseModel):
@@ -16,6 +17,7 @@ class PostUpdate(BaseModel):
     summary: str | None = Field(default=None, max_length=500)
     tags: list[str] | None = None
     content: str | None = None
+    published_at: datetime | None = None
 
 
 class Post(BaseModel):

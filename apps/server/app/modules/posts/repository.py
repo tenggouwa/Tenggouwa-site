@@ -1,5 +1,7 @@
 """Post 持久化层。基于 PostgreSQL + SQLAlchemy 2.0 async。"""
 
+from datetime import datetime, timezone
+
 from db.models import PostRow
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -32,6 +34,8 @@ class PostRepository:
             tags=list(payload.tags),
             content=payload.content,
         )
+        if payload.published_at is not None:
+            row.published_at = payload.published_at
         self.session.add(row)
         try:
             await self.session.flush()
@@ -61,12 +65,16 @@ class PostRepository:
         await self.session.flush()
         return True
 
-    async def get_by_slug(self, slug: str) -> Post | None:
+    async def get_by_slug(self, slug: str, *, only_published: bool = False) -> Post | None:
         stmt = select(PostRow).where(PostRow.slug == slug)
+        if only_published:
+            stmt = stmt.where(PostRow.published_at <= datetime.now(timezone.utc))
         row = (await self.session.execute(stmt)).scalar_one_or_none()
         return _row_to_schema(row) if row else None
 
-    async def list_all(self) -> list[Post]:
+    async def list_all(self, *, only_published: bool = False) -> list[Post]:
         stmt = select(PostRow).order_by(PostRow.published_at.desc())
+        if only_published:
+            stmt = stmt.where(PostRow.published_at <= datetime.now(timezone.utc))
         rows = (await self.session.execute(stmt)).scalars().all()
         return [_row_to_schema(r) for r in rows]

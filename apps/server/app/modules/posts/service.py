@@ -31,11 +31,11 @@ class PostService:
         return await PostRepository(session).list_all()
 
     async def list_summary(self, session: AsyncSession) -> list[PostSummary]:
-        items = await PostRepository(session).list_all()
+        items = await PostRepository(session).list_all(only_published=True)
         return [PostSummary(**item.model_dump(exclude={"content"})) for item in items]
 
     async def get_by_slug(self, session: AsyncSession, slug: str) -> Post:
-        item = await PostRepository(session).get_by_slug(slug)
+        item = await PostRepository(session).get_by_slug(slug, only_published=True)
         if item is None:
             raise DetailedHTTPException(status_code=404, detail="post not found", full_detail=f"slug={slug}")
         return item
