@@ -37,3 +37,11 @@ class PostSummary(BaseModel):
     summary: str
     tags: list[str]
     published_at: datetime
+
+
+class PostListPage(BaseModel):
+    items: list[PostSummary]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool

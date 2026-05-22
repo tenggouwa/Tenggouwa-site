@@ -4,7 +4,7 @@ from dependencies import DetailedHTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .repository import PostRepository
-from .schema import Post, PostCreate, PostSummary, PostUpdate
+from .schema import Post, PostCreate, PostListPage, PostSummary, PostUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,25 @@ class PostService:
     async def list_summary(self, session: AsyncSession) -> list[PostSummary]:
         items = await PostRepository(session).list_all(only_published=True)
         return [PostSummary(**item.model_dump(exclude={"content"})) for item in items]
+
+    async def list_summary_page(
+        self,
+        session: AsyncSession,
+        *,
+        limit: int,
+        offset: int,
+    ) -> PostListPage:
+        items, total = await PostRepository(session).list_page(
+            limit=limit, offset=offset, only_published=True,
+        )
+        summaries = [PostSummary(**item.model_dump(exclude={"content"})) for item in items]
+        return PostListPage(
+            items=summaries,
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_more=offset + len(summaries) < total,
+        )
 
     async def get_by_slug(self, session: AsyncSession, slug: str) -> Post:
         item = await PostRepository(session).get_by_slug(slug, only_published=True)

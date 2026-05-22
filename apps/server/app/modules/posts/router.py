@@ -2,11 +2,11 @@ import logging
 
 from db import get_session
 from dependencies import current_admin
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
-from .schema import Post, PostCreate, PostSummary, PostUpdate
+from .schema import Post, PostCreate, PostListPage, PostUpdate
 from .service import post_service
 
 logger = logging.getLogger(__name__)
@@ -14,13 +14,15 @@ logger = logging.getLogger(__name__)
 public_router = APIRouter(prefix="/public/posts", tags=["public.posts"])
 
 
-@public_router.get("", response_model=ResponseModel[list[PostSummary]])
+@public_router.get("", response_model=ResponseModel[PostListPage])
 async def list_posts_public(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
-) -> ResponseModel[list[PostSummary]]:
-    """列出已发布文章（摘要，不含正文）。"""
-    items = await post_service.list_summary(session)
-    return ResponseModel(data=items)
+) -> ResponseModel[PostListPage]:
+    """列出已发布文章（摘要，不含正文）。limit/offset 分页。"""
+    page = await post_service.list_summary_page(session, limit=limit, offset=offset)
+    return ResponseModel(data=page)
 
 
 @public_router.get("/{slug}", response_model=ResponseModel[Post])

@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from db.models import PostRow
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -78,3 +78,25 @@ class PostRepository:
             stmt = stmt.where(PostRow.published_at <= datetime.now(timezone.utc))
         rows = (await self.session.execute(stmt)).scalars().all()
         return [_row_to_schema(r) for r in rows]
+
+    async def list_page(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        only_published: bool = False,
+    ) -> tuple[list[Post], int]:
+        where_clause = []
+        if only_published:
+            where_clause.append(PostRow.published_at <= datetime.now(timezone.utc))
+
+        stmt = select(PostRow).order_by(PostRow.published_at.desc())
+        count_stmt = select(func.count(PostRow.id))
+        for w in where_clause:
+            stmt = stmt.where(w)
+            count_stmt = count_stmt.where(w)
+        stmt = stmt.limit(limit).offset(offset)
+
+        rows = (await self.session.execute(stmt)).scalars().all()
+        total = (await self.session.execute(count_stmt)).scalar_one()
+        return [_row_to_schema(r) for r in rows], total
