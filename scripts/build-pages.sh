@@ -21,17 +21,22 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 TARGET="${PAGES_TARGET:-ghpages}"
+# canonical / sitemap 永远指向正版根域名，不论产物挂在哪
+SITE_ORIGIN="${SITE_ORIGIN:-https://tenggouwa.com}"
 case "$TARGET" in
   ghpages)
     REPO_NAME="${REPO_NAME:-Tenggouwa-site}"
     WEB_BASE="/${REPO_NAME}/"
     ADMIN_BASE="/${REPO_NAME}/admin/"
     DIST="pages-dist"
+    # 子路径产物不让搜索引擎收录，免得跟主域名互打权重
+    PRERENDER_NOINDEX="--noindex"
     ;;
   root)
     WEB_BASE="/"
     ADMIN_BASE="/admin/"
     DIST="cf-dist"
+    PRERENDER_NOINDEX=""
     ;;
   *)
     echo "unknown PAGES_TARGET: $TARGET (expected ghpages|root)" >&2
@@ -53,6 +58,13 @@ echo "==> 构建 apps/admin (base=$ADMIN_BASE, api=${VITE_API_BASE:-<empty>})"
 VITE_BASE="$ADMIN_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/admin build
 mkdir -p "$DIST/admin"
 cp -R apps/admin/dist/. "$DIST/admin/"
+
+echo "==> 预渲染博客静态页 + sitemap / robots / feed (origin=$SITE_ORIGIN)"
+node scripts/prerender.mjs \
+  --dist="$DIST" \
+  --base="$WEB_BASE" \
+  --origin="$SITE_ORIGIN" \
+  $PRERENDER_NOINDEX
 
 # SPA 兜底：GitHub Pages 只支持根 404.html，Cloudflare Pages 也认 404.html。
 # 这里写一个 smart 404：

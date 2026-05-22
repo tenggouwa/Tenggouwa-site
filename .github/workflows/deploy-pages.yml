@@ -37,13 +37,30 @@ jobs:
 
       - run: pnpm install --frozen-lockfile=false
 
-      - name: Build pages
+      - name: Build pages (ghpages subpath, noindex)
         env:
           REPO_NAME: ${{ github.event.repository.name }}
           # 在 repo Settings → Secrets and variables → Actions → Variables
           # 加一个 VITE_API_BASE = https://api.<你的域名>
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+          SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://tenggouwa.com' }}
         run: bash scripts/build-pages.sh
+
+      - name: Build pages (root, for tenggouwa.com)
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+          SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://tenggouwa.com' }}
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+          PAGES_TARGET: root
+        run: bash scripts/build-pages.sh
+
+      - name: Upload root build for downstream (Cloudflare Pages / 自有部署)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cf-dist
+          path: cf-dist
+          retention-days: 14
 
       - uses: actions/configure-pages@v5
 
@@ -60,3 +77,32 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  notify-search-engines:
+    needs: deploy
+    runs-on: ubuntu-latest
+    # 只在 main 分支推送时通知（避免手动 dispatch 时反复推）
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download root sitemap
+        run: |
+          mkdir -p cf-dist
+          curl -fsSL "${SITE_ORIGIN}/sitemap.xml" -o cf-dist/sitemap.xml || \
+            echo "sitemap fetch failed; will rely on rebuild"
+        env:
+          SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://tenggouwa.com' }}
+
+      - name: Ping IndexNow / Baidu
+        env:
+          SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://tenggouwa.com' }}
+          SITEMAP_PATH: cf-dist/sitemap.xml
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+          BAIDU_SITE: ${{ vars.BAIDU_SITE }}
+          BAIDU_TOKEN: ${{ secrets.BAIDU_TOKEN }}
+        run: node scripts/seo-notify.mjs

@@ -1,0 +1,524 @@
+#!/usr/bin/env node
+// SSG 预渲染：把 content/posts/**/*.md 渲染成搜索引擎友好的静态 HTML，
+// 同时生成 sitemap.xml / robots.txt / feed.xml / atom.xml / 标签聚合页。
+//
+// 用法:
+//   node scripts/prerender.mjs --dist=<dir> --base=<base> --origin=<origin> [--noindex]
+//
+// 设计：
+// - 不依赖 React 运行时，纯静态 HTML（搜索引擎首屏即拿到正文）
+// - CSS 复用 vite build 出来的 main bundle，视觉跟 SPA 一致
+// - canonical / sitemap 始终指向 --origin（即正版根域名 tenggouwa.com）
+// - --noindex：给 GitHub Pages 子路径产物加 robots noindex，避免双收录
+//   稀释主域名权重
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { marked } from 'marked';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, '..');
+
+const args = Object.fromEntries(
+  process.argv.slice(2).map((a) => {
+    if (a.startsWith('--')) {
+      const [k, v] = a.slice(2).split('=');
+      return [k, v ?? true];
+    }
+    return [a, true];
+  }),
+);
+
+const DIST = path.resolve(ROOT, args.dist ?? 'pages-dist');
+const BASE = normalizeBase(args.base ?? '/');
+const ORIGIN = (args.origin ?? 'https://tenggouwa.com').replace(/\/$/, '');
+const NOINDEX = Boolean(args.noindex);
+const CONTENT_DIR = path.join(ROOT, 'content/posts');
+
+const SITE_TITLE = 'tenggouwa · 极客小站';
+const SITE_DESC = '腾构娃的极客小站：AI / 系统 / 工具的笔记、灵感与实验。';
+const AUTHOR = 'tenggouwa';
+const PUBLISHER_URL = ORIGIN;
+
+function normalizeBase(b) {
+  let s = b;
+  if (!s.startsWith('/')) s = '/' + s;
+  if (!s.endsWith('/')) s = s + '/';
+  return s.replace(/\/+/g, '/');
+}
+
+const pageUrl = (p) => (BASE + p.replace(/^\//, '')).replace(/\/+/g, '/');
+const canonical = (p) => ORIGIN + ('/' + p.replace(/^\//, '')).replace(/\/+/g, '/');
+
+// ---------- frontmatter ----------
+function parseFM(text) {
+  const m = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
+  if (!m) throw new Error('missing frontmatter');
+  const meta = {};
+  for (const raw of m[1].split('\n')) {
+    const line = raw.replace(/\s+$/, '');
+    if (!line || line.startsWith('#')) continue;
+    const idx = line.indexOf(':');
+    if (idx < 0) continue;
+    const k = line.slice(0, idx).trim();
+    const v = line.slice(idx + 1).trim();
+    if (v.startsWith('[') && v.endsWith(']')) {
+      meta[k] = v
+        .slice(1, -1)
+        .split(',')
+        .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
+        .filter(Boolean);
+    } else {
+      meta[k] = v.replace(/^['"]|['"]$/g, '');
+    }
+  }
+  return { meta, body: m[2].replace(/^\n+/, '') };
+}
+
+// ---------- markdown ----------
+marked.setOptions({ gfm: true, breaks: false });
+const renderMd = (md) => marked.parse(md);
+
+// ---------- 收集文章 ----------
+function collectPosts() {
+  const posts = [];
+  const walk = (dir) => {
+    for (const name of fs.readdirSync(dir)) {
+      const p = path.join(dir, name);
+      const st = fs.statSync(p);
+      if (st.isDirectory()) walk(p);
+      else if (name.endsWith('.md')) {
+        const raw = fs.readFileSync(p, 'utf-8');
+        const { meta, body } = parseFM(raw);
+        if (!meta.slug) {
+          console.warn(`skip (no slug): ${p}`);
+          continue;
+        }
+        posts.push({
+          slug: meta.slug,
+          title: meta.title ?? meta.slug,
+          summary: meta.summary ?? '',
+          tags: Array.isArray(meta.tags) ? meta.tags : [],
+          publishedAt: meta.published_at ?? '',
+          body,
+          srcPath: p,
+        });
+      }
+    }
+  };
+  if (fs.existsSync(CONTENT_DIR)) walk(CONTENT_DIR);
+  // 倒序：最新在前
+  posts.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
+  return posts;
+}
+
+// ---------- 复用 vite 构建产物的 CSS / 字体 ----------
+function findHeadAssets() {
+  const idxPath = path.join(DIST, 'index.html');
+  if (!fs.existsSync(idxPath)) {
+    throw new Error(`expected vite build output at ${idxPath}`);
+  }
+  const html = fs.readFileSync(idxPath, 'utf-8');
+  // 抓 <link rel="stylesheet" href="...">（vite 注入的 main CSS）
+  const links = [...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"[^>]*>/g)].map(
+    (m) => m[0],
+  );
+  // 抓 modulepreload，可有可无；保留增量性能
+  const preloads = [...html.matchAll(/<link[^>]+rel="modulepreload"[^>]+>/g)].map((m) => m[0]);
+  return [...links, ...preloads].join('\n');
+}
+
+// ---------- HTML 模板 ----------
+function escapeHtml(s = '') {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const NAV_ITEMS = [
+  { to: '/', label: '~', match: (cp) => cp === '/' },
+  { to: '/posts/', label: 'posts', match: (cp) => cp.startsWith('/posts') || cp.startsWith('/tags') },
+  { to: '/inspirations', label: 'inspirations', match: (cp) => cp.startsWith('/inspirations') },
+  { to: '/lab', label: 'lab', match: (cp) => cp.startsWith('/lab') },
+  { to: '/about', label: 'about', match: (cp) => cp.startsWith('/about') },
+];
+
+function navHtml(currentPath) {
+  return NAV_ITEMS.map((it) => {
+    const isActive = it.match(currentPath);
+    const color = isActive ? 'text-terminal-green' : 'text-terminal-gray';
+    return `<a href="${pageUrl(it.to)}" class="transition-colors hover:text-terminal-green ${color}">${it.label}</a>`;
+  }).join('\n          ');
+}
+
+function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, extraHead = '' }) {
+  const head = findHeadAssets();
+  const fullTitle = title === SITE_TITLE ? title : `${title} · tenggouwa`;
+  const canonicalUrl = canonical(currentPath);
+  const robots = NOINDEX ? '<meta name="robots" content="noindex,nofollow" />' : '<meta name="robots" content="index,follow,max-image-preview:large" />';
+  const og = ogImage ? canonical(ogImage) : canonical('/og-default.png');
+  const ld = jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>` : '';
+  const firstLd = Array.isArray(jsonLd) ? jsonLd[0] : jsonLd;
+  const ogType = firstLd?.['@type'] === 'BlogPosting' ? 'article' : 'website';
+  return `<!doctype html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>${escapeHtml(fullTitle)}</title>
+    <meta name="description" content="${escapeHtml(description)}" />
+    <link rel="canonical" href="${canonicalUrl}" />
+    ${robots}
+    <meta name="author" content="${AUTHOR}" />
+    <meta property="og:type" content="${ogType}" />
+    <meta property="og:site_name" content="${SITE_TITLE}" />
+    <meta property="og:title" content="${escapeHtml(title)}" />
+    <meta property="og:description" content="${escapeHtml(description)}" />
+    <meta property="og:url" content="${canonicalUrl}" />
+    <meta property="og:image" content="${og}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(title)}" />
+    <meta name="twitter:description" content="${escapeHtml(description)}" />
+    <meta name="twitter:image" content="${og}" />
+    <link rel="alternate" type="application/rss+xml" title="${SITE_TITLE} RSS" href="${pageUrl('/feed.xml')}" />
+    <link rel="icon" type="image/svg+xml" href="${pageUrl('/favicon.svg')}" />
+    ${head}
+    ${extraHead}
+    ${ld}
+  </head>
+  <body class="bg-terminal-bg text-terminal-gray font-mono">
+    <div class="min-h-screen flex flex-col">
+      <header class="border-b border-terminal-line/60 backdrop-blur sticky top-0 z-50 bg-terminal-bg/70">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 py-2 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
+          <a href="${pageUrl('/')}" class="text-terminal-green font-bold tracking-wide whitespace-nowrap">
+            <span class="text-terminal-pink">~$</span> tenggouwa
+          </a>
+          <nav class="flex gap-3 sm:gap-5 text-sm flex-wrap">
+          ${navHtml(currentPath)}
+          </nav>
+        </div>
+      </header>
+      <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10">
+        ${bodyHtml}
+      </main>
+      <footer class="border-t border-terminal-line/60 text-xs text-terminal-gray/70">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:justify-between gap-1">
+          <span>© ${new Date().getFullYear()} ${AUTHOR} · made with caffeine ☕</span>
+          <div class="flex items-center gap-3">
+            <a href="${pageUrl('/feed.xml')}" class="text-terminal-gray/50 hover:text-terminal-green transition-colors">RSS</a>
+            <span class="text-terminal-cyan">[ uptime: ∞ ]</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
+`;
+}
+
+// ---------- 各页面 body ----------
+function postListBody(posts, { tag } = {}) {
+  const list = tag ? posts.filter((p) => p.tags.includes(tag)) : posts;
+  const heading = tag
+    ? `<span class="text-terminal-pink">$ </span>grep -l <span class="text-terminal-yellow">${escapeHtml(tag)}</span> posts/*.md`
+    : `<span class="text-terminal-pink">$ </span>cat posts/*.md`;
+  const items = list
+    .map((p) => {
+      const tags = p.tags
+        .map(
+          (t) =>
+            `<a href="${pageUrl(`/tags/${encodeURIComponent(t)}/`)}" class="text-xs px-2 py-0.5 rounded border border-terminal-line/80 text-terminal-green hover:bg-terminal-green/10 transition-colors">${escapeHtml(t)}</a>`,
+        )
+        .join('\n            ');
+      const date = (p.publishedAt || '').slice(0, 10);
+      return `<li class="py-5 border-b border-terminal-line/60">
+        <a href="${pageUrl(`/posts/${p.slug}/`)}" class="group block">
+          <div class="flex items-baseline justify-between gap-4">
+            <h2 class="text-lg text-terminal-gray group-hover:text-terminal-green transition-colors">${escapeHtml(p.title)}</h2>
+            <span class="text-xs text-terminal-gray/70 shrink-0">${escapeHtml(date)}</span>
+          </div>
+          <p class="text-sm text-terminal-gray/80 mt-2">${escapeHtml(p.summary)}</p>
+          <div class="mt-2 flex gap-2 flex-wrap">
+            ${tags}
+          </div>
+        </a>
+      </li>`;
+    })
+    .join('\n');
+  return `
+    <div class="space-y-6">
+      <h1 class="text-terminal-green text-2xl">${heading}</h1>
+      <ul class="divide-y divide-terminal-line/60">
+${items || '<li class="py-5 text-terminal-gray/60">空空如也。</li>'}
+      </ul>
+    </div>
+  `;
+}
+
+function postDetailBody(post, { prev, next }) {
+  const date = (post.publishedAt || '').slice(0, 10);
+  const tagBadges = post.tags
+    .map(
+      (t) =>
+        `<a href="${pageUrl(`/tags/${encodeURIComponent(t)}/`)}" class="text-xs px-2 py-0.5 rounded border border-terminal-line/80 text-terminal-green hover:bg-terminal-green/10 transition-colors">${escapeHtml(t)}</a>`,
+    )
+    .join('\n          ');
+  const html = renderMd(post.body);
+  const nav = (prev || next)
+    ? `<nav class="mt-12 pt-6 border-t border-terminal-line/60 flex justify-between gap-4 text-sm">
+        ${prev ? `<a href="${pageUrl(`/posts/${prev.slug}/`)}" class="text-terminal-cyan hover:underline">← ${escapeHtml(prev.title)}</a>` : '<span></span>'}
+        ${next ? `<a href="${pageUrl(`/posts/${next.slug}/`)}" class="text-terminal-cyan hover:underline text-right">${escapeHtml(next.title)} →</a>` : '<span></span>'}
+      </nav>`
+    : '';
+  return `
+    <article class="space-y-6">
+      <a href="${pageUrl('/posts/')}" class="text-xs text-terminal-cyan hover:underline">← cd ../posts</a>
+      <header class="space-y-2 border-b border-terminal-line/60 pb-4">
+        <h1 class="text-2xl text-terminal-green">${escapeHtml(post.title)}</h1>
+        <div class="text-xs text-terminal-gray/80">${escapeHtml(date)}</div>
+        <div class="flex gap-2 flex-wrap">
+          ${tagBadges}
+        </div>
+      </header>
+      <div class="prose prose-invert max-w-none">
+${html}
+      </div>
+      ${nav}
+    </article>
+  `;
+}
+
+// ---------- JSON-LD ----------
+function websiteLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: SITE_TITLE,
+    url: ORIGIN + '/',
+    description: SITE_DESC,
+    inLanguage: 'zh-CN',
+    publisher: { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL },
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${ORIGIN}/posts/?q={search_term_string}`,
+      'query-input': 'required name=search_term_string',
+    },
+  };
+}
+
+function blogPostingLd(post) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: post.summary,
+    inLanguage: 'zh-CN',
+    datePublished: post.publishedAt,
+    dateModified: post.publishedAt,
+    author: { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL },
+    publisher: { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL },
+    mainEntityOfPage: canonical(`/posts/${post.slug}/`),
+    url: canonical(`/posts/${post.slug}/`),
+    keywords: post.tags.join(', '),
+    image: canonical(`/og/${post.slug}.png`),
+  };
+}
+
+function breadcrumbLd(items) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((it, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: it.name,
+      item: canonical(it.path),
+    })),
+  };
+}
+
+// ---------- 写文件 ----------
+function writeFile(rel, content) {
+  const full = path.join(DIST, rel);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, content);
+  console.log(`  ✓ ${rel}`);
+}
+
+// ---------- sitemap / robots / feed ----------
+function buildSitemap(posts, tags) {
+  const urls = [
+    { loc: canonical('/'), changefreq: 'weekly', priority: '1.0' },
+    { loc: canonical('/posts/'), changefreq: 'weekly', priority: '0.9' },
+    { loc: canonical('/about'), changefreq: 'monthly', priority: '0.6' },
+    ...posts.map((p) => ({
+      loc: canonical(`/posts/${p.slug}/`),
+      lastmod: (p.publishedAt || '').slice(0, 10) || undefined,
+      changefreq: 'monthly',
+      priority: '0.8',
+    })),
+    ...tags.map((t) => ({
+      loc: canonical(`/tags/${encodeURIComponent(t)}/`),
+      changefreq: 'weekly',
+      priority: '0.5',
+    })),
+  ];
+  const items = urls
+    .map(
+      (u) =>
+        `  <url>\n    <loc>${u.loc}</loc>${u.lastmod ? `\n    <lastmod>${u.lastmod}</lastmod>` : ''}\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`,
+    )
+    .join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${items}\n</urlset>\n`;
+}
+
+function buildRobots() {
+  if (NOINDEX) {
+    return `User-agent: *\nDisallow: /\n`;
+  }
+  return `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`;
+}
+
+function buildRss(posts) {
+  const items = posts
+    .slice(0, 30)
+    .map((p) => {
+      const pubDate = p.publishedAt ? new Date(p.publishedAt).toUTCString() : new Date().toUTCString();
+      const link = canonical(`/posts/${p.slug}/`);
+      const categories = p.tags.map((t) => `<category>${escapeHtml(t)}</category>`).join('');
+      return `    <item>
+      <title>${escapeHtml(p.title)}</title>
+      <link>${link}</link>
+      <guid isPermaLink="true">${link}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description><![CDATA[${p.summary}]]></description>
+      ${categories}
+    </item>`;
+    })
+    .join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>${escapeHtml(SITE_TITLE)}</title>
+    <link>${ORIGIN}/</link>
+    <description>${escapeHtml(SITE_DESC)}</description>
+    <language>zh-CN</language>
+    <atom:link href="${canonical('/feed.xml')}" rel="self" type="application/rss+xml" />
+${items}
+  </channel>
+</rss>
+`;
+}
+
+// ---------- main ----------
+function main() {
+  if (!fs.existsSync(DIST)) {
+    throw new Error(`dist not found: ${DIST}`);
+  }
+  console.log(`==> prerender into ${DIST} (base=${BASE}, origin=${ORIGIN}, noindex=${NOINDEX})`);
+  const posts = collectPosts();
+  console.log(`==> ${posts.length} posts`);
+
+  const allTags = [...new Set(posts.flatMap((p) => p.tags))].sort();
+
+  // 详情页
+  for (let i = 0; i < posts.length; i++) {
+    const post = posts[i];
+    // posts 是按时间倒序的；prev 表示更早一篇，next 表示更新一篇
+    const next = posts[i - 1];
+    const prev = posts[i + 1];
+    const path0 = `/posts/${post.slug}/`;
+    const html = shell({
+      title: post.title,
+      description: post.summary || post.title,
+      currentPath: path0,
+      ogImage: `/og/${post.slug}.png`,
+      jsonLd: [
+        blogPostingLd(post),
+        breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Posts', path: '/posts/' },
+          { name: post.title, path: path0 },
+        ]),
+      ],
+      bodyHtml: postDetailBody(post, { prev, next }),
+    });
+    writeFile(`posts/${post.slug}/index.html`, html);
+  }
+
+  // 列表页
+  writeFile(
+    'posts/index.html',
+    shell({
+      title: 'Posts · tenggouwa',
+      description: '所有文章列表。AI 系列、系统笔记、工具实验。',
+      currentPath: '/posts/',
+      jsonLd: [
+        websiteLd(),
+        breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Posts', path: '/posts/' },
+        ]),
+      ],
+      bodyHtml: postListBody(posts),
+    }),
+  );
+
+  // 标签聚合
+  for (const tag of allTags) {
+    writeFile(
+      `tags/${tag}/index.html`,
+      shell({
+        title: `#${tag} · tenggouwa`,
+        description: `标签 ${tag} 下的所有文章。`,
+        currentPath: `/tags/${tag}/`,
+        jsonLd: breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Posts', path: '/posts/' },
+          { name: `#${tag}`, path: `/tags/${tag}/` },
+        ]),
+        bodyHtml: postListBody(posts, { tag }),
+      }),
+    );
+  }
+
+  // about 页（如有 content/about.md 走它，否则给个空壳）
+  const aboutMd = path.join(ROOT, 'content/about.md');
+  if (fs.existsSync(aboutMd)) {
+    const { meta, body } = parseFM(fs.readFileSync(aboutMd, 'utf-8'));
+    writeFile(
+      'about/index.html',
+      shell({
+        title: meta.title ?? 'About',
+        description: meta.summary ?? '关于腾构娃。',
+        currentPath: '/about',
+        jsonLd: websiteLd(),
+        bodyHtml: `<article class="prose prose-invert max-w-none">${renderMd(body)}</article>`,
+      }),
+    );
+  }
+
+  // sitemap / robots / feed
+  writeFile('sitemap.xml', buildSitemap(posts, allTags));
+  writeFile('robots.txt', buildRobots());
+  writeFile('feed.xml', buildRss(posts));
+
+  // IndexNow key 文件：搜索引擎抓 https://<host>/<KEY>.txt 验证所有权
+  // 仅在非 noindex 产物（即真正面向公网的版本）写
+  const indexNowKey = process.env.INDEXNOW_KEY;
+  if (indexNowKey && !NOINDEX) {
+    const safe = indexNowKey.replace(/[^a-zA-Z0-9]/g, '');
+    if (safe.length >= 8) {
+      writeFile(`${safe}.txt`, safe);
+    }
+  }
+
+  console.log('==> done');
+}
+
+main();

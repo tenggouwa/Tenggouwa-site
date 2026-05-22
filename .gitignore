@@ -11,6 +11,7 @@ pnpm-debug.log*
 
 # Pages 输出
 pages-dist/
+cf-dist/
 
 # Python
 __pycache__/
