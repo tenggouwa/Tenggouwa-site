@@ -73,6 +73,9 @@ node scripts/prerender.mjs \
   --api="$PRERENDER_API" \
   $PRERENDER_NOINDEX
 
+echo "==> 生成 OG 封面 (PNG)"
+node scripts/generate-og.mjs --dist="$DIST"
+
 # SPA 兜底：GitHub Pages 只支持根 404.html。
 # 策略：把 web 的 index.html 整个拷贝过来当 404.html——任何 deep-link 刷新时浏览器
 # URL 不变，web SPA 直接 mount，BrowserRouter 自己 match 路由。
