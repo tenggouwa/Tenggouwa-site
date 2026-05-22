@@ -80,6 +80,28 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
 
+  lighthouse:
+    needs: build
+    runs-on: ubuntu-latest
+    # 性能/SEO 基线：跌穿阈值就 fail（参考 .lighthouserc.cjs）
+    # 跟 deploy 并行跑，不阻塞发布
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cf-dist
+          path: cf-dist
+
+      - name: Run Lighthouse CI
+        run: npx --yes @lhci/cli@0.14.x autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
   notify-search-engines:
     needs: deploy
     runs-on: ubuntu-latest

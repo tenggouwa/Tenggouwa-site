@@ -95,6 +95,12 @@ function collectPosts() {
           console.warn(`skip (no slug): ${p}`);
           continue;
         }
+        // frontmatter draft: true → 跳过预渲染，不上 sitemap / 列表 / 详情
+        // parseFM 把所有值解成字符串，所以这里同时兼容 'true' 和 true
+        if (meta.draft === 'true' || meta.draft === true) {
+          console.log(`skip (draft): ${meta.slug}`);
+          continue;
+        }
         posts.push({
           slug: meta.slug,
           title: meta.title ?? meta.slug,
