@@ -17,6 +17,14 @@ export interface PostSummary {
   published_at: string;
 }
 
+export interface PostListPage {
+  items: PostSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface Inspiration {
   id: number;
   content: string;

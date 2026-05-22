@@ -1,19 +1,59 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Tag, Empty } from '@arco-design/web-react';
 import { apiGet } from '../lib/api';
 import TermLoading from '../components/TermLoading';
-import type { PostSummary } from '../lib/types';
+import type { PostListPage, PostSummary } from '../lib/types';
+
+const PAGE_SIZE = 10;
 
 export default function PostList() {
   const [posts, setPosts] = useState<PostSummary[] | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // 首屏
   useEffect(() => {
-    apiGet<PostSummary[]>('/api/public/posts')
-      .then(setPosts)
+    apiGet<PostListPage>(`/api/public/posts?limit=${PAGE_SIZE}&offset=0`)
+      .then((page) => {
+        setPosts(page.items);
+        setHasMore(page.has_more);
+      })
       .catch((e: Error) => setError(e.message));
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || posts == null) return;
+    setLoadingMore(true);
+    try {
+      const page = await apiGet<PostListPage>(
+        `/api/public/posts?limit=${PAGE_SIZE}&offset=${posts.length}`,
+      );
+      setPosts([...posts, ...page.items]);
+      setHasMore(page.has_more);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, posts]);
+
+  // 哨兵进视口 → 自动拉下一页
+  useEffect(() => {
+    if (!hasMore || posts == null) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore();
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, posts, loadMore]);
 
   if (error) {
     return (
@@ -61,6 +101,22 @@ export default function PostList() {
           </li>
         ))}
       </ul>
+
+      {hasMore ? (
+        <div ref={sentinelRef} className="py-6 text-center text-xs text-terminal-gray/60">
+          {loadingMore ? (
+            <span>
+              <span className="text-terminal-pink">$ </span>fetching more...
+            </span>
+          ) : (
+            <span className="text-terminal-gray/40">↓ scroll for more</span>
+          )}
+        </div>
+      ) : (
+        <div className="py-6 text-center text-xs text-terminal-gray/40">
+          <span className="text-terminal-pink">$ </span># EOF — {posts.length} posts
+        </div>
+      )}
     </div>
   );
 }

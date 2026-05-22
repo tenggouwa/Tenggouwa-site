@@ -60,10 +60,13 @@ mkdir -p "$DIST/admin"
 cp -R apps/admin/dist/. "$DIST/admin/"
 
 echo "==> 预渲染博客静态页 + sitemap / robots / feed (origin=$SITE_ORIGIN)"
+# prerender 从 API 拉数据（DB 是唯一真相），未显式传则回落到 https://api.tenggouwa.com
+PRERENDER_API="${VITE_API_BASE:-https://api.tenggouwa.com}"
 node scripts/prerender.mjs \
   --dist="$DIST" \
   --base="$WEB_BASE" \
   --origin="$SITE_ORIGIN" \
+  --api="$PRERENDER_API" \
   $PRERENDER_NOINDEX
 
 # SPA 兜底：GitHub Pages 只支持根 404.html。

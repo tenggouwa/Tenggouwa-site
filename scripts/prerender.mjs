@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// SSG 预渲染：把 content/posts/**/*.md 渲染成搜索引擎友好的静态 HTML，
-// 同时生成 sitemap.xml / robots.txt / feed.xml / atom.xml / 标签聚合页。
+// SSG 预渲染：从 /api/public/posts 拉已发布文章，生成搜索引擎友好的静态 HTML，
+// 同时生成 sitemap.xml / robots.txt / feed.xml / 标签聚合页。
 //
 // 用法:
-//   node scripts/prerender.mjs --dist=<dir> --base=<base> --origin=<origin> [--noindex]
+//   node scripts/prerender.mjs --dist=<dir> --base=<base> --origin=<origin> \
+//     [--api=https://api.tenggouwa.com] [--noindex]
+//   未传 --api 时回落到环境变量 VITE_API_BASE。
 //
 // 设计：
+// - 数据源单一化：DB → /api/public/posts 是唯一真相。content/posts/*.md
+//   只是 publish-series.py 的输入，已经不再被这里直接消费——避免列表跟
+//   SPA 看到的不一致。
 // - 不依赖 React 运行时，纯静态 HTML（搜索引擎首屏即拿到正文）
 // - CSS 复用 vite build 出来的 main bundle，视觉跟 SPA 一致
 // - canonical / sitemap 始终指向 --origin（即正版根域名 tenggouwa.com）
@@ -34,7 +39,7 @@ const DIST = path.resolve(ROOT, args.dist ?? 'pages-dist');
 const BASE = normalizeBase(args.base ?? '/');
 const ORIGIN = (args.origin ?? 'https://tenggouwa.com').replace(/\/$/, '');
 const NOINDEX = Boolean(args.noindex);
-const CONTENT_DIR = path.join(ROOT, 'content/posts');
+const API_BASE = (args.api ?? process.env.VITE_API_BASE ?? '').replace(/\/$/, '');
 
 const SITE_TITLE = 'tenggouwa · 极客小站';
 const SITE_DESC = '腾构娃的极客小站：AI / 系统 / 工具的笔记、灵感与实验。';
@@ -80,41 +85,43 @@ function parseFM(text) {
 marked.setOptions({ gfm: true, breaks: false });
 const renderMd = (md) => marked.parse(md);
 
-// ---------- 收集文章 ----------
-function collectPosts() {
+// ---------- 收集文章（从 API 拉，DB 是唯一真相） ----------
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} → ${res.status} ${res.statusText}`);
+  const env = await res.json();
+  if (env && typeof env === 'object' && 'code' in env && env.code !== 0) {
+    throw new Error(`${url} → api code=${env.code} message=${env.message}`);
+  }
+  return env.data ?? env;
+}
+
+async function collectPosts() {
+  if (!API_BASE) {
+    throw new Error('API_BASE 未配置：传 --api=https://api.tenggouwa.com 或设 VITE_API_BASE');
+  }
+  // 列表：一次拉 100 篇足够，单博客规模够用很多年
+  const page = await fetchJson(`${API_BASE}/api/public/posts?limit=100&offset=0`);
+  const items = Array.isArray(page?.items) ? page.items : [];
+  console.log(`==> listing api returned ${items.length}/${page?.total ?? '?'} posts`);
+
   const posts = [];
-  const walk = (dir) => {
-    for (const name of fs.readdirSync(dir)) {
-      const p = path.join(dir, name);
-      const st = fs.statSync(p);
-      if (st.isDirectory()) walk(p);
-      else if (name.endsWith('.md')) {
-        const raw = fs.readFileSync(p, 'utf-8');
-        const { meta, body } = parseFM(raw);
-        if (!meta.slug) {
-          console.warn(`skip (no slug): ${p}`);
-          continue;
-        }
-        // frontmatter draft: true → 跳过预渲染，不上 sitemap / 列表 / 详情
-        // parseFM 把所有值解成字符串，所以这里同时兼容 'true' 和 true
-        if (meta.draft === 'true' || meta.draft === true) {
-          console.log(`skip (draft): ${meta.slug}`);
-          continue;
-        }
-        posts.push({
-          slug: meta.slug,
-          title: meta.title ?? meta.slug,
-          summary: meta.summary ?? '',
-          tags: Array.isArray(meta.tags) ? meta.tags : [],
-          publishedAt: meta.published_at ?? '',
-          body,
-          srcPath: p,
-        });
-      }
+  for (const it of items) {
+    try {
+      const d = await fetchJson(`${API_BASE}/api/public/posts/${encodeURIComponent(it.slug)}`);
+      posts.push({
+        slug: d.slug,
+        title: d.title ?? d.slug,
+        summary: d.summary ?? '',
+        tags: Array.isArray(d.tags) ? d.tags : [],
+        publishedAt: d.published_at ?? '',
+        body: d.content ?? '',
+      });
+    } catch (e) {
+      console.warn(`skip ${it.slug}: ${e.message}`);
     }
-  };
-  if (fs.existsSync(CONTENT_DIR)) walk(CONTENT_DIR);
-  // 倒序：最新在前
+  }
+  // API 已经按 published_at desc 返回，这里再保证一次
   posts.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
   return posts;
 }
@@ -422,12 +429,12 @@ ${items}
 }
 
 // ---------- main ----------
-function main() {
+async function main() {
   if (!fs.existsSync(DIST)) {
     throw new Error(`dist not found: ${DIST}`);
   }
-  console.log(`==> prerender into ${DIST} (base=${BASE}, origin=${ORIGIN}, noindex=${NOINDEX})`);
-  const posts = collectPosts();
+  console.log(`==> prerender into ${DIST} (base=${BASE}, origin=${ORIGIN}, api=${API_BASE}, noindex=${NOINDEX})`);
+  const posts = await collectPosts();
   console.log(`==> ${posts.length} posts`);
 
   const allTags = [...new Set(posts.flatMap((p) => p.tags))].sort();
@@ -527,4 +534,7 @@ function main() {
   console.log('==> done');
 }
 
-main();
+main().catch((e) => {
+  console.error('prerender failed:', e);
+  process.exit(1);
+});
