@@ -6,7 +6,9 @@ on:
     paths:
       - 'apps/web/**'
       - 'apps/admin/**'
+      - 'content/posts/**'
       - 'scripts/build-pages.sh'
+      - 'scripts/prerender.mjs'
       - '.github/workflows/deploy-pages.yml'
       - 'pnpm-workspace.yaml'
       - 'package.json'

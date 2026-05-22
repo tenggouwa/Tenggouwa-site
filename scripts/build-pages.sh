@@ -66,34 +66,26 @@ node scripts/prerender.mjs \
   --origin="$SITE_ORIGIN" \
   $PRERENDER_NOINDEX
 
-# SPA 兜底：GitHub Pages 只支持根 404.html，Cloudflare Pages 也认 404.html。
-# 这里写一个 smart 404：
-#  - <ADMIN_BASE>/* → 跳 admin SPA 根
-#  - 其它 <WEB_BASE>/* → 跳 web SPA 根
-# 各 SPA 的 index.html 启动时再从 sessionStorage 把 URL 还原回 history。
-cat > "$DIST/404.html" <<EOF
-<!doctype html>
-<html lang="zh-CN" class="dark">
-<head>
-  <meta charset="UTF-8" />
-  <title>tenggouwa · routing</title>
-  <script>
-    (function () {
-      var WEB_BASE   = "${WEB_BASE}";
-      var ADMIN_BASE = "${ADMIN_BASE}";
-      var url = location.pathname + location.search + location.hash;
-      try { sessionStorage.setItem('tg_spa_redirect', url); } catch (e) {}
-      if (location.pathname.indexOf(ADMIN_BASE) === 0) {
-        location.replace(ADMIN_BASE);
-      } else {
-        location.replace(WEB_BASE);
-      }
-    })();
-  </script>
-</head>
-<body></body>
-</html>
+# SPA 兜底：GitHub Pages 只支持根 404.html。
+# 策略：把 web 的 index.html 整个拷贝过来当 404.html——任何 deep-link 刷新时浏览器
+# URL 不变，web SPA 直接 mount，BrowserRouter 自己 match 路由。
+# 唯一例外是 admin 子路径：根 404.html 跑的是 web SPA，basename="/" 不认识 /admin/*，
+# 所以在 <head> 顶部插一段 inline script，把 admin path 先存 sessionStorage 再
+# redirect 到 admin SPA 根，admin/main.tsx 那边再 history.replaceState 还原。
+cp "$DIST/index.html" "$DIST/404.html"
+ADMIN_REDIRECT_SCRIPT=$(cat <<EOF
+<script>(function(){var b="${ADMIN_BASE}";if(location.pathname.indexOf(b)===0&&location.pathname!==b){try{sessionStorage.setItem('tg_spa_redirect',location.pathname+location.search+location.hash);}catch(e){}location.replace(b);}})();</script>
 EOF
+)
+# 在 <head> 后立刻插入 redirect script
+python3 -c "
+import sys
+p = '$DIST/404.html'
+s = open(p).read()
+inject = '''$ADMIN_REDIRECT_SCRIPT'''
+s = s.replace('<head>', '<head>' + inject, 1)
+open(p, 'w').write(s)
+"
 
 # 防止 GitHub Pages 用 Jekyll 处理（会过滤 _ 开头的目录）
 touch "$DIST/.nojekyll"
