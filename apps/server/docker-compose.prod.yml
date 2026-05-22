@@ -56,6 +56,11 @@ services:
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+      # 强制走 HTTP/2 over TCP，禁掉默认的 QUIC/UDP。
+      # 阿里云出境到 CF 边缘的 UDP 链路不稳，QUIC 每隔几小时会 idle out，
+      # 导致 agent 那条长 WS 被中转层甩掉（见 cloudflared 日志里反复出现的
+      # "timeout: no recent network activity" / "failed to accept QUIC stream"）。
+      TUNNEL_TRANSPORT_PROTOCOL: http2
     depends_on:
       - app
 
