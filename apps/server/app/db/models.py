@@ -160,7 +160,7 @@ class WebVitalsRow(Base):
     path: Mapped[str] = mapped_column(String(500), nullable=False)
     metric: Mapped[str] = mapped_column(String(16), nullable=False)  # LCP | CLS | INP | FCP | TTFB
     value: Mapped[float] = mapped_column(nullable=False)
-    rating: Mapped[str] = mapped_column(String(16), nullable=False)  # good | needs-improvement | poor
+    rating: Mapped[str] = mapped_column(String(32), nullable=False)  # good | needs-improvement | poor
     nav_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     is_mobile: Mapped[bool] = mapped_column(nullable=False, default=False)
     visitor_hash: Mapped[str] = mapped_column(String(32), nullable=False)
