@@ -6,7 +6,9 @@ from .models import (
     InspirationRow,
     PageViewRow,
     PostRow,
+    SeoSearchSnapshotRow,
     TerminalSessionRow,
+    WebVitalsRow,
 )
 from .pg import Base, async_pg, get_session
 
@@ -20,4 +22,6 @@ __all__ = [
     "AdminTotpRow",
     "AgentRow",
     "TerminalSessionRow",
+    "WebVitalsRow",
+    "SeoSearchSnapshotRow",
 ]
