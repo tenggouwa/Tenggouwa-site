@@ -5,6 +5,8 @@ fastapi:
   workers: 1
   cors_allow_origins:
     - "https://tenggouwa.github.io"
+    - "https://tenggouwa.com"
+    - "https://www.tenggouwa.com"
 
 postgres:
   default:
