@@ -40,6 +40,9 @@ const BASE = normalizeBase(args.base ?? '/');
 const ORIGIN = (args.origin ?? 'https://tenggouwa.com').replace(/\/$/, '');
 const NOINDEX = Boolean(args.noindex);
 const API_BASE = (args.api ?? process.env.VITE_API_BASE ?? '').replace(/\/$/, '');
+// Umami 埋点：静态页也注入 script tag，让搜索流量进入静态详情页时也能被统计
+const UMAMI_URL = args['umami-url'] ?? process.env.VITE_UMAMI_URL ?? '';
+const UMAMI_WEBSITE_ID = args['umami-id'] ?? process.env.VITE_UMAMI_WEBSITE_ID ?? '';
 
 const SITE_TITLE = 'tenggouwa · 极客小站';
 const SITE_DESC = '腾构娃的极客小站：AI / 系统 / 工具的笔记、灵感与实验。';
@@ -168,6 +171,12 @@ function navHtml(currentPath) {
   }).join('\n          ');
 }
 
+function umamiScript() {
+  if (NOINDEX) return ''; // 子路径产物不收录、也不必埋点
+  if (!UMAMI_URL || !UMAMI_WEBSITE_ID) return '';
+  return `<script async defer src="${UMAMI_URL}" data-website-id="${UMAMI_WEBSITE_ID}"></script>`;
+}
+
 function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, extraHead = '' }) {
   const head = findHeadAssets();
   const fullTitle = title === SITE_TITLE ? title : `${title} · tenggouwa`;
@@ -201,6 +210,7 @@ function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, ext
     <link rel="alternate" type="application/rss+xml" title="${SITE_TITLE} RSS" href="${pageUrl('/feed.xml')}" />
     <link rel="icon" type="image/svg+xml" href="${pageUrl('/favicon.svg')}" />
     ${head}
+    ${umamiScript()}
     ${extraHead}
     ${ld}
   </head>

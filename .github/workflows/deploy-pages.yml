@@ -46,6 +46,8 @@ jobs:
           # 加一个 VITE_API_BASE = https://api.<你的域名>
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://tenggouwa.com' }}
+          VITE_UMAMI_URL: ${{ vars.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ vars.VITE_UMAMI_WEBSITE_ID }}
         run: bash scripts/build-pages.sh
 
       - name: Build pages (root, for tenggouwa.com)
@@ -53,6 +55,8 @@ jobs:
           REPO_NAME: ${{ github.event.repository.name }}
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://tenggouwa.com' }}
+          VITE_UMAMI_URL: ${{ vars.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ vars.VITE_UMAMI_WEBSITE_ID }}
           INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
           PAGES_TARGET: root
         run: bash scripts/build-pages.sh
@@ -121,10 +125,14 @@ jobs:
             echo "sitemap fetch failed; will rely on rebuild"
         env:
           SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://tenggouwa.com' }}
+          VITE_UMAMI_URL: ${{ vars.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ vars.VITE_UMAMI_WEBSITE_ID }}
 
       - name: Ping IndexNow / Baidu / Google Indexing
         env:
           SITE_ORIGIN: ${{ vars.SITE_ORIGIN || 'https://tenggouwa.com' }}
+          VITE_UMAMI_URL: ${{ vars.VITE_UMAMI_URL }}
+          VITE_UMAMI_WEBSITE_ID: ${{ vars.VITE_UMAMI_WEBSITE_ID }}
           SITEMAP_PATH: cf-dist/sitemap.xml
           INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
           BAIDU_SITE: ${{ vars.BAIDU_SITE }}

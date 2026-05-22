@@ -1,0 +1,51 @@
+# Umami 隐私友好的访客统计。独立 stack，跟主 server 同一台机器跑。
+#
+# 启动：
+#   cd ~/apps/Tenggouwa-server
+#   cp -n .env.umami.sample .env.umami    # 第一次：填好 secret
+#   docker compose -f docker-compose.umami.yml --env-file .env.umami up -d
+#
+# .env.umami 需要：
+#   POSTGRES_PASSWORD=<给 umami 专用 postgres 用>
+#   APP_SECRET=<随机 32+ 字符，用来签发 session cookie>
+#
+# 走 Cloudflare Tunnel 暴露：在 cloudflare dashboard 给 tunnel 加一条
+# umami.tenggouwa.com → http://localhost:3001
+# 然后到 https://umami.tenggouwa.com 登入（默认 admin/umami，登入后改密码）。
+
+services:
+  umami-db:
+    image: postgres:16-alpine
+    container_name: tenggouwa-umami-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: umami
+    volumes:
+      - umami_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami -d umami"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    container_name: tenggouwa-umami
+    restart: unless-stopped
+    environment:
+      DATABASE_TYPE: postgresql
+      DATABASE_URL: postgres://umami:${POSTGRES_PASSWORD}@umami-db:5432/umami
+      APP_SECRET: ${APP_SECRET}
+      # 关闭遥测（不向 umami-software 上报本机使用情况）
+      DISABLE_TELEMETRY: "1"
+    ports:
+      # 只在本地 127.0.0.1 暴露，cloudflared 在 host 网络里转发
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      umami-db:
+        condition: service_healthy
+
+volumes:
+  umami_pg_data:

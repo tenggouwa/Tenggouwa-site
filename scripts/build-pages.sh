@@ -51,7 +51,11 @@ mkdir -p "$DIST"
 
 : "${VITE_API_BASE:=}"
 echo "==> 构建 apps/web (base=$WEB_BASE, api=${VITE_API_BASE:-<empty>})"
-VITE_BASE="$WEB_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/web build
+VITE_BASE="$WEB_BASE" \
+  VITE_API_BASE="$VITE_API_BASE" \
+  VITE_UMAMI_URL="${VITE_UMAMI_URL:-}" \
+  VITE_UMAMI_WEBSITE_ID="${VITE_UMAMI_WEBSITE_ID:-}" \
+  pnpm --filter @tenggouwa/web build
 cp -R apps/web/dist/. "$DIST/"
 
 echo "==> 构建 apps/admin (base=$ADMIN_BASE, api=${VITE_API_BASE:-<empty>})"
