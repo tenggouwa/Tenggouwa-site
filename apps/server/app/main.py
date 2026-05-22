@@ -41,10 +41,14 @@ def create_app() -> FastAPI:
     async def lifespan(_: FastAPI):
         logger.info("Starting tenggouwa-server...")
         setup_proxy_bypass()
-        # 真实数据库 / Redis 资源初始化放这里
+        # SEO 调度器：每日 03:00 拉 GSC 数据。缺 secret 时任务自身静默 skip
+        from modules.seo.scheduler import start_seo_scheduler, stop_seo_scheduler
+
+        start_seo_scheduler()
         logger.info("tenggouwa-server started.")
         yield
         logger.info("Stopping tenggouwa-server...")
+        stop_seo_scheduler()
         logger.info("tenggouwa-server stopped.")
 
     app = FastAPI(
