@@ -27,6 +27,7 @@ rsync -avz --delete \
   --exclude '.pytest_cache' \
   --exclude 'logs/' \
   --exclude '.env' \
+  --exclude '.env.umami' \
   "$ROOT/apps/server/" "$REMOTE:$REMOTE_PATH/"
 
 echo "==> 远端 docker compose 拉起 / 重建"
