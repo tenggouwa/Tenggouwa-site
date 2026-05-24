@@ -18,10 +18,26 @@ services:
     image: postgres:16-alpine
     container_name: tenggouwa-umami-db
     restart: unless-stopped
+    # 1G 机器上必须 cap 资源，否则 umami 数据聚合 cron 会触发 swap thrash 拖死整机
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.3
     environment:
       POSTGRES_USER: umami
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: umami
+      # 小机器优化：减少共享内存、缓存
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=16MB
+      - -c
+      - max_connections=20
     volumes:
       - umami_pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,12 +50,18 @@ services:
     image: ghcr.io/umami-software/umami:postgresql-latest
     container_name: tenggouwa-umami
     restart: unless-stopped
+    # next.js 启动 cold start 会瞬间冲到 80%+ CPU，cap 死防止拖累整机
+    mem_limit: 384m
+    memswap_limit: 512m
+    cpus: 0.5
     environment:
       DATABASE_TYPE: postgresql
       DATABASE_URL: postgres://umami:${POSTGRES_PASSWORD}@umami-db:5432/umami
       APP_SECRET: ${APP_SECRET}
       # 关闭遥测（不向 umami-software 上报本机使用情况）
       DISABLE_TELEMETRY: "1"
+      # 1G 机器：限制 next.js / node 内存峰值
+      NODE_OPTIONS: "--max-old-space-size=320"
     ports:
       # 只在本地 127.0.0.1 暴露，cloudflared 在 host 网络里转发
       - "127.0.0.1:3001:3000"

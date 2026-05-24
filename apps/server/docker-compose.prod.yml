@@ -20,10 +20,24 @@ services:
     image: postgres:16-alpine
     container_name: tenggouwa-postgres
     restart: unless-stopped
+    # 1G 机器：cap 内存防止单容器吃光机器
+    mem_limit: 256m
+    memswap_limit: 384m
+    cpus: 0.5
     environment:
       POSTGRES_USER: tenggouwa
       POSTGRES_PASSWORD: ${POSTGRES_DEFAULT_PASSWORD}
       POSTGRES_DB: tenggouwa
+    command:
+      - postgres
+      - -c
+      - shared_buffers=48MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=16MB
+      - -c
+      - max_connections=30
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -39,6 +53,10 @@ services:
     image: tenggouwa-server:latest
     container_name: tenggouwa-app
     restart: unless-stopped
+    # FastAPI + uvicorn + APScheduler 正常 100-200MB，给 384MB cap 留足
+    mem_limit: 384m
+    memswap_limit: 512m
+    cpus: 0.7
     env_file:
       - .env
     environment:
