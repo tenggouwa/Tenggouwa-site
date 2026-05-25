@@ -173,9 +173,10 @@ $ ls /proc/$$/
 attr  cgroup  cmdline  comm  cwd  environ  exe  fd  maps  mem  net  ns  oom_score
 root  stack  stat  statm  status  syscall  ...
 
-# 2. 看进程当前在哪个 syscall 里卡着
+# 2. 看进程当前在哪个 syscall 里卡着（x86_64）
 $ cat /proc/$$/syscall
-0xea 0x... 0x... 0x... ...         # rax=0xea (futex), 这个 shell 正在等键盘输入
+0 0x0 0x... 0x1 0x... ...          # 第一列就是 syscall 号（十进制），0 = read
+# 常见 x86_64 编号：read=0 / write=1 / openat=257 / futex=202 / epoll_wait=232
 
 # 3. 看系统里所有运行中的进程
 $ ls /proc | grep '^[0-9]' | wc -l
