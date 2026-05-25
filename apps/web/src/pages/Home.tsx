@@ -1,5 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Typewriter from '../components/Typewriter';
+import { apiGet } from '../lib/api';
+import { SERIES } from '../lib/series';
+import type { PostListPage, PostSummary } from '../lib/types';
 
 const ASCII = String.raw`
  _
@@ -18,6 +22,14 @@ const LINES = [
 ];
 
 export default function Home() {
+  const [latest, setLatest] = useState<PostSummary[] | null>(null);
+
+  useEffect(() => {
+    apiGet<PostListPage>('/api/public/posts?limit=3&offset=0')
+      .then((p) => setLatest(p.items))
+      .catch(() => setLatest([]));
+  }, []);
+
   return (
     <div className="space-y-10">
       <pre className="text-terminal-green text-[10px] md:text-xs leading-tight shadow-glow overflow-x-auto">
@@ -26,14 +38,88 @@ export default function Home() {
 
       <div className="border border-terminal-line/70 bg-terminal-panel/50 rounded-lg p-5 md:p-6">
         <div className="flex items-center gap-2 text-xs text-terminal-gray mb-3">
-          <span className="w-3 h-3 rounded-full bg-red-400/70" />
-          <span className="w-3 h-3 rounded-full bg-yellow-400/70" />
-          <span className="w-3 h-3 rounded-full bg-green-400/70" />
+          <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+          <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
+          <span className="w-3 h-3 rounded-full bg-[#28c840]" />
           <span className="ml-2">tenggouwa@laptop ~ — zsh</span>
         </div>
         <Typewriter lines={LINES} />
       </div>
 
+      {/* 最新文章 */}
+      {latest && latest.length > 0 && (
+        <section className="space-y-3 font-mono">
+          <h2 className="text-terminal-green text-lg flex items-baseline gap-2">
+            <span className="text-terminal-pink">$</span>
+            <span>tail -3 posts/*.md</span>
+          </h2>
+          <ul className="space-y-2">
+            {latest.map((p) => (
+              <li key={p.id}>
+                <Link
+                  to={`/posts/${p.slug}`}
+                  className="group block px-3 py-2.5 rounded
+                             border border-terminal-line/40
+                             hover:border-terminal-green/50 hover:bg-terminal-green/5
+                             transition-all"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 className="text-terminal-gray group-hover:text-terminal-green transition-colors truncate">
+                      {p.title}
+                    </h3>
+                    <span className="text-[10px] text-terminal-gray/50 shrink-0 tabular-nums">
+                      {p.published_at.slice(0, 10)}
+                    </span>
+                  </div>
+                  {p.summary && (
+                    <p className="text-xs text-terminal-gray/65 mt-1 line-clamp-1">{p.summary}</p>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link
+            to="/posts"
+            className="inline-block text-xs text-terminal-cyan hover:text-terminal-green transition-colors"
+          >
+            <span className="text-terminal-pink">~$</span> ls posts/ →
+          </Link>
+        </section>
+      )}
+
+      {/* 系列入口 */}
+      {SERIES.length > 0 && (
+        <section className="space-y-3 font-mono">
+          <h2 className="text-terminal-green text-lg flex items-baseline gap-2">
+            <span className="text-terminal-pink">$</span>
+            <span>ls series/</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {SERIES.map((s) => (
+              <Link
+                key={s.tag}
+                to={`/series/${s.tag}`}
+                className="group block p-4 rounded border border-terminal-line/40
+                           hover:border-terminal-green/50 hover:bg-terminal-green/5
+                           transition-all"
+              >
+                <div className="flex items-baseline gap-2 mb-1.5 text-xs">
+                  <span className="text-terminal-pink shrink-0">~$</span>
+                  <span className="text-terminal-cyan">{s.command_hint ?? `cat ${s.tag}/README`}</span>
+                </div>
+                <div className="text-terminal-gray group-hover:text-terminal-green transition-colors font-semibold">
+                  {s.title} →
+                </div>
+                <p className="text-xs text-terminal-gray/65 mt-1.5 line-clamp-3 leading-relaxed">
+                  {s.description}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 三大区块：保留 */}
       <section className="grid md:grid-cols-3 gap-4">
         <Card
           to="/posts"
