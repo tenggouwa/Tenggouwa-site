@@ -21,13 +21,17 @@ export default function Layout() {
     trackPageView(loc.pathname);
   }, [loc.pathname]);
 
-  // 全局 Cmd+K / Ctrl+K 召唤搜索（在 input/textarea 里不拦截）
+  // 全局 Cmd/Ctrl+K 和 Cmd/Ctrl+F 都召唤搜索（在 input/textarea 里不拦截）
+  // Cmd+F 是浏览器原生页内查找，主动拦截覆盖成站内搜索——更贴合用户预期
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const isMeta = e.metaKey || e.ctrlKey;
-      if (isMeta && e.key.toLowerCase() === 'k') {
+      const key = e.key.toLowerCase();
+      if (isMeta && (key === 'k' || key === 'f')) {
         const tag = (e.target as HTMLElement | null)?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        // 在 input 里也允许 Cmd+K 召唤；但 Cmd+F 只在非 input 区拦截，
+        // 避免抢掉用户在表单里的查找需求
+        if (key === 'f' && (tag === 'INPUT' || tag === 'TEXTAREA')) return;
         e.preventDefault();
         setSearchOpen(true);
       } else if (e.key === 'Escape' && searchOpen) {
@@ -65,8 +69,8 @@ export default function Layout() {
               type="button"
               onClick={() => setSearchOpen(true)}
               className="group flex items-center gap-2 px-2.5 py-1 rounded border border-terminal-line/60 hover:border-terminal-green/60 bg-terminal-panel/30 hover:bg-terminal-panel/60 transition-all text-xs"
-              aria-label="搜索 (Cmd+K)"
-              title="搜索 (Cmd+K)"
+              aria-label="搜索 (Cmd+K / Cmd+F)"
+              title="搜索 (⌘K 或 ⌘F)"
             >
               <svg
                 width="12"

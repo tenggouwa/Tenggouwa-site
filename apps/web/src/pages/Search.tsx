@@ -46,21 +46,35 @@ export default function Search() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-terminal-green text-2xl">
+      <h1 className="text-terminal-green text-2xl font-mono">
         <span className="text-terminal-pink">$ </span>grep -r <span className="text-terminal-yellow">{q || '<keyword>'}</span> .
       </h1>
 
-      <form onSubmit={submit} className="flex items-center gap-2 border-b border-terminal-line/60 pb-3">
-        <span className="text-terminal-pink shrink-0">~$</span>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="输入关键词后回车搜索…"
-          className="flex-1 bg-transparent outline-none text-terminal-gray placeholder:text-terminal-gray/40"
-          autoFocus
-          spellCheck={false}
-        />
-      </form>
+      <div
+        className="rounded-lg border border-terminal-green/40 bg-terminal-bg/95 overflow-hidden"
+        style={{ boxShadow: '0 0 30px rgba(90,247,142,0.15)' }}
+      >
+        {/* mac 三色点 title bar */}
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-terminal-line/60 bg-terminal-panel/60">
+          <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+          <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
+          <span className="w-3 h-3 rounded-full bg-[#28c840]" />
+          <span className="text-[11px] text-terminal-gray/60 ml-2 font-mono">~/search</span>
+        </div>
+        <form onSubmit={submit} className="flex items-center gap-2 px-4 py-3 font-mono">
+          <span className="text-terminal-pink shrink-0">~$</span>
+          <span className="text-terminal-green shrink-0">grep -r</span>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="输入关键词后回车搜索…"
+            className="flex-1 bg-transparent outline-none border-none text-terminal-gray placeholder:text-terminal-gray/40 caret-terminal-green"
+            autoFocus
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </form>
+      </div>
 
       {!q ? (
         <Empty description={
