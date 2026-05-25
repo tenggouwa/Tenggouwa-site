@@ -40,9 +40,10 @@ class PostService:
         *,
         limit: int,
         offset: int,
+        tag: str | None = None,
     ) -> PostListPage:
         items, total = await PostRepository(session).list_page(
-            limit=limit, offset=offset, only_published=True,
+            limit=limit, offset=offset, only_published=True, tag=tag,
         )
         summaries = [PostSummary(**item.model_dump(exclude={"content"})) for item in items]
         return PostListPage(
@@ -58,6 +59,21 @@ class PostService:
         if item is None:
             raise DetailedHTTPException(status_code=404, detail="post not found", full_detail=f"slug={slug}")
         return item
+
+    async def list_related(
+        self,
+        session: AsyncSession,
+        slug: str,
+        limit: int = 3,
+    ) -> list[PostSummary]:
+        """按 tag 交集找相关文章。先取当前文章拿 tags，再查同 tag 的其他已发布文章。"""
+        current = await PostRepository(session).get_by_slug(slug, only_published=True)
+        if current is None:
+            return []
+        related = await PostRepository(session).list_related(
+            slug=slug, tags=list(current.tags), limit=limit,
+        )
+        return [PostSummary(**item.model_dump(exclude={"content"})) for item in related]
 
 
 post_service = PostService()

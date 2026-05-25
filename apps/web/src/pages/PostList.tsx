@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Tag, Empty } from '@arco-design/web-react';
 import { apiGet } from '../lib/api';
 import TermLoading from '../components/TermLoading';
+import { SERIES } from '../lib/series';
 import type { PostListPage, PostSummary } from '../lib/types';
 
 const PAGE_SIZE = 10;
@@ -77,6 +78,31 @@ export default function PostList() {
       <h1 className="text-terminal-green text-2xl">
         <span className="text-terminal-pink">$ </span>cat posts/*.md
       </h1>
+
+      {/* 系列入口 */}
+      {SERIES.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono">
+          {SERIES.map((s) => (
+            <Link
+              key={s.tag}
+              to={`/series/${s.tag}`}
+              className="group block p-3 rounded border border-terminal-line/40
+                         hover:border-terminal-green/50 hover:bg-terminal-green/5
+                         transition-all"
+            >
+              <div className="flex items-baseline gap-2 mb-1">
+                <span className="text-terminal-pink shrink-0">~$</span>
+                <span className="text-terminal-cyan text-sm">{s.command_hint ?? `ls ${s.tag}/`}</span>
+              </div>
+              <div className="text-terminal-gray group-hover:text-terminal-green transition-colors font-semibold">
+                {s.title} →
+              </div>
+              <p className="text-xs text-terminal-gray/65 mt-1 line-clamp-2">{s.description}</p>
+            </Link>
+          ))}
+        </div>
+      )}
+
       <ul className="divide-y divide-terminal-line/60">
         {posts.map((p) => (
           <li key={p.id} className="py-5">

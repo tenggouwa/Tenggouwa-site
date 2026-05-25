@@ -25,6 +25,15 @@ export interface PostListPage {
   has_more: boolean;
 }
 
+// 系列元信息：title / 描述 / 排序前缀，写在前端而不是后端（轻量、好维护）
+export interface SeriesMeta {
+  tag: string;       // 用作 tag filter 的字符串，如 'linux-series'
+  title: string;     // 显示标题
+  emoji_or_glyph?: string;  // 可选小图标（应该用 SVG 或 ASCII，避免 emoji）
+  description: string;
+  command_hint?: string; // 终端风格副标题，如 'man linux'
+}
+
 export interface Inspiration {
   id: number;
   content: string;

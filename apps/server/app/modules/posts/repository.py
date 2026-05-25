@@ -85,10 +85,14 @@ class PostRepository:
         limit: int,
         offset: int,
         only_published: bool = False,
+        tag: str | None = None,
     ) -> tuple[list[Post], int]:
         where_clause = []
         if only_published:
             where_clause.append(PostRow.published_at <= datetime.now(timezone.utc))
+        if tag:
+            # JSONB ? 操作符：tags 数组里是否含某 key
+            where_clause.append(PostRow.tags.op("?")(tag))
 
         stmt = select(PostRow).order_by(PostRow.published_at.desc())
         count_stmt = select(func.count(PostRow.id))
@@ -100,3 +104,52 @@ class PostRepository:
         rows = (await self.session.execute(stmt)).scalars().all()
         total = (await self.session.execute(count_stmt)).scalar_one()
         return [_row_to_schema(r) for r in rows], total
+
+    async def list_related(
+        self,
+        *,
+        slug: str,
+        tags: list[str],
+        limit: int = 3,
+    ) -> list[Post]:
+        """相关文章：按 tag 交集数排序（共享 tag 越多越相关）；同分按发布时间倒序。
+        排除自己；只返回已发布。
+        """
+        if not tags:
+            return []
+        # 用 jsonb 数组重叠运算符 ?| 找出至少有一个 tag 重叠的；
+        # 再用 SQL 计算 overlap 数排序
+        from sqlalchemy import text
+
+        sql = text("""
+            SELECT
+                id, slug, title, summary, tags, content, published_at,
+                (
+                    SELECT COUNT(*)
+                    FROM jsonb_array_elements_text(tags) AS t(tag)
+                    WHERE t.tag = ANY(:tags)
+                ) AS overlap
+            FROM post
+            WHERE slug != :slug
+              AND published_at <= now()
+              AND tags ?| :tags
+            ORDER BY overlap DESC, published_at DESC
+            LIMIT :limit
+        """)
+        rows = (
+            await self.session.execute(
+                sql, {"slug": slug, "tags": tags, "limit": limit}
+            )
+        ).all()
+        return [
+            Post(
+                id=r.id,
+                slug=r.slug,
+                title=r.title,
+                summary=r.summary,
+                tags=list(r.tags or []),
+                content=r.content,
+                published_at=r.published_at,
+            )
+            for r in rows
+        ]

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
-from .schema import Post, PostCreate, PostListPage, PostUpdate
+from .schema import Post, PostCreate, PostListPage, PostSummary, PostUpdate
 from .service import post_service
 
 logger = logging.getLogger(__name__)
@@ -18,10 +18,11 @@ public_router = APIRouter(prefix="/public/posts", tags=["public.posts"])
 async def list_posts_public(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    tag: str | None = Query(default=None, max_length=64, description="按 tag 过滤"),
     session: AsyncSession = Depends(get_session),
 ) -> ResponseModel[PostListPage]:
-    """列出已发布文章（摘要，不含正文）。limit/offset 分页。"""
-    page = await post_service.list_summary_page(session, limit=limit, offset=offset)
+    """列出已发布文章（摘要，不含正文）。limit/offset 分页；tag 可选过滤。"""
+    page = await post_service.list_summary_page(session, limit=limit, offset=offset, tag=tag)
     return ResponseModel(data=page)
 
 
@@ -32,6 +33,17 @@ async def get_post_public(
 ) -> ResponseModel[Post]:
     item = await post_service.get_by_slug(session, slug)
     return ResponseModel(data=item)
+
+
+@public_router.get("/{slug}/related", response_model=ResponseModel[list[PostSummary]])
+async def get_post_related(
+    slug: str,
+    limit: int = Query(default=3, ge=1, le=10),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[PostSummary]]:
+    """相关文章：按 tag 交集排序，排除自己，只返回已发布。"""
+    items = await post_service.list_related(session, slug, limit=limit)
+    return ResponseModel(data=items)
 
 
 admin_router = APIRouter(

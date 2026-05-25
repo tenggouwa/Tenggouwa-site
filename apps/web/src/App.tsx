@@ -19,6 +19,7 @@ import About from './pages/About';
 import Console from './pages/Console';
 import NotFound from './pages/NotFound';
 import Search from './pages/Search';
+import Series from './pages/Series';
 
 export default function App() {
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="lab/life" element={<Life />} />
           <Route path="about" element={<About />} />
           <Route path="search" element={<Search />} />
+          <Route path="series/:tag" element={<Series />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
