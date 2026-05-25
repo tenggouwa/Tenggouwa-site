@@ -46,7 +46,61 @@ export default function Home() {
         <Typewriter lines={LINES} />
       </div>
 
-      {/* 最新文章 */}
+      {/* 三大区块：先出现 */}
+      <section className="grid md:grid-cols-3 gap-4">
+        <Card
+          to="/posts"
+          title="posts/"
+          desc="技术 / 思考 / 折腾笔记"
+          accent="text-terminal-green"
+        />
+        <Card
+          to="/inspirations"
+          title="inspirations/"
+          desc="随手记的小灵感 & 闪念"
+          accent="text-terminal-cyan"
+        />
+        <Card
+          to="/lab"
+          title="lab/"
+          desc="前端实验室：shader / 粒子 / 玩具"
+          accent="text-terminal-pink"
+        />
+      </section>
+
+      {/* 系列入口（放在三大区块之后） */}
+      {SERIES.length > 0 && (
+        <section className="space-y-3 font-mono">
+          <h2 className="text-terminal-green text-lg flex items-baseline gap-2">
+            <span className="text-terminal-pink">$</span>
+            <span>ls series/</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {SERIES.map((s) => (
+              <Link
+                key={s.tag}
+                to={`/series/${s.tag}`}
+                className="group block p-4 rounded border border-terminal-line/40
+                           hover:border-terminal-green/50 hover:bg-terminal-green/5
+                           transition-all"
+              >
+                <div className="flex items-baseline gap-2 mb-1.5 text-xs">
+                  <span className="text-terminal-pink shrink-0">~$</span>
+                  <span className="text-terminal-cyan">{s.command_hint ?? `cat ${s.tag}/README`}</span>
+                </div>
+                <div className="text-terminal-gray group-hover:text-terminal-green transition-colors font-semibold">
+                  {s.title} →
+                </div>
+                <p className="text-xs text-terminal-gray/65 mt-1.5 line-clamp-3 leading-relaxed">
+                  {s.description}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 最新文章（放最后） */}
       {latest && latest.length > 0 && (
         <section className="space-y-3 font-mono">
           <h2 className="text-terminal-green text-lg flex items-baseline gap-2">
@@ -86,60 +140,6 @@ export default function Home() {
           </Link>
         </section>
       )}
-
-      {/* 系列入口 */}
-      {SERIES.length > 0 && (
-        <section className="space-y-3 font-mono">
-          <h2 className="text-terminal-green text-lg flex items-baseline gap-2">
-            <span className="text-terminal-pink">$</span>
-            <span>ls series/</span>
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {SERIES.map((s) => (
-              <Link
-                key={s.tag}
-                to={`/series/${s.tag}`}
-                className="group block p-4 rounded border border-terminal-line/40
-                           hover:border-terminal-green/50 hover:bg-terminal-green/5
-                           transition-all"
-              >
-                <div className="flex items-baseline gap-2 mb-1.5 text-xs">
-                  <span className="text-terminal-pink shrink-0">~$</span>
-                  <span className="text-terminal-cyan">{s.command_hint ?? `cat ${s.tag}/README`}</span>
-                </div>
-                <div className="text-terminal-gray group-hover:text-terminal-green transition-colors font-semibold">
-                  {s.title} →
-                </div>
-                <p className="text-xs text-terminal-gray/65 mt-1.5 line-clamp-3 leading-relaxed">
-                  {s.description}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 三大区块：保留 */}
-      <section className="grid md:grid-cols-3 gap-4">
-        <Card
-          to="/posts"
-          title="posts/"
-          desc="技术 / 思考 / 折腾笔记"
-          accent="text-terminal-green"
-        />
-        <Card
-          to="/inspirations"
-          title="inspirations/"
-          desc="随手记的小灵感 & 闪念"
-          accent="text-terminal-cyan"
-        />
-        <Card
-          to="/lab"
-          title="lab/"
-          desc="前端实验室：shader / 粒子 / 玩具"
-          accent="text-terminal-pink"
-        />
-      </section>
 
       {/* 入口很隐蔽：只有需要进 console 的人会留意，对一般访客只是一段闪光的命令 */}
       <Link

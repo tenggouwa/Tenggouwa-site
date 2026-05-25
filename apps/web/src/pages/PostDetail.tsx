@@ -59,7 +59,7 @@ export default function PostDetail() {
     <>
       <ReadingProgress />
       <TableOfContents containerSelector="#post-body" />
-      <article className="space-y-6">
+      <article className="space-y-6 min-w-0 overflow-x-clip">
         <Link to="/posts" className="text-xs text-terminal-cyan hover:underline">
           ← cd ../posts
         </Link>
@@ -88,7 +88,7 @@ export default function PostDetail() {
             ))}
           </div>
         </header>
-        <div id="post-body" className="prose prose-invert max-w-none">
+        <div id="post-body" className="prose prose-invert max-w-none min-w-0 break-words">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}

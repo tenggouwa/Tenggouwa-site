@@ -24,7 +24,7 @@ export default function CodeBlock({ children, className }: PreProps) {
   };
 
   return (
-    <pre className={`group relative ${className ?? ''}`}>
+    <pre className={`group relative max-w-full overflow-x-auto ${className ?? ''}`}>
       {children}
       <button
         type="button"

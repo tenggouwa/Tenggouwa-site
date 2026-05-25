@@ -163,10 +163,10 @@ export default function TableOfContents({ containerSelector }: Props) {
                       type="button"
                       onClick={() => jumpTo(h.id)}
                       className={
-                        'w-full text-left px-4 py-2 block transition-colors border-l-2 ' +
+                        'w-full text-left px-4 py-2 block transition-colors border-l-2 appearance-none ' +
                         (activeId === h.id
                           ? 'bg-terminal-green/10 border-terminal-green text-terminal-green'
-                          : 'border-transparent text-terminal-gray hover:bg-terminal-line/30')
+                          : 'bg-transparent border-transparent text-terminal-gray hover:bg-terminal-line/30')
                       }
                     >
                       {h.text}
