@@ -31,3 +31,21 @@ export interface Inspiration {
   mood: string | null;
   created_at: string;
 }
+
+export interface SearchHit {
+  type: 'post' | 'inspiration';
+  id: number;
+  title: string;
+  url: string;
+  snippet: string; // 含 <mark>关键词</mark> 高亮的 HTML
+  score: number;
+  tags: string[];
+  timestamp: string | null;
+}
+
+export interface SearchResponse {
+  query: string;
+  took_ms: number;
+  total: number;
+  hits: SearchHit[];
+}

@@ -18,6 +18,7 @@ import Wave from './pages/lab/Wave';
 import About from './pages/About';
 import Console from './pages/Console';
 import NotFound from './pages/NotFound';
+import Search from './pages/Search';
 
 export default function App() {
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="lab/2048" element={<Game2048 />} />
           <Route path="lab/life" element={<Life />} />
           <Route path="about" element={<About />} />
+          <Route path="search" element={<Search />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

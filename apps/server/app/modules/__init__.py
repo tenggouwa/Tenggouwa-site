@@ -14,6 +14,7 @@ from .inspirations.router import admin_router as inspiration_admin_router
 from .inspirations.router import public_router as inspiration_public_router
 from .posts.router import admin_router as post_admin_router
 from .posts.router import public_router as post_public_router
+from .search.router import public_router as search_public_router
 from .seo.router import admin_router as seo_admin_router
 from .seo.router import public_router as seo_public_router
 from .terminal.router import admin_router as terminal_admin_router
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/api")
 router.include_router(post_public_router)
 router.include_router(inspiration_public_router)
 router.include_router(analytics_public_router)
+router.include_router(search_public_router)
 router.include_router(seo_public_router)
 router.include_router(terminal_console_router)  # /api/console/*：自带 voice/TOTP 鉴权
 
