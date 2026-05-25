@@ -18,6 +18,7 @@ class SearchRepository:
     async def search_posts(self, q: str, limit: int) -> list[dict]:
         # word_similarity 比 similarity 对短查询友好（含 vs 整体相似）
         # ILIKE 兜底确保子串匹配也命中（trigram 对很短的中文词可能漏）
+        # published_at <= now() 过滤未来调度的草稿（跟 /api/public/posts 一致）
         sql = text("""
             SELECT
                 id,
@@ -34,10 +35,13 @@ class SearchRepository:
                     word_similarity(:q, content) * 0.4
                 ) AS score
             FROM post
-            WHERE title ILIKE :like_q
-               OR summary ILIKE :like_q
-               OR tags::text ILIKE :like_q
-               OR content ILIKE :like_q
+            WHERE published_at <= now()
+              AND (
+                title ILIKE :like_q
+                OR summary ILIKE :like_q
+                OR tags::text ILIKE :like_q
+                OR content ILIKE :like_q
+              )
             ORDER BY score DESC, published_at DESC
             LIMIT :limit
         """)

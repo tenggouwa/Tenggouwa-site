@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Modal, Tag } from '@arco-design/web-react';
 import clsx from 'clsx';
 import { apiGet } from '../lib/api';
 import type { SearchHit, SearchResponse } from '../lib/types';
@@ -10,8 +9,7 @@ interface Props {
   onClose: () => void;
 }
 
-// 节流的轻量 debounce
-function useDebounced<T>(value: T, ms = 200): T {
+function useDebounced<T>(value: T, ms = 180): T {
   const [v, setV] = useState(value);
   useEffect(() => {
     const id = window.setTimeout(() => setV(value), ms);
@@ -27,20 +25,24 @@ export default function SearchModal({ visible, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const debouncedQ = useDebounced(q, 180);
 
-  // 打开时自动聚焦 + 重置
   useEffect(() => {
     if (visible) {
-      setTimeout(() => inputRef.current?.focus(), 60);
+      setTimeout(() => inputRef.current?.focus(), 30);
       setActive(0);
+      document.body.style.overflow = 'hidden';
     } else {
       setQ('');
       setResp(null);
+      document.body.style.overflow = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [visible]);
 
-  // 输入即搜
   useEffect(() => {
     const term = debouncedQ.trim();
     if (!term) {
@@ -67,6 +69,13 @@ export default function SearchModal({ visible, onClose }: Props) {
     };
   }, [debouncedQ]);
 
+  // 选中项滚到可视区
+  useEffect(() => {
+    if (!panelRef.current) return;
+    const el = panelRef.current.querySelector<HTMLElement>(`[data-hit-idx="${active}"]`);
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [active]);
+
   const goHit = useCallback(
     (hit: SearchHit) => {
       onClose();
@@ -75,7 +84,6 @@ export default function SearchModal({ visible, onClose }: Props) {
     [nav, onClose],
   );
 
-  // 上下键 + Enter 选择
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const hits = resp?.hits ?? [];
     if (e.key === 'ArrowDown') {
@@ -89,26 +97,40 @@ export default function SearchModal({ visible, onClose }: Props) {
       const hit = hits[active];
       if (hit) goHit(hit);
       else if (q.trim()) {
-        // 没结果但有 query：跳独立搜索页
         onClose();
         nav(`/search?q=${encodeURIComponent(q.trim())}`);
       }
     }
   };
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      onCancel={onClose}
-      footer={null}
-      mask
-      maskClosable
-      simple
-      style={{ width: 720, maxWidth: '92vw', top: '12vh' }}
-      className="tg-search-modal"
-    >
-      <div onKeyDown={onKeyDown} className="font-mono">
-        <div className="flex items-center gap-2 border-b border-terminal-line/60 pb-3 mb-3">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] px-4 font-mono">
+      {/* backdrop */}
+      <button
+        type="button"
+        aria-label="close"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/75 backdrop-blur-sm cursor-default"
+      />
+      {/* panel */}
+      <div
+        ref={panelRef}
+        className="relative w-full max-w-[640px] bg-terminal-bg/95 border border-terminal-green/40 rounded-lg overflow-hidden"
+        style={{ boxShadow: '0 0 40px rgba(90,247,142,0.18), 0 8px 32px rgba(0,0,0,0.6)' }}
+        onKeyDown={onKeyDown}
+      >
+        {/* mac 风 title bar */}
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-terminal-line/60 bg-terminal-panel/60">
+          <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+          <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
+          <span className="w-3 h-3 rounded-full bg-[#28c840]" />
+          <span className="text-[11px] text-terminal-gray/60 ml-2">~/search</span>
+        </div>
+
+        {/* input */}
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-terminal-line/40">
           <span className="text-terminal-pink shrink-0">~$</span>
           <span className="text-terminal-green shrink-0">grep -r</span>
           <input
@@ -116,73 +138,108 @@ export default function SearchModal({ visible, onClose }: Props) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="搜索文章 / 灵感…"
-            className="flex-1 bg-transparent outline-none border-none text-terminal-gray placeholder:text-terminal-gray/40"
+            className="flex-1 bg-transparent outline-none border-none text-terminal-gray placeholder:text-terminal-gray/40 caret-terminal-green"
             spellCheck={false}
             autoComplete="off"
           />
-          {loading && <span className="text-terminal-gray/60 text-xs">…</span>}
+          {loading && <span className="text-terminal-gray/50 text-xs animate-pulse">...</span>}
         </div>
 
-        {!q.trim() ? (
-          <div className="text-xs text-terminal-gray/60 px-1 py-4">
-            <div>
-              <kbd className="px-1.5 py-0.5 rounded border border-terminal-line/80">↑</kbd>{' '}
-              <kbd className="px-1.5 py-0.5 rounded border border-terminal-line/80">↓</kbd> 选择 ·{' '}
-              <kbd className="px-1.5 py-0.5 rounded border border-terminal-line/80">Enter</kbd> 打开 ·{' '}
-              <kbd className="px-1.5 py-0.5 rounded border border-terminal-line/80">Esc</kbd> 关闭
+        {/* body */}
+        <div className="max-h-[55vh] overflow-y-auto">
+          {!q.trim() ? (
+            <div className="px-5 py-6 text-xs text-terminal-gray/60 leading-relaxed">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <span className="flex items-center gap-1">
+                  <Kbd>↑</Kbd>
+                  <Kbd>↓</Kbd>
+                  <span>选择</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <Kbd>Enter</Kbd>
+                  <span>打开</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <Kbd>Esc</Kbd>
+                  <span>关闭</span>
+                </span>
+              </div>
+              <div className="mt-3 text-terminal-gray/50">
+                支持 posts + inspirations 全文搜索 · 中文 / 英文 / 标签
+              </div>
             </div>
-            <div className="mt-2">支持 posts + inspirations 全文搜索 · 中文/英文/标签都行</div>
-          </div>
-        ) : resp == null ? null : resp.hits.length === 0 ? (
-          <div className="text-sm text-terminal-gray/60 py-6 text-center">
-            没有命中 <code className="text-terminal-yellow">{resp.query}</code>
-          </div>
-        ) : (
-          <>
-            <ul className="max-h-[55vh] overflow-y-auto space-y-1">
+          ) : resp == null ? null : resp.hits.length === 0 ? (
+            <div className="px-5 py-8 text-sm text-terminal-gray/60 text-center">
+              <span className="text-terminal-pink">$ </span>
+              no match for <span className="text-terminal-yellow">{resp.query}</span>
+            </div>
+          ) : (
+            <ul className="py-2">
               {resp.hits.map((h, idx) => (
                 <li key={`${h.type}-${h.id}`}>
                   <button
                     type="button"
+                    data-hit-idx={idx}
                     onClick={() => goHit(h)}
                     onMouseEnter={() => setActive(idx)}
                     className={clsx(
-                      'w-full text-left px-3 py-2 rounded transition-colors block',
+                      'w-full text-left px-4 py-2.5 block transition-colors border-l-2',
                       idx === active
-                        ? 'bg-terminal-green/15 ring-1 ring-terminal-green/40'
-                        : 'hover:bg-terminal-line/40',
+                        ? 'bg-terminal-green/10 border-terminal-green'
+                        : 'border-transparent hover:bg-terminal-line/30',
                     )}
                   >
-                    <div className="flex items-baseline gap-2">
-                      <Tag color={h.type === 'post' ? 'green' : 'cyan'} size="small">
+                    <div className="flex items-baseline gap-2 min-w-0">
+                      <span
+                        className={clsx(
+                          'text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0',
+                          h.type === 'post'
+                            ? 'text-terminal-green bg-terminal-green/15'
+                            : 'text-terminal-cyan bg-terminal-cyan/15',
+                        )}
+                      >
                         {h.type}
-                      </Tag>
+                      </span>
                       <span className="text-terminal-gray font-medium truncate">{h.title}</span>
                     </div>
                     <div
-                      className="text-xs text-terminal-gray/70 mt-1 [&>mark]:bg-terminal-yellow/30 [&>mark]:text-terminal-yellow [&>mark]:px-0.5 [&>mark]:rounded"
+                      className="text-xs text-terminal-gray/65 mt-1 line-clamp-2 [&>mark]:bg-terminal-yellow/30 [&>mark]:text-terminal-yellow [&>mark]:px-0.5 [&>mark]:rounded"
                       dangerouslySetInnerHTML={{ __html: h.snippet }}
                     />
                   </button>
                 </li>
               ))}
             </ul>
-            <div className="text-xs text-terminal-gray/50 pt-2 mt-2 border-t border-terminal-line/40 flex justify-between">
-              <span>{resp.total} 条结果 · {resp.took_ms} ms</span>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  nav(`/search?q=${encodeURIComponent(q.trim())}`);
-                }}
-                className="text-terminal-cyan hover:underline"
-              >
-                查看全部 →
-              </button>
-            </div>
-          </>
+          )}
+        </div>
+
+        {/* footer */}
+        {resp != null && resp.hits.length > 0 && (
+          <div className="px-4 py-2 text-[11px] text-terminal-gray/50 border-t border-terminal-line/40 flex justify-between items-center">
+            <span>
+              {resp.total} hits · {resp.took_ms} ms
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                nav(`/search?q=${encodeURIComponent(q.trim())}`);
+              }}
+              className="text-terminal-cyan hover:text-terminal-green hover:underline"
+            >
+              查看全部 →
+            </button>
+          </div>
         )}
       </div>
-    </Modal>
+    </div>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="px-1.5 py-0.5 rounded border border-terminal-line/80 bg-terminal-panel/60 text-terminal-gray/80 text-[10px] font-mono">
+      {children}
+    </kbd>
   );
 }
