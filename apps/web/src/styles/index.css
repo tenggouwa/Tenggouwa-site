@@ -5,6 +5,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* preflight 关掉后（怕跟 Arco reset 打架），唯一必须补回的一条：
+   没有它，Tailwind 的 w-full + px-* 在 content-box 默认下会把盒子撑出
+   padding 宽度，移动端整页横向溢出。border-box 本就是 Arco 的假设。*/
+@layer base {
+  *,
+  ::before,
+  ::after {
+    box-sizing: border-box;
+  }
+}
+
 html,
 body,
 #root {
