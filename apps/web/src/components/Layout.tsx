@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import { trackPageView } from '../lib/track';
 import SearchModal from './SearchModal';
+import SkeletonScreen from './SkeletonScreen';
 
 const NAV = [
   { to: '/', label: '~', exact: true },
@@ -97,7 +98,9 @@ export default function Layout() {
         </div>
       </header>
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10">
-        <Outlet />
+        <Suspense fallback={<SkeletonScreen />}>
+          <Outlet />
+        </Suspense>
       </main>
       <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} />
       <footer className="border-t border-terminal-line/60 text-xs text-terminal-gray/70">

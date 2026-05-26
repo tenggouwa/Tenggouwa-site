@@ -34,6 +34,12 @@ class AnalyticsRepository:
         self.session.add(row)
         await self.session.flush()
 
+    async def path_views(self, path: str) -> int:
+        """单个 path 的累计 PV（走 ix_page_view_path_ts 索引）。"""
+        return await self.session.scalar(
+            select(func.count()).select_from(PageViewRow).where(PageViewRow.path == path)
+        ) or 0
+
     async def overview(self, days: int) -> dict:
         """返回累计 + 今日 + 每日 PV / UV 序列。"""
         utc_today = datetime.now(timezone.utc).date()

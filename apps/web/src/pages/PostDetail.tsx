@@ -10,6 +10,7 @@ import ReadingProgress from '../components/ReadingProgress';
 import CodeBlock from '../components/CodeBlock';
 import TableOfContents from '../components/TableOfContents';
 import RelatedPosts from '../components/RelatedPosts';
+import SeriesNav from '../components/SeriesNav';
 import { estimateReadingMinutes } from '../lib/reading';
 import { seriesForTags } from '../lib/series';
 import type { Post } from '../lib/types';
@@ -17,6 +18,7 @@ import type { Post } from '../lib/types';
 export default function PostDetail() {
   const { slug } = useParams();
   const [post, setPost] = useState<Post | null>(null);
+  const [reads, setReads] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,6 +28,14 @@ export default function PostDetail() {
     apiGet<Post>(`/api/public/posts/${slug}`)
       .then(setPost)
       .catch((e: Error) => setError(e.message));
+  }, [slug]);
+
+  useEffect(() => {
+    if (!slug) return;
+    setReads(null);
+    apiGet<{ views: number }>(`/api/public/track/views?path=/posts/${slug}`)
+      .then((d) => setReads(d.views))
+      .catch(() => {});
   }, [slug]);
 
   const minutes = useMemo(
@@ -79,6 +89,12 @@ export default function PostDetail() {
             <span>{post.published_at.slice(0, 10)}</span>
             <span className="text-terminal-gray/40">·</span>
             <span>{minutes} min read</span>
+            {reads != null && reads > 0 && (
+              <>
+                <span className="text-terminal-gray/40">·</span>
+                <span>{reads.toLocaleString()} reads</span>
+              </>
+            )}
           </div>
           <div className="flex gap-2 flex-wrap">
             {post.tags.map((t) => (
@@ -97,6 +113,7 @@ export default function PostDetail() {
             {post.content}
           </ReactMarkdown>
         </div>
+        {series && <SeriesNav tag={series.tag} currentSlug={post.slug} />}
         <RelatedPosts slug={post.slug} />
       </article>
     </>

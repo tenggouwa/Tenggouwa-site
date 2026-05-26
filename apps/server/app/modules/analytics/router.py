@@ -2,7 +2,7 @@ import logging
 
 from db import get_session
 from dependencies import current_admin
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
@@ -34,6 +34,16 @@ async def track(
     country = request.headers.get("cf-ipcountry")
     ok = await analytics_service.track(session, payload, ip=ip, ua=ua, country=country)
     return ResponseModel(data={"recorded": ok})
+
+
+@public_router.get("/views", response_model=ResponseModel[dict])
+async def path_views(
+    path: str = Query(..., max_length=500),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """单篇文章的累计阅读量，供前端文章页展示。"""
+    n = await analytics_service.path_views(session, path)
+    return ResponseModel(data={"path": path, "views": n})
 
 
 def _client_ip(request: Request) -> str | None:

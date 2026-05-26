@@ -64,6 +64,10 @@ class AnalyticsService:
     async def devices(self, session: AsyncSession, days: int) -> dict:
         return await AnalyticsRepository(session).devices(days=_clamp_days(days))
 
+    async def path_views(self, session: AsyncSession, path: str) -> int:
+        # 用与写入相同的 normalize，保证查询 path 与存储 path 对齐
+        return await AnalyticsRepository(session).path_views(_normalize_path(path))
+
     @staticmethod
     def _make_visitor_hash(ip: str | None, ua: str | None) -> str:
         # sha256(ip + ua + YYYYMMDD UTC)[:32]

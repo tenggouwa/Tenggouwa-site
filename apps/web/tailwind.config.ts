@@ -38,6 +38,7 @@ const config: Config = {
       animation: {
         blink: 'blink 1s steps(1) infinite',
         'noise-pan': 'noisePan 8s linear infinite',
+        shimmer: 'shimmer 1.6s ease-in-out infinite',
       },
       keyframes: {
         blink: {
@@ -47,6 +48,10 @@ const config: Config = {
         noisePan: {
           '0%': { backgroundPosition: '0 0' },
           '100%': { backgroundPosition: '200px 200px' },
+        },
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
         },
       },
       typography: () => ({

@@ -23,11 +23,15 @@ const NotFound = lazy(() => import('./pages/NotFound'));
 const Search = lazy(() => import('./pages/Search'));
 const Series = lazy(() => import('./pages/Series'));
 
-function RouteFallback() {
+// 全屏路由（console）的兜底：黑屏 + 终端 boot 提示。Layout 下的页面用 Layout
+// 内层 Suspense 的骨架屏（header/footer 不闪），不走这个。
+function BootFallback() {
   return (
-    <div className="px-4 py-8 font-mono text-sm text-terminal-green/70">
-      <span className="text-terminal-pink">~$</span> loading
-      <span className="animate-pulse">_</span>
+    <div className="flex min-h-screen items-center justify-center bg-terminal-bg font-mono text-sm text-terminal-green/80">
+      <span>
+        <span className="text-terminal-pink">~$</span> booting console
+        <span className="ml-0.5 inline-block h-[15px] w-[7px] translate-y-[2px] bg-terminal-green/80 animate-blink" />
+      </span>
     </div>
   );
 }
@@ -39,7 +43,7 @@ export default function App() {
 
   return (
     <ConfigProvider>
-      <Suspense fallback={<RouteFallback />}>
+      <Suspense fallback={<BootFallback />}>
         <Routes>
           {/* 全屏路由（不套 Layout，没有 header/footer）*/}
           <Route path="console" element={<Console />} />
