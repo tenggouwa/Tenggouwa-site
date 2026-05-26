@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
+import markedKatex from 'marked-katex-extension';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -40,9 +41,6 @@ const BASE = normalizeBase(args.base ?? '/');
 const ORIGIN = (args.origin ?? 'https://tenggouwa.com').replace(/\/$/, '');
 const NOINDEX = Boolean(args.noindex);
 const API_BASE = (args.api ?? process.env.VITE_API_BASE ?? '').replace(/\/$/, '');
-// Umami 埋点：静态页也注入 script tag，让搜索流量进入静态详情页时也能被统计
-const UMAMI_URL = args['umami-url'] ?? process.env.VITE_UMAMI_URL ?? '';
-const UMAMI_WEBSITE_ID = args['umami-id'] ?? process.env.VITE_UMAMI_WEBSITE_ID ?? '';
 
 const SITE_TITLE = 'tenggouwa · 极客小站';
 const SITE_DESC = '腾构娃的极客小站：AI / 系统 / 工具的笔记、灵感与实验。';
@@ -86,6 +84,9 @@ function parseFM(text) {
 
 // ---------- markdown ----------
 marked.setOptions({ gfm: true, breaks: false });
+// 服务端把 $...$ / $$...$$ 渲染成 KaTeX HTML，跟 SPA 的 remark-math/rehype-katex 对齐，
+// 首屏即拿到公式（消除 hydrate 前的 raw LaTeX 跳变 + SEO 拿到正常公式）。
+marked.use(markedKatex({ throwOnError: false }));
 const renderMd = (md) => marked.parse(md);
 
 // ---------- 收集文章（从 API 拉，DB 是唯一真相） ----------
@@ -171,12 +172,6 @@ function navHtml(currentPath) {
   }).join('\n          ');
 }
 
-function umamiScript() {
-  if (NOINDEX) return ''; // 子路径产物不收录、也不必埋点
-  if (!UMAMI_URL || !UMAMI_WEBSITE_ID) return '';
-  return `<script async defer src="${UMAMI_URL}" data-website-id="${UMAMI_WEBSITE_ID}"></script>`;
-}
-
 function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, extraHead = '' }) {
   const head = findHeadAssets();
   const fullTitle = title === SITE_TITLE ? title : `${title} · tenggouwa`;
@@ -209,8 +204,8 @@ function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, ext
     <meta name="twitter:image" content="${og}" />
     <link rel="alternate" type="application/rss+xml" title="${SITE_TITLE} RSS" href="${pageUrl('/feed.xml')}" />
     <link rel="icon" type="image/svg+xml" href="${pageUrl('/favicon.svg')}" />
+    ${bodyHtml && bodyHtml.includes('class="katex"') ? '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />' : ''}
     ${head}
-    ${umamiScript()}
     ${extraHead}
     ${ld}
   </head>

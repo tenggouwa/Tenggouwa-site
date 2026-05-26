@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             react: ['react', 'react-dom', 'react-router-dom'],
-            markdown: ['react-markdown', 'remark-gfm', 'rehype-highlight'],
+            markdown: ['react-markdown', 'remark-gfm', 'rehype-highlight', 'remark-math', 'rehype-katex', 'katex'],
             arco: ['@arco-design/web-react'],
             xterm: ['@xterm/xterm', '@xterm/addon-fit'],
           },

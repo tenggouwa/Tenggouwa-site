@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
+import Mermaid from './Mermaid';
 
-// 给 react-markdown 用的 <pre> 替换组件：保留 highlight 结果，hover 出现复制按钮
+// 给 react-markdown 用的 <pre> 替换组件：保留 highlight 结果，hover 出现复制按钮。
+// language-mermaid 的代码块分流给 Mermaid 渲染成图，其余正常高亮 + 复制 + 语言角标。
 // react-markdown v9 的 components.pre 接到的是 {node, children, ...rest}，children
 // 是一个 <code> 元素（带 hljs 的 className 和高亮 span）
 
@@ -9,8 +11,23 @@ interface PreProps {
   className?: string;
 }
 
+// 从内层 <code> 的 className(language-xxx) 取语言名
+function codeLang(children: ReactNode): string {
+  if (children && typeof children === 'object' && 'props' in children) {
+    const cn = (children as { props?: { className?: string } }).props?.className ?? '';
+    const m = /language-([\w-]+)/.exec(cn);
+    return m ? m[1] : '';
+  }
+  return '';
+}
+
 export default function CodeBlock({ children, className }: PreProps) {
   const [copied, setCopied] = useState(false);
+  const lang = codeLang(children);
+
+  if (lang === 'mermaid') {
+    return <Mermaid chart={extractText(children)} />;
+  }
 
   const copy = async () => {
     const text = extractText(children);
@@ -26,6 +43,11 @@ export default function CodeBlock({ children, className }: PreProps) {
   return (
     <pre className={`group relative max-w-full overflow-x-auto ${className ?? ''}`}>
       {children}
+      {lang && (
+        <span className="pointer-events-none absolute top-1.5 right-2.5 font-mono text-[10px] text-terminal-gray/40 transition-opacity group-hover:opacity-0">
+          {lang}
+        </span>
+      )}
       <button
         type="button"
         onClick={copy}

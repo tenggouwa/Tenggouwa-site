@@ -3,7 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import { Tag } from '@arco-design/web-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { apiGet } from '../lib/api';
 import TermLoading from '../components/TermLoading';
 import ReadingProgress from '../components/ReadingProgress';
@@ -106,8 +109,8 @@ export default function PostDetail() {
         </header>
         <div id="post-body" className="prose prose-invert max-w-none min-w-0 break-words">
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeHighlight, rehypeKatex]}
             components={{ pre: CodeBlock }}
           >
             {post.content}
