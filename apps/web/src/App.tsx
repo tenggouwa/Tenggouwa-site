@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { ConfigProvider } from '@arco-design/web-react';
 import Layout from './components/Layout';
 import Home from './pages/Home';
+import BootScreen from './components/BootScreen';
 
 // 首页随主 bundle 同步加载（首屏要立即出），其余路由按需切分。
 const PostList = lazy(() => import('./pages/PostList'));
@@ -22,6 +23,7 @@ const Console = lazy(() => import('./pages/Console'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Search = lazy(() => import('./pages/Search'));
 const Series = lazy(() => import('./pages/Series'));
+const MatrixCanvas = lazy(() => import('./components/MatrixCanvas'));
 
 // 全屏路由（console）的兜底：黑屏 + 终端 boot 提示。Layout 下的页面用 Layout
 // 内层 Suspense 的骨架屏（header/footer 不闪），不走这个。
@@ -36,13 +38,72 @@ function BootFallback() {
   );
 }
 
+const KONAMI = [
+  'ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
+  'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a',
+];
+
 export default function App() {
+  const [booted, setBooted] = useState(
+    () => typeof window !== 'undefined' && window.sessionStorage.getItem('booted') === '1',
+  );
+  const [matrix, setMatrix] = useState(false);
+
   useEffect(() => {
     document.body.setAttribute('arco-theme', 'dark');
   }, []);
 
+  // Konami code（↑↑↓↓←→←→BA）→ 全屏矩阵雨彩蛋
+  useEffect(() => {
+    let pos = 0;
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (k === KONAMI[pos]) {
+        pos += 1;
+        if (pos === KONAMI.length) {
+          pos = 0;
+          setMatrix(true);
+        }
+      } else {
+        pos = k === KONAMI[0] ? 1 : 0;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // 彩蛋开启时 Esc 关闭
+  useEffect(() => {
+    if (!matrix) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMatrix(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [matrix]);
+
+  const finishBoot = () => {
+    window.sessionStorage.setItem('booted', '1');
+    setBooted(true);
+  };
+
   return (
     <ConfigProvider>
+      {!booted && <BootScreen onDone={finishBoot} />}
+      {matrix && (
+        <div className="fixed inset-0 z-[200] bg-black">
+          <Suspense fallback={null}>
+            <MatrixCanvas className="block h-full w-full bg-terminal-bg" />
+          </Suspense>
+          <button
+            type="button"
+            onClick={() => setMatrix(false)}
+            className="absolute right-4 top-4 rounded border border-terminal-green/50 bg-terminal-bg/70 px-2 py-1 font-mono text-xs text-terminal-green transition-colors hover:bg-terminal-green/10"
+          >
+            esc
+          </button>
+        </div>
+      )}
       <Suspense fallback={<BootFallback />}>
         <Routes>
           {/* 全屏路由（不套 Layout，没有 header/footer）*/}
