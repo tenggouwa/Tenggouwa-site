@@ -41,6 +41,14 @@ export interface Inspiration {
   created_at: string;
 }
 
+export interface InspirationListPage {
+  items: Inspiration[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface SearchHit {
   type: 'post' | 'inspiration';
   id: number;

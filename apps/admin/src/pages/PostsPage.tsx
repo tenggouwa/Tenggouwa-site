@@ -14,7 +14,9 @@ import {
 import MDEditor from '@uiw/react-md-editor';
 import '@uiw/react-md-editor/markdown-editor.css';
 import { http } from '../lib/api';
-import type { Post, PostCreate } from '../lib/types';
+import type { Post, PostAdminPage, PostCreate } from '../lib/types';
+
+const PAGE_SIZE = 20;
 
 function slugify(title: string): string {
   // 只保留 ASCII：中文标题留个手输的余地（提示文案里说了）
@@ -28,22 +30,28 @@ function slugify(title: string): string {
 export default function PostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Post | null>(null);
   const [form] = Form.useForm<PostCreate>();
 
-  async function refresh() {
+  async function refresh(p: number) {
     setLoading(true);
     try {
-      const data = (await http.get('/api/admin/posts')) as unknown as Post[];
-      setPosts(data);
+      const data = (await http.get(
+        `/api/admin/posts?limit=${PAGE_SIZE}&offset=${(p - 1) * PAGE_SIZE}`,
+      )) as unknown as PostAdminPage;
+      setPosts(data.items);
+      setTotal(data.total);
+      setPage(p);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    refresh();
+    refresh(1);
   }, []);
 
   function openCreate() {
@@ -88,13 +96,13 @@ export default function PostsPage() {
       Message.success('已创建');
     }
     setOpen(false);
-    refresh();
+    refresh(editing ? page : 1);
   }
 
   async function remove(id: number) {
     await http.delete(`/api/admin/posts/${id}`);
     Message.success('已删除');
-    refresh();
+    refresh(page);
   }
 
   return (
@@ -109,6 +117,13 @@ export default function PostsPage() {
         rowKey="id"
         loading={loading}
         data={posts}
+        pagination={{
+          current: page,
+          pageSize: PAGE_SIZE,
+          total,
+          onChange: (p) => refresh(p),
+          showTotal: true,
+        }}
         columns={[
           { title: 'ID', dataIndex: 'id', width: 60 },
           { title: 'Slug', dataIndex: 'slug', width: 180 },

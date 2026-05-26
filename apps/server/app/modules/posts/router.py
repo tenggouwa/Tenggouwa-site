@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
-from .schema import Post, PostCreate, PostListPage, PostSummary, PostUpdate
+from .schema import Post, PostAdminListPage, PostCreate, PostListPage, PostSummary, PostUpdate
 from .service import post_service
 
 logger = logging.getLogger(__name__)
@@ -53,10 +53,14 @@ admin_router = APIRouter(
 )
 
 
-@admin_router.get("", response_model=ResponseModel[list[Post]])
-async def list_posts_admin(session: AsyncSession = Depends(get_session)) -> ResponseModel[list[Post]]:
-    items = await post_service.list_all(session)
-    return ResponseModel(data=items)
+@admin_router.get("", response_model=ResponseModel[PostAdminListPage])
+async def list_posts_admin(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[PostAdminListPage]:
+    page = await post_service.list_admin_page(session, limit=limit, offset=offset)
+    return ResponseModel(data=page)
 
 
 @admin_router.post("", response_model=ResponseModel[Post])

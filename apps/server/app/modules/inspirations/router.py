@@ -2,11 +2,11 @@ import logging
 
 from db import get_session
 from dependencies import current_admin
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
-from .schema import Inspiration, InspirationCreate
+from .schema import Inspiration, InspirationCreate, InspirationListPage
 from .service import inspiration_service
 
 logger = logging.getLogger(__name__)
@@ -14,10 +14,14 @@ logger = logging.getLogger(__name__)
 public_router = APIRouter(prefix="/public/inspirations", tags=["public.inspirations"])
 
 
-@public_router.get("", response_model=ResponseModel[list[Inspiration]])
-async def list_public(session: AsyncSession = Depends(get_session)) -> ResponseModel[list[Inspiration]]:
-    items = await inspiration_service.list_all(session)
-    return ResponseModel(data=items)
+@public_router.get("", response_model=ResponseModel[InspirationListPage])
+async def list_public(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[InspirationListPage]:
+    page = await inspiration_service.list_page(session, limit=limit, offset=offset)
+    return ResponseModel(data=page)
 
 
 admin_router = APIRouter(
@@ -27,10 +31,14 @@ admin_router = APIRouter(
 )
 
 
-@admin_router.get("", response_model=ResponseModel[list[Inspiration]])
-async def list_admin(session: AsyncSession = Depends(get_session)) -> ResponseModel[list[Inspiration]]:
-    items = await inspiration_service.list_all(session)
-    return ResponseModel(data=items)
+@admin_router.get("", response_model=ResponseModel[InspirationListPage])
+async def list_admin(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[InspirationListPage]:
+    page = await inspiration_service.list_page(session, limit=limit, offset=offset)
+    return ResponseModel(data=page)
 
 
 @admin_router.post("", response_model=ResponseModel[Inspiration])

@@ -28,6 +28,22 @@ export interface InspirationCreate {
   mood?: string | null;
 }
 
+export interface PostAdminPage {
+  items: Post[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface InspirationListPage {
+  items: Inspiration[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface DailyPoint {
   date: string;
   pv: number;

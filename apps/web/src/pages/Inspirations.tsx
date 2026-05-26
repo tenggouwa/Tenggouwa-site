@@ -2,17 +2,38 @@ import { useEffect, useState } from 'react';
 import { Empty } from '@arco-design/web-react';
 import { apiGet } from '../lib/api';
 import TermLoading from '../components/TermLoading';
-import type { Inspiration } from '../lib/types';
+import type { Inspiration, InspirationListPage } from '../lib/types';
+
+const PAGE = 20;
 
 export default function Inspirations() {
   const [list, setList] = useState<Inspiration[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function load(offset: number) {
+    const page = await apiGet<InspirationListPage>(
+      `/api/public/inspirations?limit=${PAGE}&offset=${offset}`,
+    );
+    setList((prev) => (offset === 0 || prev == null ? page.items : [...prev, ...page.items]));
+    setHasMore(page.has_more);
+  }
+
   useEffect(() => {
-    apiGet<Inspiration[]>('/api/public/inspirations')
-      .then(setList)
-      .catch((e: Error) => setError(e.message));
+    load(0).catch((e: Error) => setError(e.message));
   }, []);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      await load(list?.length ?? 0);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   if (error) {
     return (
@@ -48,6 +69,17 @@ export default function Inspirations() {
           </div>
         ))}
       </div>
+      {hasMore && (
+        <button
+          type="button"
+          onClick={loadMore}
+          disabled={loadingMore}
+          className="font-mono text-sm text-terminal-green hover:text-terminal-cyan disabled:opacity-50"
+        >
+          <span className="text-terminal-pink">$ </span>
+          {loadingMore ? 'loading...' : 'load more'}
+        </button>
+      )}
     </div>
   );
 }

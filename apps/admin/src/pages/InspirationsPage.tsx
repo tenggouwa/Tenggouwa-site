@@ -10,26 +10,34 @@ import {
   Table,
 } from '@arco-design/web-react';
 import { http } from '../lib/api';
-import type { Inspiration, InspirationCreate } from '../lib/types';
+import type { Inspiration, InspirationCreate, InspirationListPage } from '../lib/types';
+
+const PAGE_SIZE = 20;
 
 export default function InspirationsPage() {
   const [list, setList] = useState<Inspiration[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<InspirationCreate>();
 
-  async function refresh() {
+  async function refresh(p: number) {
     setLoading(true);
     try {
-      const data = (await http.get('/api/admin/inspirations')) as unknown as Inspiration[];
-      setList(data);
+      const data = (await http.get(
+        `/api/admin/inspirations?limit=${PAGE_SIZE}&offset=${(p - 1) * PAGE_SIZE}`,
+      )) as unknown as InspirationListPage;
+      setList(data.items);
+      setTotal(data.total);
+      setPage(p);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    refresh();
+    refresh(1);
   }, []);
 
   async function submit() {
@@ -38,13 +46,13 @@ export default function InspirationsPage() {
     Message.success('已添加');
     setOpen(false);
     form.resetFields();
-    refresh();
+    refresh(1);
   }
 
   async function remove(id: number) {
     await http.delete(`/api/admin/inspirations/${id}`);
     Message.success('已删除');
-    refresh();
+    refresh(page);
   }
 
   return (
@@ -59,6 +67,13 @@ export default function InspirationsPage() {
         rowKey="id"
         loading={loading}
         data={list}
+        pagination={{
+          current: page,
+          pageSize: PAGE_SIZE,
+          total,
+          onChange: (p) => refresh(p),
+          showTotal: true,
+        }}
         columns={[
           { title: 'ID', dataIndex: 'id', width: 60 },
           { title: '内容', dataIndex: 'content' },

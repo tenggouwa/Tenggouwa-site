@@ -4,7 +4,7 @@ from dependencies import DetailedHTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .repository import PostRepository
-from .schema import Post, PostCreate, PostListPage, PostSummary, PostUpdate
+from .schema import Post, PostAdminListPage, PostCreate, PostListPage, PostSummary, PostUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,23 @@ class PostService:
 
     async def list_all(self, session: AsyncSession) -> list[Post]:
         return await PostRepository(session).list_all()
+
+    async def list_admin_page(
+        self,
+        session: AsyncSession,
+        *,
+        limit: int,
+        offset: int,
+    ) -> PostAdminListPage:
+        """admin 列表分页：含草稿（不限已发布）和正文。"""
+        items, total = await PostRepository(session).list_page(limit=limit, offset=offset, only_published=False)
+        return PostAdminListPage(
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_more=offset + len(items) < total,
+        )
 
     async def list_summary(self, session: AsyncSession) -> list[PostSummary]:
         items = await PostRepository(session).list_all(only_published=True)
@@ -66,13 +83,8 @@ class PostService:
         slug: str,
         limit: int = 3,
     ) -> list[PostSummary]:
-        """按 tag 交集找相关文章。先取当前文章拿 tags，再查同 tag 的其他已发布文章。"""
-        current = await PostRepository(session).get_by_slug(slug, only_published=True)
-        if current is None:
-            return []
-        related = await PostRepository(session).list_related(
-            slug=slug, tags=list(current.tags), limit=limit,
-        )
+        """按 tag 交集找相关文章。单条 SQL 内联当前文章 tags，不再先查一次。"""
+        related = await PostRepository(session).list_related(slug=slug, limit=limit)
         return [PostSummary(**item.model_dump(exclude={"content"})) for item in related]
 
 

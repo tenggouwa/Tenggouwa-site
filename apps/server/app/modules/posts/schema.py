@@ -45,3 +45,13 @@ class PostListPage(BaseModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class PostAdminListPage(BaseModel):
+    """admin 列表分页：含正文，编辑时直接取行内 content，无需再请求详情。"""
+
+    items: list[Post]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool

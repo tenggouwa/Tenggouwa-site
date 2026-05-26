@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 
 from db.models import SeoSearchSnapshotRow, WebVitalsRow
-from sqlalchemy import case, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -111,7 +111,19 @@ class SeoRepository:
             "samples_total": int(m.total or 0),
         }
 
+    async def delete_vitals_before(self, cutoff: datetime) -> int:
+        result = await self.session.execute(delete(WebVitalsRow).where(WebVitalsRow.ts < cutoff))
+        await self.session.flush()
+        return result.rowcount or 0
+
     # ---------- 搜索快照 ----------
+
+    async def delete_snapshots_before(self, cutoff: datetime) -> int:
+        result = await self.session.execute(
+            delete(SeoSearchSnapshotRow).where(SeoSearchSnapshotRow.snapshot_date < cutoff)
+        )
+        await self.session.flush()
+        return result.rowcount or 0
 
     async def upsert_snapshots(self, rows: list[dict]) -> int:
         """整批替换 (snapshot_date, channel, url) 的数据。简化实现：先 delete 再 insert。"""

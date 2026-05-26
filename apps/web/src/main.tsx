@@ -2,7 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
-import { startUmami } from './lib/umami';
 import { startVitals } from './lib/vitals';
 import './styles/index.css';
 
@@ -18,4 +17,3 @@ ReactDOM.createRoot(rootEl).render(
 );
 
 startVitals();
-startUmami();

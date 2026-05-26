@@ -12,7 +12,7 @@ import hashlib
 import logging
 import os
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,10 @@ from .repository import SeoRepository
 from .schema import VitalsReport
 
 logger = logging.getLogger(__name__)
+
+# 埋点数据保留期：web_vitals 看近期性能趋势，90 天足够；搜索快照有长期分析价值，留 1 年。
+VITALS_RETENTION_DAYS = 90
+SNAPSHOT_RETENTION_DAYS = 365
 
 
 class SeoService:
@@ -156,6 +160,16 @@ class SeoService:
             return 0
         logger.warning("Bing fetch stub: not implemented yet")
         return 0
+
+    # ---------- 数据保留清理（定时任务调用） ----------
+
+    async def purge_old_data(self, session: AsyncSession) -> dict[str, int]:
+        """删除超过保留期的埋点数据，防止埋点表无限增长。session 退出时自动 commit。"""
+        now = datetime.now(timezone.utc)
+        repo = SeoRepository(session)
+        vitals = await repo.delete_vitals_before(now - timedelta(days=VITALS_RETENTION_DAYS))
+        snapshots = await repo.delete_snapshots_before(now - timedelta(days=SNAPSHOT_RETENTION_DAYS))
+        return {"web_vitals": vitals, "seo_search_snapshot": snapshots}
 
 
 def _visitor_hash(ip: str | None, ua: str | None) -> str:

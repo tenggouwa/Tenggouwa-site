@@ -109,37 +109,37 @@ class PostRepository:
         self,
         *,
         slug: str,
-        tags: list[str],
         limit: int = 3,
     ) -> list[Post]:
         """相关文章：按 tag 交集数排序（共享 tag 越多越相关）；同分按发布时间倒序。
         排除自己；只返回已发布。
+
+        单条 SQL 内联取当前文章的 tags（CTE `cur`），无需先单独查一次当前文章。
+        当前文章不存在 / 未发布时 cur 为空，与 post 的 CROSS JOIN 自然返回空结果。
         """
-        if not tags:
-            return []
-        # 用 jsonb 数组重叠运算符 ?| 找出至少有一个 tag 重叠的；
-        # 再用 SQL 计算 overlap 数排序
         from sqlalchemy import text
 
         sql = text("""
+            WITH cur AS (
+                SELECT tags FROM post
+                WHERE slug = :slug AND published_at <= now()
+            )
             SELECT
-                id, slug, title, summary, tags, content, published_at,
+                p.id, p.slug, p.title, p.summary, p.tags, p.content, p.published_at,
                 (
                     SELECT COUNT(*)
-                    FROM jsonb_array_elements_text(tags) AS t(tag)
-                    WHERE t.tag = ANY(:tags)
+                    FROM jsonb_array_elements_text(p.tags) AS t(tag)
+                    WHERE t.tag IN (SELECT jsonb_array_elements_text(cur.tags) FROM cur)
                 ) AS overlap
-            FROM post
-            WHERE slug != :slug
-              AND published_at <= now()
-              AND tags ?| :tags
-            ORDER BY overlap DESC, published_at DESC
+            FROM post p, cur
+            WHERE p.slug != :slug
+              AND p.published_at <= now()
+              AND p.tags ?| ARRAY(SELECT jsonb_array_elements_text(cur.tags) FROM cur)
+            ORDER BY overlap DESC, p.published_at DESC
             LIMIT :limit
         """)
         rows = (
-            await self.session.execute(
-                sql, {"slug": slug, "tags": tags, "limit": limit}
-            )
+            await self.session.execute(sql, {"slug": slug, "limit": limit})
         ).all()
         return [
             Post(

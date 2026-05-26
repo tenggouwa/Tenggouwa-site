@@ -13,3 +13,11 @@ class Inspiration(BaseModel):
     content: str
     mood: str | None = None
     created_at: datetime
+
+
+class InspirationListPage(BaseModel):
+    items: list[Inspiration]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool

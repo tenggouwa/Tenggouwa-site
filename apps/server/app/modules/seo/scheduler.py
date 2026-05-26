@@ -53,11 +53,29 @@ async def _run_bing_fetch() -> None:
         logger.exception("Bing fetch failed")
 
 
+async def _run_retention() -> None:
+    """删除超过保留期的埋点数据，防止 web_vitals / seo_search_snapshot 无限增长。"""
+    try:
+        async with async_pg.session() as session:
+            result = await seo_service.purge_old_data(session)
+        logger.info(f"Retention purge done: {result}")
+    except Exception:
+        logger.exception("Retention purge failed")
+
+
 def start_seo_scheduler() -> None:
     global _scheduler
     if _scheduler is not None:
         return
     sched = AsyncIOScheduler(timezone=CN_TZ)
+    sched.add_job(
+        _run_retention,
+        CronTrigger(hour=2, minute=0, timezone=CN_TZ),
+        id="seo_retention_daily",
+        name="埋点数据保留清理",
+        max_instances=1,
+        coalesce=True,
+    )
     sched.add_job(
         _run_gsc_fetch,
         CronTrigger(hour=3, minute=0, timezone=CN_TZ),
@@ -84,7 +102,7 @@ def start_seo_scheduler() -> None:
     )
     sched.start()
     _scheduler = sched
-    logger.info("SEO scheduler started: GSC@03:00, Baidu@04:00, Bing@05:00 Asia/Shanghai")
+    logger.info("SEO scheduler started: Retention@02:00, GSC@03:00, Baidu@04:00, Bing@05:00 Asia/Shanghai")
 
 
 def stop_seo_scheduler() -> None:
