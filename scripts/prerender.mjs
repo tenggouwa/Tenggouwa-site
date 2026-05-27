@@ -57,6 +57,18 @@ function normalizeBase(b) {
 const pageUrl = (p) => (BASE + p.replace(/^\//, '')).replace(/\/+/g, '/');
 const canonical = (p) => ORIGIN + ('/' + p.replace(/^\//, '')).replace(/\/+/g, '/');
 
+// 把多行 summary 压成单行，给 llms.txt / JSON-LD 等纯文本场景用
+const oneLine = (s = '') => String(s).replace(/\s+/g, ' ').trim();
+
+// 文章所属系列：tag 里形如 `ai-series` / `linux-series` 的那个
+const SERIES_NAMES = { ai: 'AI', linux: 'Linux' };
+const seriesTagOf = (post) => post.tags.find((t) => t.endsWith('-series')) || null;
+function seriesLabel(tag) {
+  const base = tag.replace(/-series$/, '');
+  const name = SERIES_NAMES[base] ?? base.charAt(0).toUpperCase() + base.slice(1);
+  return `${name} 系列`;
+}
+
 // ---------- frontmatter ----------
 function parseFM(text) {
   const m = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
@@ -216,6 +228,7 @@ function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, ext
     <meta name="twitter:description" content="${escapeHtml(description)}" />
     <meta name="twitter:image" content="${og}" />
     <link rel="alternate" type="application/rss+xml" title="${SITE_TITLE} RSS" href="${pageUrl('/feed.xml')}" />
+    ${NOINDEX ? '' : `<link rel="alternate" type="text/plain" title="llms.txt" href="${pageUrl('/llms.txt')}" />`}
     <link rel="icon" type="image/svg+xml" href="${pageUrl('/favicon.svg')}" />
     ${bodyHtml && bodyHtml.includes('class="katex"') ? '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous" />' : ''}
     ${head}
@@ -345,7 +358,15 @@ function websiteLd() {
   };
 }
 
+// CJK 没有空格，按「中文字符数 + 拉丁词数」粗算字数，给 AI 引擎一个体量信号
+function wordCount(md = '') {
+  const cjk = (md.match(/[一-鿿]/g) || []).length;
+  const latin = (md.match(/[A-Za-z0-9]+/g) || []).length;
+  return cjk + latin;
+}
+
 function blogPostingLd(post) {
+  const series = seriesTagOf(post);
   return {
     '@context': 'https://schema.org',
     '@type': 'BlogPosting',
@@ -356,9 +377,13 @@ function blogPostingLd(post) {
     dateModified: post.publishedAt,
     author: { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL },
     publisher: { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL },
+    isPartOf: { '@type': 'WebSite', name: SITE_TITLE, url: ORIGIN + '/' },
     mainEntityOfPage: canonical(`/posts/${post.slug}/`),
     url: canonical(`/posts/${post.slug}/`),
     keywords: post.tags.join(', '),
+    articleSection: series ? seriesLabel(series) : post.tags[0],
+    wordCount: wordCount(post.body),
+    isAccessibleForFree: true,
     image: canonical(`/og/${post.slug}.png`),
   };
 }
@@ -411,11 +436,41 @@ function buildSitemap(posts, tags) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${items}\n</urlset>\n`;
 }
 
+// 已知的生成式 AI / LLM 爬虫。`User-agent: *  Allow: /` 已涵盖它们，这里再
+// 显式列一遍是为了表态「欢迎抓取并引用」（GEO）——尤其 Google-Extended /
+// Applebot-Extended 默认放行但靠显式声明确认 opt-in。
+const AI_CRAWLERS = [
+  'GPTBot',
+  'OAI-SearchBot',
+  'ChatGPT-User',
+  'ClaudeBot',
+  'Claude-User',
+  'Claude-SearchBot',
+  'anthropic-ai',
+  'PerplexityBot',
+  'Perplexity-User',
+  'Google-Extended',
+  'Applebot-Extended',
+  'Amazonbot',
+  'Bytespider',
+  'CCBot',
+  'cohere-ai',
+  'Meta-ExternalAgent',
+];
+
 function buildRobots() {
   if (NOINDEX) {
     return `User-agent: *\nDisallow: /\n`;
   }
-  return `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`;
+  // 多个连续 User-agent 行共享其后的一组规则
+  const aiBlock = AI_CRAWLERS.map((b) => `User-agent: ${b}`).join('\n') + '\nAllow: /\n';
+  return (
+    `# 欢迎搜索引擎与生成式 AI 引擎抓取并引用本站内容（GEO）。\n` +
+    `# LLM 友好索引见 ${ORIGIN}/llms.txt ，全文合集见 ${ORIGIN}/llms-full.txt 。\n` +
+    `User-agent: *\nAllow: /\n\n` +
+    `${aiBlock}\n` +
+    `Sitemap: ${ORIGIN}/sitemap.xml\n`
+  );
 }
 
 function buildRss(posts) {
@@ -449,6 +504,79 @@ ${items}
 `;
 }
 
+// ---------- GEO：LLM 友好产物 ----------
+// 单篇文章的纯 markdown（标题 + 元信息 + 正文源）。给 /posts/<slug>.md，也是
+// llms-full.txt 的拼装单元；LLM 抓这个比解析 HTML 干净得多。
+function postMarkdown(post) {
+  const date = (post.publishedAt || '').slice(0, 10);
+  const meta = [`- URL: ${canonical(`/posts/${post.slug}/`)}`];
+  if (date) meta.push(`- 发布: ${date}`);
+  if (post.tags.length) meta.push(`- 标签: ${post.tags.join(', ')}`);
+  const header = [
+    `# ${oneLine(post.title)}`,
+    '',
+    ...(post.summary ? [`> ${oneLine(post.summary)}`, ''] : []),
+    ...meta,
+  ].join('\n');
+  return `${header}\n\n${post.body.trim()}\n`;
+}
+
+// llms.txt（llmstxt.org 约定）：给 LLM 的站点导航——H1 + 简介 + 按系列分组的链接清单
+function buildLlmsTxt(posts) {
+  const groups = new Map();
+  const standalone = [];
+  for (const p of posts) {
+    const s = seriesTagOf(p);
+    if (s) {
+      if (!groups.has(s)) groups.set(s, []);
+      groups.get(s).push(p);
+    } else {
+      standalone.push(p);
+    }
+  }
+  const link = (p) => `- [${oneLine(p.title)}](${canonical(`/posts/${p.slug}/`)}): ${oneLine(p.summary)}`;
+  const out = [
+    `# ${SITE_TITLE}`,
+    '',
+    `> ${SITE_DESC}`,
+    '',
+    '本站文章以中文写作，覆盖 AI 大模型原理、Linux / 系统底层、前端与工具实验。' +
+      '每篇的 markdown 源在 `/posts/<slug>.md`，全部正文合集见 `/llms-full.txt`。',
+    '',
+  ];
+  for (const s of [...groups.keys()].sort()) {
+    // 系列内按发布时间正序，符合阅读 / 学习顺序
+    const items = groups.get(s).slice().sort((a, b) => (a.publishedAt || '').localeCompare(b.publishedAt || ''));
+    out.push(`## ${seriesLabel(s)}`, '', ...items.map(link), '');
+  }
+  if (standalone.length) {
+    out.push('## 其它文章', '', ...standalone.map(link), '');
+  }
+  out.push(
+    '## Optional',
+    '',
+    `- [全文合集](${canonical('/llms-full.txt')}): 所有文章正文合并的 markdown，可一次性喂给模型`,
+    `- [RSS](${canonical('/feed.xml')}): 更新订阅源`,
+    `- [关于](${canonical('/about')}): 关于作者与本站`,
+    '',
+  );
+  return out.join('\n');
+}
+
+// llms-full.txt：全站正文合集，按发布时间倒序拼接
+function buildLlmsFull(posts) {
+  const head = [
+    `# ${SITE_TITLE} — 全文合集`,
+    '',
+    `> ${SITE_DESC}`,
+    '',
+    `本文件包含本站全部 ${posts.length} 篇文章的正文（markdown 源），按发布时间倒序，` +
+      `生成于 ${new Date().toISOString().slice(0, 10)}。`,
+    '',
+  ].join('\n');
+  return `${head}\n${posts.map(postMarkdown).join('\n---\n\n')}`;
+}
+
 // ---------- main ----------
 async function main() {
   if (!fs.existsSync(DIST)) {
@@ -472,6 +600,10 @@ async function main() {
       description: post.summary || post.title,
       currentPath: path0,
       ogImage: `/og/${post.slug}.png`,
+      // 给 LLM / 工具一个干净的 markdown 源入口（仅公网正版产物生成 .md）
+      extraHead: NOINDEX
+        ? ''
+        : `<link rel="alternate" type="text/markdown" title="${escapeHtml(post.title)} (markdown)" href="${pageUrl(`/posts/${post.slug}.md`)}" />`,
       jsonLd: [
         blogPostingLd(post),
         breadcrumbLd([
@@ -483,6 +615,9 @@ async function main() {
       bodyHtml: postDetailBody(post, { prev, next }),
     });
     writeFile(`posts/${post.slug}/index.html`, html);
+    if (!NOINDEX) {
+      writeFile(`posts/${post.slug}.md`, postMarkdown(post));
+    }
   }
 
   // 列表页
@@ -541,6 +676,12 @@ async function main() {
   writeFile('sitemap.xml', buildSitemap(posts, allTags));
   writeFile('robots.txt', buildRobots());
   writeFile('feed.xml', buildRss(posts));
+
+  // GEO：LLM 友好产物（仅公网正版产物，避免 AI 收录 github.io 子路径副本）
+  if (!NOINDEX) {
+    writeFile('llms.txt', buildLlmsTxt(posts));
+    writeFile('llms-full.txt', buildLlmsFull(posts));
+  }
 
   // IndexNow key 文件：搜索引擎抓 https://<host>/<KEY>.txt 验证所有权
   // 仅在非 noindex 产物（即真正面向公网的版本）写
