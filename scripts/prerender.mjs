@@ -146,6 +146,19 @@ function findHeadAssets() {
   return [...links, ...preloads].join('\n');
 }
 
+// vite 构建产物里的入口 module 脚本（带 hash）。注入到预渲染页后，SPA 会在
+// 客户端用 createRoot 接管 #root：静态 HTML 只负责首屏 + SEO，挂载后由 React
+// 重新向 /api/public/posts 拉最新数据，所以新文章不必重新预渲染部署。
+function findEntryScript() {
+  const idxPath = path.join(DIST, 'index.html');
+  const html = fs.readFileSync(idxPath, 'utf-8');
+  const m = html.match(/<script[^>]+type="module"[^>]+src="[^"]+"[^>]*>\s*<\/script>/);
+  if (!m) {
+    throw new Error(`entry module script not found in ${idxPath}`);
+  }
+  return m[0];
+}
+
 // ---------- HTML 模板 ----------
 function escapeHtml(s = '') {
   return String(s)
@@ -210,6 +223,7 @@ function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, ext
     ${ld}
   </head>
   <body class="bg-terminal-bg text-terminal-gray font-mono">
+    <div id="root">
     <div class="min-h-screen flex flex-col">
       <header class="border-b border-terminal-line/60 backdrop-blur sticky top-0 z-50 bg-terminal-bg/70">
         <div class="max-w-5xl mx-auto px-4 sm:px-6 py-2 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
@@ -234,6 +248,8 @@ function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, ext
         </div>
       </footer>
     </div>
+    </div>
+    ${findEntryScript()}
   </body>
 </html>
 `;
