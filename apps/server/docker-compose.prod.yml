@@ -20,6 +20,9 @@ services:
     image: postgres:16-alpine
     container_name: tenggouwa-postgres
     restart: unless-stopped
+    # 只绑 127.0.0.1：公网摸不到，DataGrip 等只能经 SSH 隧道连
+    ports:
+      - "127.0.0.1:5432:5432"
     # 1G 机器：cap 内存防止单容器吃光机器
     mem_limit: 256m
     memswap_limit: 384m
