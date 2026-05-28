@@ -44,3 +44,6 @@ __pycache__/
 
 # 服务器日志
 apps/server/logs/
+
+# packages/api-types: openapi.json 是 gen 的中间产物，只 commit 生成出来的 openapi.ts
+packages/api-types/openapi.json

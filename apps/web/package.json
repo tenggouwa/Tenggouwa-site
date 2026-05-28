@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@arco-design/web-react": "^2.66.1",
+    "@tenggouwa/api-types": "workspace:*",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "clsx": "^2.1.1",
