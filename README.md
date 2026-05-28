@@ -34,8 +34,12 @@
 - 📦 **单仓多端** —— `web` `admin` `server` 一个仓搞定，pnpm workspace + uv 各管一摊
 - 🎨 **极客终端风** —— Tailwind + Arco 双武器，自调 `@tailwindcss/typography` 主题
 - ⚡ **Cloudflare Tunnel 暴露 API** —— 服务器不开一个入站口，免 ICP 备案
-- 🔐 **JWT + bcrypt 后台鉴权** —— admin 凭据走 env，不入仓
-- 📊 **自研埋点** —— 不依赖第三方，PG + Recharts dashboard，看 PV / UV / 地理 / 设备
+- 🔐 **JWT + bcrypt + TOTP + 声纹** —— admin 双因素登录，凭据走 env，不入仓
+- 📊 **自研埋点 + SEO** —— PG + Recharts dashboard 看 PV / UV / 地理 / 设备；Web Vitals + Google Search Console 接入
+- 🛡 **PR 门禁 CI** —— `ci.yml` 每个 PR 自动 `tsc --noEmit` + `vite build` + `ruff` + `pytest`
+- 🪝 **lefthook 本地 hooks** —— pre-commit 自动 `ruff fix .py`，pre-push 跑全 monorepo typecheck
+- 🔄 **OpenAPI → TS 类型** —— `packages/api-types` 由 FastAPI `app.openapi()` 自动生成，前端 `import type { Schemas } from '@/lib/apiTypes'` 直接用
+- 🤖 **Dependabot 周更** —— npm / pip / github-actions 三 ecosystem，dev-deps minor 自动 group，major 单独 PR
 - 🚀 **一行命令部署** —— `pnpm deploy:server` 完成 rsync + docker build + 迁移 + 重启
 - 🧬 **极简 docker stack** —— `postgres + app + cloudflared` 三个容器，全 `compose up`
 
@@ -89,13 +93,24 @@
 ├── apps
 │   ├── web/        # 前台（极客终端风）
 │   ├── admin/      # 后台（文章 / 灵感 / 站点分析）
-│   └── server/     # FastAPI + Postgres + Alembic
-├── packages/       # 共享代码（占位）
-├── scripts/        # build / deploy 脚本
+│   ├── server/     # FastAPI + Postgres + Alembic + agent 网关
+│   └── mac-agent/  # 本机 PTY daemon，配合 /console 拉远程终端
+├── packages/
+│   └── api-types/  # OpenAPI → TS（pnpm gen:api-types 生成）
+├── scripts/
+│   ├── build-pages.sh
+│   ├── deploy-server.sh
+│   ├── gen-api-types.sh
+│   ├── prerender.mjs / generate-og.mjs / seo-notify.mjs
+│   └── ...
 ├── deploy/         # nginx / systemd / cloudflare 模板与说明
 ├── .github/
-│   └── workflows/  # deploy-pages.yml
-├── CLAUDE.md       # 协作约定（中文优先、ruff、X | Y 类型...）
+│   ├── workflows/
+│   │   ├── ci.yml            # PR 门禁：typecheck + build + ruff + pytest
+│   │   └── deploy-pages.yml  # main 触发，部署 Pages + Lighthouse + IndexNow
+│   └── dependabot.yml        # 每周 npm / pip / github-actions 升级 PR
+├── lefthook.yml    # 本机 git hooks（pre-commit ruff、pre-push typecheck）
+├── CLAUDE.md       # 协作约定 + 工作流（中文优先、PR、ruff、设计规范）
 ├── TODO.md         # 路线图
 └── README.md       # 你正在看
 ```
@@ -103,7 +118,7 @@
 ## 🚀 起手
 
 ```bash
-# 装前端依赖
+# 装依赖（顺带 lefthook install 注册 git hooks，需要 git >= 2.31 + uv 在 PATH）
 pnpm install
 
 # 起前端
@@ -116,16 +131,37 @@ docker compose up -d postgres        # 本地 PG
 cp -n .env.sample .env               # 含 dev 密钥
 cd ..
 pnpm dev:server                      # http://localhost:10095
+
+# 改了 FastAPI schema 后同步前端类型
+pnpm gen:api-types                   # 重写 packages/api-types/src/openapi.ts
 ```
 
-默认后台账号：`dev / dev123`（生产用 bcrypt 哈希走环境变量，见 `apps/server/.env.prod.sample`）。
+默认后台账号：`dev / dev123`（生产用 bcrypt 哈希 + TOTP，走环境变量，见 `apps/server/.env.prod.sample`）。
 
-## 📦 部署
+### 工作流
+
+所有改动都走 **feature branch + PR + squash merge**，不直接推 `main`：
+
+```bash
+git checkout -b feat/<topic> origin/main
+# ...改完...
+git commit -m "feat: ..."             # pre-commit 自动 ruff fix .py
+git push -u origin HEAD               # pre-push 跑全 monorepo typecheck + ruff
+gh pr create                          # 触发 ci.yml；CI 绿才能合
+gh pr merge <pr> --squash --delete-branch
+```
+
+合并到 `main` 后 `deploy-pages.yml` 自动重发 Pages。
+
+## 📦 部署 / 流水线
 
 | 链路 | 方式 | 触发 |
 | ---- | ---- | ---- |
-| 前端 → GitHub Pages | `.github/workflows/deploy-pages.yml` | `git push` 到 `main` 自动 |
+| PR 门禁 | `.github/workflows/ci.yml` | 每个 `pull_request` + `push` 到 `main` |
+| 前端 → GitHub Pages | `.github/workflows/deploy-pages.yml` | `main` 命中 `apps/web/**` / `apps/admin/**` / `package.json` 等 |
+| 前端 → Cloudflare Pages | GitHub App 默认行为 | 每个 PR 自动 preview |
 | 后端 → 阿里云 docker | `scripts/deploy-server.sh` | 本地 `pnpm deploy:server` |
+| 依赖升级 | `.github/dependabot.yml` | 每周自动开 PR（npm / pip / actions） |
 
 需要在 GitHub repo Settings → Secrets and variables → Actions → Variables 加：
 
@@ -150,9 +186,17 @@ pnpm dev:server                      # http://localhost:10095
 - [x] PostgreSQL 接入 + Alembic 迁移
 - [x] Markdown 编辑器 + 终端配色 prose
 - [x] 自研埋点 + admin /analytics dashboard
+- [x] 双因素登录（TOTP + 声纹）+ 7d 信任 cookie
+- [x] `/console` 远程 PTY（FastAPI WSS 网关 + mac-agent）
+- [x] SEO（robots / llms.txt / Web Vitals / GSC 接入 / IndexNow / Baidu / Google indexing）
+- [x] PR 门禁 CI（`ci.yml`）
+- [x] `packages/api-types` 共享类型（OpenAPI → TS）
+- [x] lefthook 本地预检 + Dependabot 周更
 - [ ] admin 改 admin 密码 UI
 - [ ] 文件 / 图片上传（OSS 或自建）
 - [ ] 评论 / RSS / sitemap
+- [ ] Playwright e2e smoke flow
+- [ ] 后端 Redis 缓存层（posts list / detail / related）
 
 ## 🤝 协作约定
 
@@ -163,6 +207,8 @@ pnpm dev:server                      # http://localhost:10095
 - 不引入未要求的功能 / 抽象 / 回退逻辑
 - 不写废注释
 - 不预防"未来"
+- **所有改动走 feature branch + PR + squash merge**；不直接推 `main`
+- API 响应类型从 `apps/web/src/lib/apiTypes.ts` 取，不要手抄 schema
 
 ## 🪪 致谢
 
