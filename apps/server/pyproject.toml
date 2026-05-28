@@ -11,7 +11,7 @@ dependencies = [
     "alembic==1.13.3",
     "asyncpg==0.30.0",
     "bcrypt==4.2.0",
-    "click==8.2.1",
+    "click==8.4.1",
     "concurrent-log-handler==0.9.28",
     "fastapi==0.115.14",
     "greenlet==3.2.3",
