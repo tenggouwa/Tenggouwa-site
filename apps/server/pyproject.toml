@@ -17,7 +17,7 @@ dependencies = [
     "greenlet==3.2.3",
     "gunicorn==23.0.0",
     "httpx[http2]==0.28.1",
-    "h2==4.2.0",
+    "h2==4.3.0",
     "psutil==7.0.0",
     "pydantic==2.11.7",
     "PyJWT==2.13.0",
