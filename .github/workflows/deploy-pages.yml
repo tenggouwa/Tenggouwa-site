@@ -30,7 +30,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # 不指定 version，让 pnpm/action-setup 读 package.json 的 packageManager 字段
       - uses: pnpm/action-setup@v4
@@ -93,7 +93,7 @@ jobs:
     # 性能/SEO 基线：跌穿阈值就 fail（参考 .lighthouserc.cjs）
     # 跟 deploy 并行跑，不阻塞发布
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v4
         with:
@@ -115,7 +115,7 @@ jobs:
     # 只在 main 分支推送时通知（避免手动 dispatch 时反复推）
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v4
         with:
