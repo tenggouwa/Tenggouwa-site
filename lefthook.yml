@@ -1,0 +1,26 @@
+# Git hooks managed by lefthook (https://github.com/evilmartians/lefthook).
+# pre-commit: auto-fix staged Python files with ruff.
+# pre-push:   full monorepo typecheck + backend ruff before anything leaves the laptop.
+#
+# Requires `uv` (https://docs.astral.sh/uv/) and `pnpm` on PATH.
+# Skip a single commit: `LEFTHOOK=0 git commit ...`.
+
+pre-commit:
+  parallel: true
+  commands:
+    ruff-format:
+      glob: "apps/server/**/*.py"
+      run: uvx --from ruff==0.12.1 ruff format --config apps/server/pyproject.toml {staged_files}
+      stage_fixed: true
+    ruff-check-fix:
+      glob: "apps/server/**/*.py"
+      run: uvx --from ruff==0.12.1 ruff check --fix --config apps/server/pyproject.toml {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: pnpm -r --parallel lint
+    ruff:
+      run: cd apps/server && uvx --from ruff==0.12.1 ruff check . && uvx --from ruff==0.12.1 ruff format --check .
