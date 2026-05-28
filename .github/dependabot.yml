@@ -9,8 +9,10 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
+      # Group only safe minor/patch dev-dep bumps; majors get their own PRs.
       dev-dependencies:
         dependency-type: "development"
+        update-types: ["patch", "minor"]
 
   # FastAPI backend (pip via pyproject.toml + uv.lock).
   - package-ecosystem: "pip"
