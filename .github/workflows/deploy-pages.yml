@@ -65,7 +65,7 @@ jobs:
         run: bash scripts/build-pages.sh
 
       - name: Upload root build for downstream (Cloudflare Pages / 自有部署)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cf-dist
           path: cf-dist
