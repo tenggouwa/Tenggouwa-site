@@ -26,10 +26,7 @@ def upgrade() -> None:
     op.execute("CREATE INDEX IF NOT EXISTS ix_post_content_trgm ON post USING gin (content gin_trgm_ops)")
     op.execute("CREATE INDEX IF NOT EXISTS ix_post_tags_trgm ON post USING gin ((tags::text) gin_trgm_ops)")
 
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_inspiration_content_trgm "
-        "ON inspiration USING gin (content gin_trgm_ops)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_inspiration_content_trgm ON inspiration USING gin (content gin_trgm_ops)")
 
 
 def downgrade() -> None:

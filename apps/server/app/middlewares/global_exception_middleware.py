@@ -23,7 +23,9 @@ class GlobalExceptionMiddleware(BaseHTTPMiddleware):
             self.logger.exception("Detailed HTTP exception occurred")
             return JSONResponse(
                 status_code=e.status_code,
-                content=ResponseModel[dict](code=e.status_code, message=e.detail, data={"detail": e.full_detail}).model_dump(),
+                content=ResponseModel[dict](
+                    code=e.status_code, message=e.detail, data={"detail": e.full_detail}
+                ).model_dump(),
             )
         except HTTPException as e:
             self.logger.exception("HTTP exception occurred")
@@ -35,5 +37,7 @@ class GlobalExceptionMiddleware(BaseHTTPMiddleware):
             self.logger.exception("Unhandled exception occurred")
             return JSONResponse(
                 status_code=500,
-                content=ResponseModel[dict](code=500, message="Internal server error", data={"detail": str(e)}).model_dump(),
+                content=ResponseModel[dict](
+                    code=500, message="Internal server error", data={"detail": str(e)}
+                ).model_dump(),
             )
