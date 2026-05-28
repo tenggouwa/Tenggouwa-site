@@ -60,7 +60,10 @@ class PostService:
         tag: str | None = None,
     ) -> PostListPage:
         items, total = await PostRepository(session).list_page(
-            limit=limit, offset=offset, only_published=True, tag=tag,
+            limit=limit,
+            offset=offset,
+            only_published=True,
+            tag=tag,
         )
         summaries = [PostSummary(**item.model_dump(exclude={"content"})) for item in items]
         return PostListPage(

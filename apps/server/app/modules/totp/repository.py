@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from db.models import AdminTotpRow
 from sqlalchemy import select
@@ -36,7 +36,7 @@ class AdminTotpRepository:
         row = await self.get(username)
         if row is None:
             return
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         row.enrolled_at = now
         row.last_verified_at = now
         await self.session.flush()
@@ -45,7 +45,7 @@ class AdminTotpRepository:
         row = await self.get(username)
         if row is None:
             return
-        row.last_verified_at = datetime.now(timezone.utc)
+        row.last_verified_at = datetime.now(UTC)
         await self.session.flush()
 
     async def delete(self, username: str) -> bool:

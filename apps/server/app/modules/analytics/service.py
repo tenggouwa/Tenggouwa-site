@@ -1,6 +1,6 @@
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,7 +71,7 @@ class AnalyticsService:
     @staticmethod
     def _make_visitor_hash(ip: str | None, ua: str | None) -> str:
         # sha256(ip + ua + YYYYMMDD UTC)[:32]
-        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        today = datetime.now(UTC).strftime("%Y%m%d")
         raw = f"{ip or ''}::{ua or ''}::{today}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 

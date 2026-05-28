@@ -33,28 +33,32 @@ class SearchService:
         hits = []
         for p in post_rows:
             snippet_src = self._pick_snippet_source(q, p["title"], p["summary"], p["content"])
-            hits.append({
-                "type": "post",
-                "id": p["id"],
-                "title": p["title"],
-                "url": f"/posts/{p['slug']}",
-                "snippet": _highlight(snippet_src, q),
-                "score": p["score"],
-                "tags": p["tags"],
-                "timestamp": p["published_at"],
-            })
+            hits.append(
+                {
+                    "type": "post",
+                    "id": p["id"],
+                    "title": p["title"],
+                    "url": f"/posts/{p['slug']}",
+                    "snippet": _highlight(snippet_src, q),
+                    "score": p["score"],
+                    "tags": p["tags"],
+                    "timestamp": p["published_at"],
+                }
+            )
         for i in ins_rows:
             title = _truncate(i["content"], 40)
-            hits.append({
-                "type": "inspiration",
-                "id": i["id"],
-                "title": title,
-                "url": f"/inspirations#i{i['id']}",
-                "snippet": _highlight(i["content"], q),
-                "score": i["score"] * 0.6,  # inspiration 整体降权，post 更主要
-                "tags": [],
-                "timestamp": i["created_at"],
-            })
+            hits.append(
+                {
+                    "type": "inspiration",
+                    "id": i["id"],
+                    "title": title,
+                    "url": f"/inspirations#i{i['id']}",
+                    "snippet": _highlight(i["content"], q),
+                    "score": i["score"] * 0.6,  # inspiration 整体降权，post 更主要
+                    "tags": [],
+                    "timestamp": i["created_at"],
+                }
+            )
 
         hits.sort(key=lambda h: h["score"], reverse=True)
         hits = hits[:limit]
@@ -105,7 +109,7 @@ def _highlight(text: str, q: str) -> str:
         snippet = snippet + "…"
     # 不区分大小写包裹 <mark>
     pattern = re.compile(re.escape(q), re.IGNORECASE)
-    return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", snippet)[:SNIPPET_MAX + 14]
+    return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", snippet)[: SNIPPET_MAX + 14]
     # +14 给 <mark></mark> 标签预算
 
 

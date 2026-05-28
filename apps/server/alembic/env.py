@@ -12,8 +12,9 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 # 确保 alembic 在 apps/server 根目录跑时也能 import 到 app/ 下的模块
 SERVER_ROOT = Path(__file__).resolve().parent.parent

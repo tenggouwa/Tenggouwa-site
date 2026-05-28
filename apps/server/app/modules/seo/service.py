@@ -12,7 +12,7 @@ import hashlib
 import logging
 import os
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -108,7 +108,7 @@ class SeoService:
             a["count"] += 1
             if r["query"]:
                 a["queries"].append((r["query"], r["impressions"]))
-        snapshot_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        snapshot_date = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         snapshots = []
         for page, a in agg.items():
             top_queries = [q for q, _ in sorted(a["queries"], key=lambda x: -x[1])[:10]]
@@ -165,7 +165,7 @@ class SeoService:
 
     async def purge_old_data(self, session: AsyncSession) -> dict[str, int]:
         """删除超过保留期的埋点数据，防止埋点表无限增长。session 退出时自动 commit。"""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         repo = SeoRepository(session)
         vitals = await repo.delete_vitals_before(now - timedelta(days=VITALS_RETENTION_DAYS))
         snapshots = await repo.delete_snapshots_before(now - timedelta(days=SNAPSHOT_RETENTION_DAYS))
@@ -173,7 +173,7 @@ class SeoService:
 
 
 def _visitor_hash(ip: str | None, ua: str | None) -> str:
-    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    today = datetime.now(UTC).strftime("%Y%m%d")
     raw = f"{ip or ''}::{ua or ''}::{today}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 

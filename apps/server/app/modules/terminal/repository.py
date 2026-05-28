@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from db.models import AgentRow, TerminalSessionRow
 from sqlalchemy import select
@@ -27,25 +27,21 @@ class AgentRepository:
         return await self.session.get(AgentRow, agent_id)
 
     async def list_by_owner(self, owner: str) -> list[AgentRow]:
-        stmt = (
-            select(AgentRow)
-            .where(AgentRow.owner == owner)
-            .order_by(AgentRow.created_at.desc())
-        )
+        stmt = select(AgentRow).where(AgentRow.owner == owner).order_by(AgentRow.created_at.desc())
         return list((await self.session.execute(stmt)).scalars().all())
 
     async def touch_seen(self, agent_id: int) -> None:
         row = await self.get_by_id(agent_id)
         if row is None:
             return
-        row.last_seen_at = datetime.now(timezone.utc)
+        row.last_seen_at = datetime.now(UTC)
         await self.session.flush()
 
     async def revoke(self, agent_id: int) -> bool:
         row = await self.get_by_id(agent_id)
         if row is None:
             return False
-        row.revoked_at = datetime.now(timezone.utc)
+        row.revoked_at = datetime.now(UTC)
         await self.session.flush()
         return True
 
@@ -81,7 +77,7 @@ class TerminalSessionRepository:
         row = await self.session.get(TerminalSessionRow, session_id)
         if row is None:
             return
-        row.closed_at = datetime.now(timezone.utc)
+        row.closed_at = datetime.now(UTC)
         row.bytes_in = bytes_in
         row.bytes_out = bytes_out
         await self.session.flush()

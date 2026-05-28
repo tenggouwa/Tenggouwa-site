@@ -21,8 +21,8 @@ from .schema import TotpEnrollStart
 logger = logging.getLogger(__name__)
 
 ISSUER = "tenggouwa.com"
-STEP_TTL = 5 * 60           # 5 min
-TRUST_TTL = 7 * 86400        # 7 day
+STEP_TTL = 5 * 60  # 5 min
+TRUST_TTL = 7 * 86400  # 7 day
 
 
 class TotpService:

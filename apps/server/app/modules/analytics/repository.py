@@ -1,6 +1,6 @@
 """Analytics 查询。聚合都用 SQL 里做，避免拉全量到内存。"""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from db.models import PageViewRow
 from sqlalchemy import case, func, literal_column, select
@@ -36,15 +36,16 @@ class AnalyticsRepository:
 
     async def path_views(self, path: str) -> int:
         """单个 path 的累计 PV（走 ix_page_view_path_ts 索引）。"""
-        return await self.session.scalar(
-            select(func.count()).select_from(PageViewRow).where(PageViewRow.path == path)
-        ) or 0
+        return (
+            await self.session.scalar(select(func.count()).select_from(PageViewRow).where(PageViewRow.path == path))
+            or 0
+        )
 
     async def overview(self, days: int) -> dict:
         """返回累计 + 今日 + 每日 PV / UV 序列。"""
-        utc_today = datetime.now(timezone.utc).date()
+        utc_today = datetime.now(UTC).date()
         start = utc_today - timedelta(days=days - 1)
-        start_dt = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc)
+        start_dt = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
 
         # 累计
         total_pv = await self.session.scalar(select(func.count()).select_from(PageViewRow)) or 0
@@ -56,7 +57,7 @@ class AnalyticsRepository:
         )
 
         # 今日（UTC）
-        today_dt = datetime.combine(utc_today, datetime.min.time(), tzinfo=timezone.utc)
+        today_dt = datetime.combine(utc_today, datetime.min.time(), tzinfo=UTC)
         pv_today = (
             await self.session.scalar(
                 select(func.count()).where(PageViewRow.ts >= today_dt),
@@ -193,4 +194,4 @@ class AnalyticsRepository:
 
 
 def _utc_days_ago(days: int) -> datetime:
-    return datetime.now(timezone.utc) - timedelta(days=days)
+    return datetime.now(UTC) - timedelta(days=days)

@@ -1,6 +1,6 @@
 """Post 持久化层。基于 PostgreSQL + SQLAlchemy 2.0 async。"""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from db.models import PostRow
 from sqlalchemy import func, select
@@ -68,14 +68,14 @@ class PostRepository:
     async def get_by_slug(self, slug: str, *, only_published: bool = False) -> Post | None:
         stmt = select(PostRow).where(PostRow.slug == slug)
         if only_published:
-            stmt = stmt.where(PostRow.published_at <= datetime.now(timezone.utc))
+            stmt = stmt.where(PostRow.published_at <= datetime.now(UTC))
         row = (await self.session.execute(stmt)).scalar_one_or_none()
         return _row_to_schema(row) if row else None
 
     async def list_all(self, *, only_published: bool = False) -> list[Post]:
         stmt = select(PostRow).order_by(PostRow.published_at.desc())
         if only_published:
-            stmt = stmt.where(PostRow.published_at <= datetime.now(timezone.utc))
+            stmt = stmt.where(PostRow.published_at <= datetime.now(UTC))
         rows = (await self.session.execute(stmt)).scalars().all()
         return [_row_to_schema(r) for r in rows]
 
@@ -89,7 +89,7 @@ class PostRepository:
     ) -> tuple[list[Post], int]:
         where_clause = []
         if only_published:
-            where_clause.append(PostRow.published_at <= datetime.now(timezone.utc))
+            where_clause.append(PostRow.published_at <= datetime.now(UTC))
         if tag:
             # JSONB ? 操作符：tags 数组里是否含某 key
             where_clause.append(PostRow.tags.op("?")(tag))
@@ -138,9 +138,7 @@ class PostRepository:
             ORDER BY overlap DESC, p.published_at DESC
             LIMIT :limit
         """)
-        rows = (
-            await self.session.execute(sql, {"slug": slug, "limit": limit})
-        ).all()
+        rows = (await self.session.execute(sql, {"slug": slug, "limit": limit})).all()
         return [
             Post(
                 id=r.id,

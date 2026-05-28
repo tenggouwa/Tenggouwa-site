@@ -41,12 +41,7 @@ class InspirationRepository:
         return [_row_to_schema(r) for r in rows]
 
     async def list_page(self, *, limit: int, offset: int) -> tuple[list[Inspiration], int]:
-        stmt = (
-            select(InspirationRow)
-            .order_by(InspirationRow.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+        stmt = select(InspirationRow).order_by(InspirationRow.created_at.desc()).limit(limit).offset(offset)
         rows = (await self.session.execute(stmt)).scalars().all()
         total = (await self.session.execute(select(func.count(InspirationRow.id)))).scalar_one()
         return [_row_to_schema(r) for r in rows], total

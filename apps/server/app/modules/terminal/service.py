@@ -24,8 +24,8 @@ from .repository import AgentRepository
 
 logger = logging.getLogger(__name__)
 
-TERM_TOKEN_TTL = 5 * 60       # 5 min
-VOICE_PHRASE = "芝麻开门"     # 仪式口令
+TERM_TOKEN_TTL = 5 * 60  # 5 min
+VOICE_PHRASE = "芝麻开门"  # 仪式口令
 
 
 class TerminalService:
@@ -90,7 +90,7 @@ class TerminalService:
         if not _phrase_matches(voice_transcript or "", VOICE_PHRASE):
             raise DetailedHTTPException(
                 403,
-                f"口令不对，请念：\"{VOICE_PHRASE}\"",
+                f'口令不对，请念："{VOICE_PHRASE}"',
                 f"voice phrase mismatch: {voice_transcript!r}",
             )
         # 校验 admin 仍然启用 TOTP

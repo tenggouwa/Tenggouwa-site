@@ -108,12 +108,7 @@ def url_index_status_sync(urls: Iterable[str]) -> dict[str, bool]:
     result: dict[str, bool] = {}
     for url in urls:
         try:
-            resp = (
-                client.urlInspection()
-                .index()
-                .inspect(body={"inspectionUrl": url, "siteUrl": site})
-                .execute()
-            )
+            resp = client.urlInspection().index().inspect(body={"inspectionUrl": url, "siteUrl": site}).execute()
             verdict = resp.get("inspectionResult", {}).get("indexStatusResult", {}).get("verdict")
             result[url] = verdict == "PASS"
         except Exception:

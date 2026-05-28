@@ -48,7 +48,25 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "C4", "UP", "ARG", "SIM", "ICN", "PLW", "PLR", "PLE", "FIX"]
-ignore = ["E203", "PLR0913", "PLR0915", "PLR2004"]
+ignore = [
+    "E203",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    # FastAPI Depends() as default argument is the canonical pattern
+    "B008",
+    # Unused method/function args are often kept for interface compatibility
+    "ARG002",
+    "ARG004",
+    # Existing complex routers; track as tech debt, don't block CI gate
+    "PLR0912",
+    # Module-level scheduler singleton legitimately uses `global`
+    "PLW0603",
+    # Style preference; existing code uses try/except/pass intentionally
+    "SIM105",
+    # PEP 695 generic syntax is opt-in; existing Generic[T] is fine
+    "UP046",
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

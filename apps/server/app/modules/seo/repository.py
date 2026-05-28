@@ -5,7 +5,7 @@
 """
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from db.models import SeoSearchSnapshotRow, WebVitalsRow
 from sqlalchemy import case, delete, func, select
@@ -43,7 +43,7 @@ class SeoRepository:
         await self.session.flush()
 
     async def vitals_overview(self, days: int) -> dict:
-        start = datetime.now(timezone.utc) - timedelta(days=days)
+        start = datetime.now(UTC) - timedelta(days=days)
 
         # 每个 metric 的 p75 / p95 / good_ratio / samples
         rows = (
@@ -136,7 +136,7 @@ class SeoRepository:
         return len(rows)
 
     async def search_channel_overview(self, channel: str, days: int) -> dict:
-        start = datetime.now(timezone.utc) - timedelta(days=days)
+        start = datetime.now(UTC) - timedelta(days=days)
         # 最新一天的快照
         latest_date = await self.session.scalar(
             select(func.max(SeoSearchSnapshotRow.snapshot_date)).where(
@@ -208,7 +208,7 @@ class SeoRepository:
 
     async def top_keywords(self, channel: str, days: int, limit: int) -> list[dict]:
         """top_queries 是 JSONB 数组，Postgres 用 jsonb_array_elements_text 展开统计。"""
-        start = datetime.now(timezone.utc) - timedelta(days=days)
+        start = datetime.now(UTC) - timedelta(days=days)
         # 用 raw SQL（SQLAlchemy 表达 jsonb_array_elements_text 不直观）
         sql = """
             SELECT q.query, COUNT(*) AS occurrences
@@ -231,7 +231,7 @@ class SeoRepository:
 
     async def indexing_status(self, days: int) -> list[dict]:
         """汇总每个 URL 在三个渠道的最新 indexed 标记。"""
-        start = datetime.now(timezone.utc) - timedelta(days=days)
+        start = datetime.now(UTC) - timedelta(days=days)
         rows = (
             await self.session.execute(
                 select(

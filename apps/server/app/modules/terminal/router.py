@@ -279,6 +279,7 @@ async def admin_terminal_ws(
     except Exception:  # noqa: BLE001
         logger.exception("client ws error session=%s", session_id)
     finally:
+
         async def _grace_expired() -> None:
             ac = broker.get_agent(agent_id)
             if ac is not None:
@@ -375,7 +376,9 @@ async def console_unlock(
 ) -> ResponseModel[ConsoleUnlockResponse]:
     if payload.method == "voice":
         owner = await terminal_service.unlock_with_voice(
-            session, payload.voice_transcript, tg_trust,
+            session,
+            payload.voice_transcript,
+            tg_trust,
         )
     else:  # totp
         owner = await terminal_service.unlock_with_totp(session, payload.code)
@@ -468,6 +471,7 @@ async def console_ws(
     except Exception:  # noqa: BLE001
         logger.exception("console ws error session=%s", session_id)
     finally:
+
         async def _grace_expired() -> None:
             ac = broker.get_agent(agent_id)
             if ac is not None:
