@@ -15,6 +15,11 @@ on:
       - '.github/workflows/deploy-pages.yml'
       - 'pnpm-workspace.yaml'
       - 'package.json'
+  # 每天 02:00 UTC（≈ 上海 10:00）自动重 build，让按 published_at 排进未来
+  # 的稿子到点后能进 sitemap / 静态 HTML —— prerender 走的是 API，DB 是
+  # 唯一真相，不靠 git push 触发。
+  schedule:
+    - cron: '0 2 * * *'
   workflow_dispatch: {}
 
 permissions:
