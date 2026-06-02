@@ -148,3 +148,24 @@ jobs:
           BAIDU_TOKEN: ${{ secrets.BAIDU_TOKEN }}
           GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
         run: node scripts/seo-notify.mjs
+
+  # canonical 域名 tenggouwa.com 跑在 Cloudflare Pages 上，靠 CF 的 git 集成在
+  # push main 时才构建。定时 / 手动 rebuild 不产生 push —— 上面那套 build/deploy
+  # 只刷新了 GitHub Pages 的 noindex 子路径镜像，canonical 域名纹丝不动。
+  # 这个 job 在定时 / 手动触发时显式 POST Cloudflare Pages 的 Deploy Hook，
+  # 让 CF 重新跑一遍 PAGES_TARGET=root 构建，从 API 拉到新发布的文章 → 进
+  # canonical 域名的静态页 + sitemap。需在 repo Secrets 配 CLOUDFLARE_DEPLOY_HOOK
+  # （Cloudflare 后台 Pages → 项目 → Settings → Builds & deployments → Deploy hook）。
+  trigger-cloudflare:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Trigger Cloudflare Pages rebuild via Deploy Hook
+        env:
+          HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
+        run: |
+          if [ -z "${HOOK}" ]; then
+            echo "::warning::CLOUDFLARE_DEPLOY_HOOK 未配置，跳过 canonical 域名重建（只刷新了 github.io 镜像）"
+            exit 0
+          fi
+          curl -fsSL -X POST "${HOOK}" >/dev/null && echo "已触发 Cloudflare Pages 重建 tenggouwa.com"
