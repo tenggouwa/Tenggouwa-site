@@ -32,6 +32,16 @@ export interface SeriesMeta {
   emoji_or_glyph?: string;  // 可选小图标（应该用 SVG 或 ASCII，避免 emoji）
   description: string;
   command_hint?: string; // 终端风格副标题，如 'man linux'
+  // 完整路线图：未发布的稿子也在里面，前端展示"已发 / 排队中"双状态。
+  // 顺序就是系列阅读顺序（第 1 篇在最前）。
+  roadmap?: SeriesEpisode[];
+}
+
+export interface SeriesEpisode {
+  slug: string;
+  title: string;
+  published_at: string;  // YYYY-MM-DD（前端按当前时间判定 published）
+  part?: string;         // 可选分组标签，如 "Part 1 — 是什么 / 从哪来"
 }
 
 export interface Inspiration {
