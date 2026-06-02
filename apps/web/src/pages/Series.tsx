@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Tag, Empty } from '@arco-design/web-react';
 import { apiGet } from '../lib/api';
 import TermLoading from '../components/TermLoading';
 import { getSeries } from '../lib/series';
-import type { PostListPage, PostSummary } from '../lib/types';
+import type { PostListPage, PostSummary, SeriesEpisode } from '../lib/types';
 
 export default function Series() {
   const { tag } = useParams<{ tag: string }>();
@@ -25,6 +25,32 @@ export default function Series() {
       })
       .catch((e: Error) => setError(e.message));
   }, [tag]);
+
+  // 已发布的 slug 集合（O(1) 查询）
+  const publishedBySlug = useMemo(() => {
+    const m = new Map<string, PostSummary>();
+    items?.forEach((p) => m.set(p.slug, p));
+    return m;
+  }, [items]);
+
+  // roadmap 视图：把路线图按 part 分组，每条标"已发布"或"排队中"
+  const roadmapGroups = useMemo(() => {
+    if (!meta?.roadmap) return null;
+    const groups = new Map<string, SeriesEpisode[]>();
+    for (const ep of meta.roadmap) {
+      const k = ep.part ?? '';
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k)!.push(ep);
+    }
+    return Array.from(groups.entries());
+  }, [meta]);
+
+  // 下一篇预告（roadmap 里 published_at > now 的第一篇）
+  const nextEpisode = useMemo(() => {
+    if (!meta?.roadmap) return null;
+    const now = new Date();
+    return meta.roadmap.find((ep) => new Date(ep.published_at) > now) ?? null;
+  }, [meta]);
 
   if (!tag || !meta) {
     return (
@@ -51,6 +77,9 @@ export default function Series() {
     return <TermLoading tip={['fetching series...', 'sorting episodes...']} />;
   }
 
+  const totalCount = meta.roadmap ? meta.roadmap.length : items.length;
+  const publishedCount = items.length;
+
   return (
     <div className="space-y-6">
       {/* 系列封面：终端面板风 */}
@@ -73,22 +102,100 @@ export default function Series() {
           </div>
           <h1 className="text-2xl text-terminal-green">{meta.title}</h1>
           <p className="text-terminal-gray/85 leading-relaxed">{meta.description}</p>
-          <div className="text-xs text-terminal-gray/60 pt-2">
-            共 <span className="text-terminal-green">{items.length}</span> 篇 · 已发布{' '}
-            <span className="text-terminal-green">
-              {items.filter((p) => new Date(p.published_at) <= new Date()).length}
-            </span>{' '}
-            篇
+          <div className="text-xs text-terminal-gray/60 pt-2 flex flex-wrap gap-x-4 gap-y-1">
+            <span>
+              共 <span className="text-terminal-green">{totalCount}</span> 篇 · 已发布{' '}
+              <span className="text-terminal-green">{publishedCount}</span> 篇
+            </span>
+            {nextEpisode && (
+              <span>
+                <span className="text-terminal-pink">next $~ </span>
+                {nextEpisode.published_at}
+                <span className="text-terminal-gray/40"> · </span>
+                {nextEpisode.title}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 目录 */}
+      {/* 目录：roadmap 视图按 part 分组 + 已发/排队双状态 */}
       <h2 className="text-terminal-green text-lg flex items-baseline gap-2">
         <span className="text-terminal-pink">$</span>
         <span>ls -la</span>
       </h2>
-      {items.length === 0 ? (
+
+      {roadmapGroups ? (
+        <div className="space-y-6 font-mono">
+          {roadmapGroups.map(([part, eps], gi) => (
+            <section key={part || gi} className="space-y-2">
+              {part && (
+                <div className="text-xs text-terminal-cyan/80 border-b border-terminal-line/40 pb-1">
+                  <span className="text-terminal-pink">## </span>
+                  {part}
+                </div>
+              )}
+              <ol className="space-y-2">
+                {eps.map((ep) => {
+                  const published = publishedBySlug.get(ep.slug);
+                  const idx = meta.roadmap!.findIndex((e) => e.slug === ep.slug);
+                  return (
+                    <li key={ep.slug}>
+                      {published ? (
+                        <Link
+                          to={`/posts/${ep.slug}`}
+                          className="group flex items-baseline gap-3 px-3 py-2 rounded
+                                     border border-terminal-line/40
+                                     hover:border-terminal-green/50 hover:bg-terminal-green/5
+                                     transition-all"
+                        >
+                          <span className="text-terminal-gray/50 text-xs tabular-nums shrink-0 w-8">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="text-terminal-gray group-hover:text-terminal-green transition-colors truncate">
+                                {published.title}
+                              </span>
+                              <span className="text-xs text-terminal-gray/50 shrink-0">
+                                {published.published_at.slice(0, 10)}
+                              </span>
+                            </div>
+                            {published.summary && (
+                              <p className="text-xs text-terminal-gray/65 mt-1 line-clamp-1">
+                                {published.summary}
+                              </p>
+                            )}
+                          </div>
+                        </Link>
+                      ) : (
+                        <div
+                          className="flex items-baseline gap-3 px-3 py-2 rounded
+                                     border border-dashed border-terminal-line/30
+                                     bg-terminal-panel/20 cursor-default"
+                          title="排队中：到点自动发布"
+                        >
+                          <span className="text-terminal-gray/30 text-xs tabular-nums shrink-0 w-8">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="text-terminal-gray/45 truncate">{ep.title}</span>
+                              <span className="text-xs text-terminal-pink/70 shrink-0">
+                                📌 {ep.published_at}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
         <Empty description="系列里还没有已发布的文章" />
       ) : (
         <ol className="space-y-2 font-mono">

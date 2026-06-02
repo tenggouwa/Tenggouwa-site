@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Tag } from '@arco-design/web-react';
+import { Tag, Message } from '@arco-design/web-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -23,6 +23,35 @@ export default function PostDetail() {
   const [post, setPost] = useState<Post | null>(null);
   const [reads, setReads] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // 复制纯 markdown 给 LLM 用。优先 fetch 预渲染的 /posts/<slug>.md（带 H1 +
+  // 元数据头，LLM 友好）；dev 环境或 prerender 缺失时回落到 post.content。
+  async function copyMarkdown() {
+    if (!post) return;
+    let text = '';
+    try {
+      const r = await fetch(`/posts/${post.slug}.md`);
+      if (r.ok) {
+        const body = await r.text();
+        // 防 dev / SPA 兜底把 .md 路径回退成 index.html
+        if (body && !/^\s*<!doctype/i.test(body) && !/^\s*<html/i.test(body)) {
+          text = body;
+        }
+      }
+    } catch {
+      /* swallow, fallback below */
+    }
+    if (!text) text = `# ${post.title}\n\n${post.content}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      Message.success({ content: '已复制 markdown · 喂给 ChatGPT/Claude 用', duration: 2500 });
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      Message.error('复制失败：浏览器拒绝了 clipboard 权限');
+    }
+  }
 
   useEffect(() => {
     if (!slug) return;
@@ -99,12 +128,45 @@ export default function PostDetail() {
               </>
             )}
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {post.tags.map((t) => (
-              <Tag key={t} color="green" size="small">
-                {t}
-              </Tag>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
+              {post.tags.map((t) => (
+                <Tag key={t} color="green" size="small">
+                  {t}
+                </Tag>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={copyMarkdown}
+              title="复制纯 markdown，粘进 ChatGPT / Claude 让它帮你总结、出题、翻译"
+              className="ml-auto inline-flex items-center gap-1.5 rounded border border-terminal-line/60
+                         bg-terminal-panel/30 px-2 py-1 font-mono text-[11px] text-terminal-gray
+                         hover:border-terminal-green/60 hover:text-terminal-green
+                         transition-colors"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                {copied ? (
+                  <polyline points="20 6 9 17 4 12" />
+                ) : (
+                  <>
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </>
+                )}
+              </svg>
+              <span>{copied ? 'copied!' : '$ copy --markdown'}</span>
+            </button>
           </div>
         </header>
         <div id="post-body" className="prose prose-invert max-w-none min-w-0 break-words">
