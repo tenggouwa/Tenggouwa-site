@@ -15,11 +15,12 @@ on:
       - '.github/workflows/deploy-pages.yml'
       - 'pnpm-workspace.yaml'
       - 'package.json'
-  # 每天 02:00 UTC（≈ 上海 10:00）自动重 build，让按 published_at 排进未来
-  # 的稿子到点后能进 sitemap / 静态 HTML —— prerender 走的是 API，DB 是
-  # 唯一真相，不靠 git push 触发。
+  # 每 6 小时（02/08/14/20 UTC）自动重 build，让发布到 DB 的新稿 / 按
+  # published_at 排进未来的稿子到点后能尽快进 sitemap / 静态 HTML —— prerender
+  # 走的是 API，DB 是唯一真相，不靠 git push 触发。频率提高是为了把新文章对
+  # 爬虫的「冷加载 404」窗口从最长 24h 压到最长 6h。
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2,8,14,20 * * *'
   workflow_dispatch: {}
 
 permissions:
