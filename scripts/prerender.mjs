@@ -112,6 +112,28 @@ async function fetchJson(url) {
   return env.data ?? env;
 }
 
+// 并发限制：N 篇文章并发 fetch /posts/<slug> 详情；同时也避免 23+ 并发把后端
+// 打瘫。8 在单 H100 / 4 核 VPS 上是个稳妥默认；fetch 全在同一 keep-alive 连接池里。
+const FETCH_CONCURRENCY = 8;
+
+async function fetchInPool(items, worker) {
+  const out = new Array(items.length);
+  let cursor = 0;
+  async function pull() {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      try {
+        out[i] = await worker(items[i], i);
+      } catch (e) {
+        out[i] = { __error: e instanceof Error ? e.message : String(e) };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, items.length) }, pull));
+  return out;
+}
+
 async function collectPosts() {
   if (!API_BASE) {
     throw new Error('API_BASE 未配置：传 --api=https://api.tenggouwa.com 或设 VITE_API_BASE');
@@ -121,22 +143,30 @@ async function collectPosts() {
   const items = Array.isArray(page?.items) ? page.items : [];
   console.log(`==> listing api returned ${items.length}/${page?.total ?? '?'} posts`);
 
+  // 并发拉详情（顺序无关，最终用 published_at 排序）
+  const t0 = performance.now();
+  const results = await fetchInPool(items, (it) =>
+    fetchJson(`${API_BASE}/api/public/posts/${encodeURIComponent(it.slug)}`),
+  );
+  const ms = (performance.now() - t0).toFixed(0);
+
   const posts = [];
-  for (const it of items) {
-    try {
-      const d = await fetchJson(`${API_BASE}/api/public/posts/${encodeURIComponent(it.slug)}`);
-      posts.push({
-        slug: d.slug,
-        title: d.title ?? d.slug,
-        summary: d.summary ?? '',
-        tags: Array.isArray(d.tags) ? d.tags : [],
-        publishedAt: d.published_at ?? '',
-        body: d.content ?? '',
-      });
-    } catch (e) {
-      console.warn(`skip ${it.slug}: ${e.message}`);
+  results.forEach((d, i) => {
+    if (d && d.__error) {
+      console.warn(`skip ${items[i].slug}: ${d.__error}`);
+      return;
     }
-  }
+    posts.push({
+      slug: d.slug,
+      title: d.title ?? d.slug,
+      summary: d.summary ?? '',
+      tags: Array.isArray(d.tags) ? d.tags : [],
+      publishedAt: d.published_at ?? '',
+      body: d.content ?? '',
+    });
+  });
+  console.log(`==> fetched ${posts.length} bodies in ${ms}ms (concurrency=${FETCH_CONCURRENCY})`);
+
   // API 已经按 published_at desc 返回，这里再保证一次
   posts.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
   return posts;
