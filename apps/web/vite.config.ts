@@ -33,7 +33,10 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      sourcemap: false,
+      // 开 sourcemap：浏览器只在 devtools 打开时才 fetch .map，普通访客零成本，
+      // 但生产出错时 Sentry / DevTools 能拿到真实栈，省下大量"猜 minified 变量名"
+      // 的时间。同时让 Lighthouse 的 valid-source-maps 这项通过。
+      sourcemap: true,
       chunkSizeWarningLimit: 1200,
       rollupOptions: {
         output: {

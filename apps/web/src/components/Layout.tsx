@@ -70,8 +70,8 @@ export default function Layout() {
               type="button"
               onClick={() => setSearchOpen(true)}
               className="group flex items-center gap-2 px-2.5 py-1 rounded border border-terminal-line/60 hover:border-terminal-green/60 bg-terminal-panel/30 hover:bg-terminal-panel/60 transition-all text-xs"
-              aria-label="搜索 (Cmd+K / Cmd+F)"
-              title="搜索 (⌘K 或 ⌘F)"
+              aria-label="search"
+              title="search · ⌘K / ⌘F"
             >
               <svg
                 width="12"
