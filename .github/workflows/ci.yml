@@ -26,7 +26,8 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile=false
+      # CI 用 --frozen-lockfile：lockfile 由 dependabot / 本地 commit 保证同步。
+      - run: pnpm install --frozen-lockfile
 
       - name: Build web (tsc --noEmit && vite build)
         run: pnpm --filter @tenggouwa/web build

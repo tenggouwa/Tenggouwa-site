@@ -46,7 +46,9 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile=false
+      # CI 用 --frozen-lockfile：lockfile 由 dependabot / 本地 commit 保证同步，
+      # 跑时禁止解析 / 写入 lockfile，结果更稳更快。
+      - run: pnpm install --frozen-lockfile
 
       - name: Build pages (ghpages subpath, noindex)
         env:

@@ -86,9 +86,9 @@ class PostService:
         slug: str,
         limit: int = 3,
     ) -> list[PostSummary]:
-        """按 tag 交集找相关文章。单条 SQL 内联当前文章 tags，不再先查一次。"""
-        related = await PostRepository(session).list_related(slug=slug, limit=limit)
-        return [PostSummary(**item.model_dump(exclude={"content"})) for item in related]
+        """按 tag 交集找相关文章。单条 SQL 内联当前文章 tags，不再先查一次。
+        Repository 直接返回 PostSummary（不读 content），见 repo 注释。"""
+        return await PostRepository(session).list_related(slug=slug, limit=limit)
 
 
 post_service = PostService()
