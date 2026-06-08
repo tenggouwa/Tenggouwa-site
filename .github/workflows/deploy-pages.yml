@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v6
 
       # 不指定 version，让 pnpm/action-setup 读 package.json 的 packageManager 字段
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v6
         with:
