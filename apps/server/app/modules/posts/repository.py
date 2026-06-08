@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .schema import Post, PostCreate, PostUpdate
+from .schema import Post, PostCreate, PostSummary, PostUpdate
 
 
 def _row_to_schema(row: PostRow) -> Post:
@@ -110,12 +110,15 @@ class PostRepository:
         *,
         slug: str,
         limit: int = 3,
-    ) -> list[Post]:
+    ) -> list[PostSummary]:
         """相关文章：按 tag 交集数排序（共享 tag 越多越相关）；同分按发布时间倒序。
         排除自己；只返回已发布。
 
         单条 SQL 内联取当前文章的 tags（CTE `cur`），无需先单独查一次当前文章。
         当前文章不存在 / 未发布时 cur 为空，与 post 的 CROSS JOIN 自然返回空结果。
+
+        返回 PostSummary（无 content）：相关文章只展示标题 / 摘要，不读正文，
+        避免每次 PostDetail 加载白拉 N×4500 字。
         """
         from sqlalchemy import text
 
@@ -125,7 +128,7 @@ class PostRepository:
                 WHERE slug = :slug AND published_at <= now()
             )
             SELECT
-                p.id, p.slug, p.title, p.summary, p.tags, p.content, p.published_at,
+                p.id, p.slug, p.title, p.summary, p.tags, p.published_at,
                 (
                     SELECT COUNT(*)
                     FROM jsonb_array_elements_text(p.tags) AS t(tag)
@@ -140,13 +143,12 @@ class PostRepository:
         """)
         rows = (await self.session.execute(sql, {"slug": slug, "limit": limit})).all()
         return [
-            Post(
+            PostSummary(
                 id=r.id,
                 slug=r.slug,
                 title=r.title,
                 summary=r.summary,
                 tags=list(r.tags or []),
-                content=r.content,
                 published_at=r.published_at,
             )
             for r in rows
