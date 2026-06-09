@@ -29,6 +29,9 @@ jobs:
       # CI 用 --frozen-lockfile：lockfile 由 dependabot / 本地 commit 保证同步。
       - run: pnpm install --frozen-lockfile
 
+      - name: Test web (vitest)
+        run: pnpm --filter @tenggouwa/web test
+
       - name: Build web (tsc --noEmit && vite build)
         run: pnpm --filter @tenggouwa/web build
 
