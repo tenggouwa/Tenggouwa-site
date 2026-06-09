@@ -10,7 +10,7 @@ dependencies = [
     "SQLAlchemy==2.0.50",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
-    "bcrypt==4.2.0",
+    "bcrypt==5.0.0",
     "click==8.4.1",
     "concurrent-log-handler==0.9.28",
     "fastapi==0.136.3",
