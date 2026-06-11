@@ -32,7 +32,7 @@ dependencies = [
     # SEO 调度 + GSC API
     "APScheduler==3.11.2",
     "google-auth==2.53.0",
-    "google-api-python-client==2.149.0",
+    "google-api-python-client==2.197.0",
 ]
 
 [project.optional-dependencies]
