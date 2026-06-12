@@ -65,6 +65,13 @@ const TOYS: Toy[] = [
     tag: 'automaton',
     accent: 'yellow',
   },
+  {
+    slug: 'mandelbrot',
+    title: 'mandelbrot.ascii',
+    desc: '逃逸时间分形，按字符密度渲染。点击放大、拖动平移、无限下钻。',
+    tag: 'fractal',
+    accent: 'green',
+  },
 ];
 
 const ACCENT_TEXT: Record<Toy['accent'], string> = {
