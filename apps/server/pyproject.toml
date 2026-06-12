@@ -24,7 +24,7 @@ dependencies = [
     "pyotp==2.9.0",
     "python-dotenv==1.2.2",
     "python-multipart==0.0.20",
-    "redis==6.1.0",
+    "redis==8.0.0",
     "starlette==0.46.2",
     "uvicorn[standard]==0.48.0",
     "uvicorn-worker==0.3.0",
