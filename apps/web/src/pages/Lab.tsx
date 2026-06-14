@@ -72,6 +72,13 @@ const TOYS: Toy[] = [
     tag: 'fractal',
     accent: 'green',
   },
+  {
+    slug: 'reaction',
+    title: 'reaction.diffusion',
+    desc: 'Gray-Scott 反应扩散。自组织出珊瑚 / 分裂 / 斑点，点击注入、切换预设。',
+    tag: 'simulation',
+    accent: 'cyan',
+  },
 ];
 
 const ACCENT_TEXT: Record<Toy['accent'], string> = {
