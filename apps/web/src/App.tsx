@@ -17,6 +17,7 @@ const Life = lazy(() => import('./pages/lab/Life'));
 const Donut = lazy(() => import('./pages/lab/Donut'));
 const Game2048 = lazy(() => import('./pages/lab/Game2048'));
 const Mandelbrot = lazy(() => import('./pages/lab/Mandelbrot'));
+const Reaction = lazy(() => import('./pages/lab/Reaction'));
 const Rope = lazy(() => import('./pages/lab/Rope'));
 const Wave = lazy(() => import('./pages/lab/Wave'));
 const About = lazy(() => import('./pages/About'));
@@ -124,6 +125,7 @@ export default function App() {
             <Route path="lab/snake" element={<SnakeToy />} />
             <Route path="lab/2048" element={<Game2048 />} />
             <Route path="lab/mandelbrot" element={<Mandelbrot />} />
+            <Route path="lab/reaction" element={<Reaction />} />
             <Route path="lab/life" element={<Life />} />
             <Route path="about" element={<About />} />
             <Route path="search" element={<Search />} />
