@@ -439,12 +439,81 @@ function writeFile(rel, content) {
   console.log(`  ✓ ${rel}`);
 }
 
+// ---------- /lab 静态页 ----------
+// 与 apps/web/src/pages/Lab.tsx 的 TOYS 保持同步：新增玩具两边都要加，
+// 否则该玩具的深链接会回退到 SPA（首次请求 404）。
+const LAB_TOYS = [
+  { slug: 'matrix', title: 'matrix-rain', desc: '经典数字雨。半角假名 + ASCII，自带 bloom。', accent: 'green' },
+  { slug: 'flock', title: 'flock.boids', desc: 'Boids 鸟群算法。鼠标当吸引子，发光拖尾。', accent: 'cyan' },
+  { slug: 'donut', title: 'donut.c', desc: '致敬 a1k0n。3D torus 投影到 ASCII 字符。', accent: 'cyan' },
+  { slug: 'wave', title: 'wave.field', desc: '2D 波动方程 + 阻尼。点 / 拖产生字符涟漪。', accent: 'cyan' },
+  { slug: 'rope', title: 'rope.verlet', desc: 'Verlet 物理绳。鼠标拖任意节点，gravity 可调。', accent: 'pink' },
+  { slug: 'snake', title: 'snake.sh', desc: '终端栅格贪吃蛇。方向键 / hjkl 操作。', accent: 'pink' },
+  { slug: '2048', title: '2048.exe', desc: '经典数字消除。↑↓←→ 移动方块，merge same number。', accent: 'yellow' },
+  { slug: 'life', title: 'conway.life', desc: '生命游戏。点格子编辑，可播放 / 步进 / 随机化。', accent: 'yellow' },
+  { slug: 'mandelbrot', title: 'mandelbrot.ascii', desc: '逃逸时间分形，按字符密度渲染。点击放大、拖动平移、无限下钻。', accent: 'green' },
+  { slug: 'reaction', title: 'reaction.diffusion', desc: 'Gray-Scott 反应扩散。自组织出珊瑚 / 分裂 / 斑点，点击注入、切换预设。', accent: 'cyan' },
+];
+
+const LAB_ACCENT_TEXT = {
+  green: 'text-terminal-green',
+  cyan: 'text-terminal-cyan',
+  pink: 'text-terminal-pink',
+  yellow: 'text-terminal-yellow',
+};
+
+function labListBody() {
+  const cards = LAB_TOYS.map(
+    (t) => `<a href="${pageUrl(`/lab/${t.slug}`)}" class="group block border border-terminal-line/70 bg-terminal-panel/40 rounded-lg p-5 transition-colors hover:border-terminal-green/60">
+        <div class="text-lg font-semibold ${LAB_ACCENT_TEXT[t.accent]} mb-2">${escapeHtml(t.title)}</div>
+        <div class="text-sm text-terminal-gray">${escapeHtml(t.desc)}</div>
+        <div class="mt-4 text-xs text-terminal-gray/70 group-hover:text-terminal-green transition-colors">./${escapeHtml(t.slug)} <span class="opacity-60">↵</span></div>
+      </a>`,
+  ).join('\n');
+  return `
+    <div class="space-y-8">
+      <div class="space-y-2">
+        <h1 class="text-terminal-pink text-2xl"><span class="text-terminal-pink">$ </span>ls ./lab</h1>
+        <p class="text-sm text-terminal-gray">前端实验室。一些跑在浏览器里的小玩具，点进去看。</p>
+      </div>
+      <section class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+${cards}
+      </section>
+    </div>
+  `;
+}
+
+// 玩具本体是 canvas 交互组件，无法预渲染；这里只出 LabFrame 外壳（面包屑 + 标题 +
+// 描述 + 占位），让深链接 200 命中并带正确 meta，SPA 挂载后替换占位。
+function labToyBody(toy) {
+  return `
+    <div class="space-y-5">
+      <div class="text-xs text-terminal-gray flex items-center gap-2">
+        <a href="${pageUrl('/lab')}" class="hover:text-terminal-green transition-colors">../lab</a>
+        <span class="text-terminal-line">/</span>
+        <span class="text-terminal-gray/80">${escapeHtml(toy.slug)}</span>
+      </div>
+      <h1 class="text-2xl ${LAB_ACCENT_TEXT[toy.accent]}"><span class="text-terminal-pink">$ </span>./${escapeHtml(toy.title)}</h1>
+      <p class="text-sm text-terminal-gray">${escapeHtml(toy.desc)}</p>
+      <div class="rounded-lg overflow-hidden border border-terminal-line/70 bg-terminal-panel/40">
+        <div class="p-8 text-center text-sm text-terminal-gray/60">正在加载交互组件…</div>
+      </div>
+    </div>
+  `;
+}
+
 // ---------- sitemap / robots / feed ----------
 function buildSitemap(posts, tags) {
   const urls = [
     { loc: canonical('/'), changefreq: 'weekly', priority: '1.0' },
     { loc: canonical('/posts/'), changefreq: 'weekly', priority: '0.9' },
     { loc: canonical('/about'), changefreq: 'monthly', priority: '0.6' },
+    { loc: canonical('/lab'), changefreq: 'monthly', priority: '0.5' },
+    ...LAB_TOYS.map((t) => ({
+      loc: canonical(`/lab/${t.slug}`),
+      changefreq: 'monthly',
+      priority: '0.4',
+    })),
     ...posts.map((p) => ({
       loc: canonical(`/posts/${p.slug}/`),
       lastmod: (p.publishedAt || '').slice(0, 10) || undefined,
@@ -698,6 +767,37 @@ async function main() {
         currentPath: '/about',
         jsonLd: websiteLd(),
         bodyHtml: `<article class="prose prose-invert max-w-none">${renderMd(body)}</article>`,
+      }),
+    );
+  }
+
+  // /lab 列表 + 每个玩具的静态外壳（消掉深链接 404，SPA 挂载后接管）
+  writeFile(
+    'lab/index.html',
+    shell({
+      title: 'Lab',
+      description: '前端实验室。跑在浏览器里的生成式小玩具：分形、反应扩散、boids、生命游戏等。',
+      currentPath: '/lab',
+      jsonLd: breadcrumbLd([
+        { name: 'Home', path: '/' },
+        { name: 'Lab', path: '/lab' },
+      ]),
+      bodyHtml: labListBody(),
+    }),
+  );
+  for (const toy of LAB_TOYS) {
+    writeFile(
+      `lab/${toy.slug}/index.html`,
+      shell({
+        title: `${toy.title} · lab`,
+        description: toy.desc,
+        currentPath: `/lab/${toy.slug}`,
+        jsonLd: breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Lab', path: '/lab' },
+          { name: toy.title, path: `/lab/${toy.slug}` },
+        ]),
+        bodyHtml: labToyBody(toy),
       }),
     );
   }
