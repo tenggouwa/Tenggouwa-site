@@ -25,6 +25,12 @@ export interface PostListPage {
   has_more: boolean;
 }
 
+// 单篇文章累计阅读量，列表页画热力条用
+export interface PostHeat {
+  slug: string;
+  pv: number;
+}
+
 // 系列元信息：title / 描述 / 排序前缀，写在前端而不是后端（轻量、好维护）
 export interface SeriesMeta {
   tag: string;       // 用作 tag filter 的字符串，如 'linux-series'

@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom';
 import { Tag, Empty } from '@arco-design/web-react';
 import { apiGet } from '../lib/api';
 import TermLoading from '../components/TermLoading';
+import HeatBar from '../components/HeatBar';
 import { SERIES } from '../lib/series';
-import type { PostListPage, PostSummary } from '../lib/types';
+import type { PostHeat, PostListPage, PostSummary } from '../lib/types';
 
 const PAGE_SIZE = 10;
 
@@ -13,6 +14,7 @@ export default function PostList() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [heat, setHeat] = useState<Map<string, number>>(new Map());
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // 首屏
@@ -24,6 +26,17 @@ export default function PostList() {
       })
       .catch((e: Error) => setError(e.message));
   }, []);
+
+  // 阅读热力（锦上添花，失败 / 无数据就不画条，不影响列表）
+  useEffect(() => {
+    apiGet<PostHeat[]>('/api/public/track/top?limit=200')
+      .then((rows) => setHeat(new Map(rows.map((r) => [r.slug, r.pv]))))
+      .catch(() => {
+        /* 埋点接口挂了不该让列表页报错 */
+      });
+  }, []);
+
+  const maxPv = heat.size > 0 ? Math.max(...heat.values()) : 0;
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || posts == null) return;
@@ -111,9 +124,10 @@ export default function PostList() {
                 <h2 className="text-lg text-terminal-gray group-hover:text-terminal-green transition-colors">
                   {p.title}
                 </h2>
-                <span className="text-xs text-terminal-gray/70 shrink-0">
-                  {p.published_at.slice(0, 10)}
-                </span>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span className="text-xs text-terminal-gray/70">{p.published_at.slice(0, 10)}</span>
+                  {heat.has(p.slug) && <HeatBar pv={heat.get(p.slug)!} max={maxPv} />}
+                </div>
               </div>
               <p className="text-sm text-terminal-gray/80 mt-2">{p.summary}</p>
               <div className="mt-2 flex gap-2 flex-wrap">

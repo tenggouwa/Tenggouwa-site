@@ -10,6 +10,7 @@ from .schema import (
     CountryStat,
     DeviceStats,
     OverviewResponse,
+    PostHeat,
     TopPage,
     TopReferrer,
     TrackRequest,
@@ -44,6 +45,22 @@ async def path_views(
     """单篇文章的累计阅读量，供前端文章页展示。"""
     n = await analytics_service.path_views(session, path)
     return ResponseModel(data={"path": path, "views": n})
+
+
+@public_router.get("/top", response_model=ResponseModel[list[PostHeat]])
+async def post_heat(
+    limit: int = Query(default=50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[PostHeat]]:
+    """各文章累计阅读量（热度降序），供前端列表页画热力条。"""
+    rows = await analytics_service.post_heat(session, limit)
+    out: list[PostHeat] = []
+    for r in rows:
+        slug = r["path"].removeprefix("/posts/")
+        # 跳过 /posts 自身与异常嵌套路径，只保留干净的单层 slug
+        if slug and "/" not in slug:
+            out.append(PostHeat(slug=slug, pv=r["pv"]))
+    return ResponseModel(data=out)
 
 
 def _client_ip(request: Request) -> str | None:

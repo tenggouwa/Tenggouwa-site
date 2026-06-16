@@ -41,6 +41,18 @@ class AnalyticsRepository:
             or 0
         )
 
+    async def post_heat(self, limit: int) -> list[dict]:
+        """各文章累计 PV，热度降序。仅统计 `/posts/` 路径，供前台列表页画热力条。"""
+        stmt = (
+            select(PageViewRow.path, func.count().label("pv"))
+            .where(PageViewRow.path.like("/posts/%"))
+            .group_by(PageViewRow.path)
+            .order_by(literal_column("pv").desc())
+            .limit(limit)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [{"path": r.path, "pv": r.pv} for r in rows]
+
     async def overview(self, days: int) -> dict:
         """返回累计 + 今日 + 每日 PV / UV 序列。"""
         utc_today = datetime.now(UTC).date()

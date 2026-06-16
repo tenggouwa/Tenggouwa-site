@@ -10,6 +10,7 @@ import 'katex/dist/katex.min.css';
 import { apiGet } from '../lib/api';
 import TermLoading from '../components/TermLoading';
 import ReadingProgress from '../components/ReadingProgress';
+import OdometerCount from '../components/OdometerCount';
 import CodeBlock from '../components/CodeBlock';
 import TableOfContents from '../components/TableOfContents';
 import RelatedPosts from '../components/RelatedPosts';
@@ -124,7 +125,15 @@ export default function PostDetail() {
             {reads != null && reads > 0 && (
               <>
                 <span className="text-terminal-gray/40">·</span>
-                <span>{reads.toLocaleString()} reads</span>
+                <span className="inline-flex items-baseline gap-1 tabular-nums">
+                  <span className="text-terminal-gray/50">reads</span>
+                  <span className="text-terminal-gray/40">[</span>
+                  <OdometerCount
+                    value={reads}
+                    className="text-terminal-green tracking-wider [text-shadow:0_0_8px_rgba(90,247,142,0.45)]"
+                  />
+                  <span className="text-terminal-gray/40">]</span>
+                </span>
               </>
             )}
           </div>
