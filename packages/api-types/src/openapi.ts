@@ -61,6 +61,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/casino/wallet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get Wallet
+         * @description 取/建钱包：首次进来按固定初始积分发一个。
+         */
+        post: operations["get_wallet_api_public_casino_wallet_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim
+         * @description 输光重领固定积分（仅余额为 0 时）。重领次数累计落库。
+         */
+        post: operations["claim_api_public_casino_claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/play": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Play
+         * @description 下一注：后端权威 RNG 算结果 + 落库，返回结果与新余额。
+         */
+        post: operations["play_api_public_casino_play_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Curve
+         * @description 该玩家的输赢曲线：balance 随局数变化（最近窗口）。
+         */
+        get: operations["curve_api_public_casino_curve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stats
+         * @description 全站聚合：每个游戏的实测 RTP / 庄家优势 vs 理论值。反赌教育落点。
+         */
+        get: operations["stats_api_public_casino_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/blackjack/deal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Blackjack Deal
+         * @description 21 点开局：发牌、托管押注，返回玩家手牌 + 庄家明牌。天牌则立即结算。
+         */
+        post: operations["blackjack_deal_api_public_casino_blackjack_deal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/blackjack/action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Blackjack Action
+         * @description 21 点动作：hit 要牌 / stand 停牌 / double 双倍。结算时揭庄家暗牌。
+         */
+        post: operations["blackjack_action_api_public_casino_blackjack_action_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/inspirations": {
         parameters: {
             query?: never;
@@ -748,6 +888,59 @@ export interface components {
             /** Online */
             online: boolean;
         };
+        /** BlackjackActionRequest */
+        BlackjackActionRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Action */
+            action: string;
+        };
+        /** BlackjackDealRequest */
+        BlackjackDealRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Bet Amount */
+            bet_amount: number;
+        };
+        /** BlackjackState */
+        BlackjackState: {
+            /** Status */
+            status: string;
+            /** Player */
+            player: {
+                [key: string]: unknown;
+            }[];
+            /** Dealer */
+            dealer: {
+                [key: string]: unknown;
+            }[];
+            /** Player Total */
+            player_total: number;
+            /** Dealer Total */
+            dealer_total: number;
+            /** Can Double */
+            can_double: boolean;
+            /** Bet */
+            bet: number;
+            /** Doubled */
+            doubled: boolean;
+            /** Result */
+            result?: string | null;
+            /** Outcome */
+            outcome?: string | null;
+            /**
+             * Payout
+             * @default 0
+             */
+            payout: number;
+            /**
+             * Net
+             * @default 0
+             */
+            net: number;
+            /** Balance */
+            balance: number;
+        };
         /** ConsoleUnlockRequest */
         ConsoleUnlockRequest: {
             /**
@@ -778,6 +971,30 @@ export interface components {
             /** Pv */
             pv: number;
         };
+        /** CurvePoint */
+        CurvePoint: {
+            /** Round Index */
+            round_index: number;
+            /** Balance After */
+            balance_after: number;
+            /** Net */
+            net: number;
+            /** Game */
+            game: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** CurveResponse */
+        CurveResponse: {
+            /** Device Id */
+            device_id: string;
+            wallet: components["schemas"]["Wallet"];
+            /** Points */
+            points: components["schemas"]["CurvePoint"][];
+        };
         /** DailyPoint */
         DailyPoint: {
             /**
@@ -798,6 +1015,23 @@ export interface components {
             os: components["schemas"]["NameCount"][];
             /** Mobile Ratio */
             mobile_ratio: number;
+        };
+        /** GameStat */
+        GameStat: {
+            /** Game */
+            game: string;
+            /** Rounds */
+            rounds: number;
+            /** Total Wagered */
+            total_wagered: number;
+            /** Total Payout */
+            total_payout: number;
+            /** Observed Rtp */
+            observed_rtp: number | null;
+            /** Observed House Edge */
+            observed_house_edge: number | null;
+            /** Theoretical House Edge */
+            theoretical_house_edge: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -947,6 +1181,38 @@ export interface components {
             /** History */
             history?: components["schemas"]["PiHistoryPoint"][];
         };
+        /** PlayRequest */
+        PlayRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Game */
+            game: string;
+            /** Bet Amount */
+            bet_amount: number;
+            /** Bet Detail */
+            bet_detail?: {
+                [key: string]: unknown;
+            };
+        };
+        /** PlayResult */
+        PlayResult: {
+            /** Game */
+            game: string;
+            /** Bet Amount */
+            bet_amount: number;
+            /** Payout */
+            payout: number;
+            /** Net */
+            net: number;
+            /** Outcome */
+            outcome: string;
+            /** Rng Detail */
+            rng_detail: {
+                [key: string]: unknown;
+            };
+            /** Balance After */
+            balance_after: number;
+        };
         /** Post */
         Post: {
             /** Id */
@@ -1066,6 +1332,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["AgentIssueResponse"] | null;
         };
+        /** ResponseModel[BlackjackState] */
+        ResponseModel_BlackjackState_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["BlackjackState"] | null;
+        };
         /** ResponseModel[ConsoleUnlockResponse] */
         ResponseModel_ConsoleUnlockResponse_: {
             /**
@@ -1079,6 +1359,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["ConsoleUnlockResponse"] | null;
+        };
+        /** ResponseModel[CurveResponse] */
+        ResponseModel_CurveResponse_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["CurveResponse"] | null;
         };
         /** ResponseModel[DeviceStats] */
         ResponseModel_DeviceStats_: {
@@ -1164,6 +1458,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["PiStatus"] | null;
         };
+        /** ResponseModel[PlayResult] */
+        ResponseModel_PlayResult_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["PlayResult"] | null;
+        };
         /** ResponseModel[PostAdminListPage] */
         ResponseModel_PostAdminListPage_: {
             /**
@@ -1234,6 +1542,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["SearchResponse"] | null;
         };
+        /** ResponseModel[StatsSummary] */
+        ResponseModel_StatsSummary_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["StatsSummary"] | null;
+        };
         /** ResponseModel[TotpEnrollStart] */
         ResponseModel_TotpEnrollStart_: {
             /**
@@ -1289,6 +1611,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["VitalsOverview"] | null;
+        };
+        /** ResponseModel[Wallet] */
+        ResponseModel_Wallet_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["Wallet"] | null;
         };
         /** ResponseModel[dict] */
         ResponseModel_dict_: {
@@ -1507,6 +1843,19 @@ export interface components {
             /** Position */
             position: number;
         };
+        /** StatsSummary */
+        StatsSummary: {
+            /** Games */
+            games: components["schemas"]["GameStat"][];
+            /** Total Rounds */
+            total_rounds: number;
+            /** Total Players */
+            total_players: number;
+            /** Total Wagered */
+            total_wagered: number;
+            /** Total Payout */
+            total_payout: number;
+        };
         /** TerminalSessionLog */
         TerminalSessionLog: {
             /** Id */
@@ -1652,6 +2001,28 @@ export interface components {
             /** P75 Inp */
             p75_inp: number | null;
         };
+        /** Wallet */
+        Wallet: {
+            /** Device Id */
+            device_id: string;
+            /** Balance */
+            balance: number;
+            /** Reclaim Count */
+            reclaim_count: number;
+            /** Total Wagered */
+            total_wagered: number;
+            /** Total Payout */
+            total_payout: number;
+            /** Net */
+            net: number;
+            /** Rounds Played */
+            rounds_played: number;
+        };
+        /** WalletRequest */
+        WalletRequest: {
+            /** Device Id */
+            device_id: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -1746,6 +2117,222 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_list_PostSummary__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_wallet_api_public_casino_wallet_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalletRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_Wallet_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_api_public_casino_claim_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalletRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_Wallet_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    play_api_public_casino_play_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_PlayResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    curve_api_public_casino_curve_get: {
+        parameters: {
+            query: {
+                device_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_CurveResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stats_api_public_casino_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_StatsSummary_"];
+                };
+            };
+        };
+    };
+    blackjack_deal_api_public_casino_blackjack_deal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlackjackDealRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_BlackjackState_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    blackjack_action_api_public_casino_blackjack_action_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlackjackActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_BlackjackState_"];
                 };
             };
             /** @description Validation Error */

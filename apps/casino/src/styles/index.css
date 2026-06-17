@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #0b0f10;
+  background-image:
+    radial-gradient(circle at 15% -5%, rgba(255, 106, 193, 0.1), transparent 42%),
+    radial-gradient(circle at 85% 110%, rgba(87, 199, 255, 0.1), transparent 45%);
+  background-attachment: fixed, fixed;
+  background-repeat: no-repeat, no-repeat;
+  background-size: 100% 100%, 100% 100%;
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+/* CRT 扫描线，延续主站终端基因 */
+body::before {
+  content: '';
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.02) 0px,
+    rgba(255, 255, 255, 0.02) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  z-index: 9999;
+  mix-blend-mode: overlay;
+}
+
+::selection {
+  background: rgba(90, 247, 142, 0.35);
+  color: #ffffff;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* 中奖特效 */
+@keyframes winPop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  70% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.04);
+    opacity: 0;
+  }
+}
+@keyframes winParticle {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tx), var(--ty)) scale(0.25);
+    opacity: 0;
+  }
+}
+@keyframes winFlash {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+  }
+}

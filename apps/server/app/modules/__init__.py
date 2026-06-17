@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from .analytics.router import admin_router as analytics_admin_router
 from .analytics.router import public_router as analytics_public_router
 from .auth.router import router as auth_router
+from .casino.router import public_router as casino_public_router
 from .inspirations.router import admin_router as inspiration_admin_router
 from .inspirations.router import public_router as inspiration_public_router
 from .pi.router import agent_router as pi_agent_router
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/api")
 
 # 公开接口（前台 web 用，免鉴权）
 router.include_router(post_public_router)
+router.include_router(casino_public_router)
 router.include_router(inspiration_public_router)
 router.include_router(analytics_public_router)
 router.include_router(pi_public_router)

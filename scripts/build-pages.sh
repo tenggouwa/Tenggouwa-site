@@ -28,6 +28,7 @@ case "$TARGET" in
     REPO_NAME="${REPO_NAME:-Tenggouwa-site}"
     WEB_BASE="/${REPO_NAME}/"
     ADMIN_BASE="/${REPO_NAME}/admin/"
+    CASINO_BASE="/${REPO_NAME}/casino/"
     DIST="pages-dist"
     # 子路径产物不让搜索引擎收录，免得跟主域名互打权重
     PRERENDER_NOINDEX="--noindex"
@@ -35,6 +36,7 @@ case "$TARGET" in
   root)
     WEB_BASE="/"
     ADMIN_BASE="/admin/"
+    CASINO_BASE="/casino/"
     DIST="cf-dist"
     PRERENDER_NOINDEX=""
     ;;
@@ -63,6 +65,11 @@ VITE_BASE="$ADMIN_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/
 mkdir -p "$DIST/admin"
 cp -R apps/admin/dist/. "$DIST/admin/"
 
+echo "==> 构建 apps/casino (base=$CASINO_BASE, api=${VITE_API_BASE:-<empty>})"
+VITE_BASE="$CASINO_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/casino build
+mkdir -p "$DIST/casino"
+cp -R apps/casino/dist/. "$DIST/casino/"
+
 echo "==> 预渲染博客静态页 + sitemap / robots / feed (origin=$SITE_ORIGIN)"
 # prerender 从 API 拉数据（DB 是唯一真相），未显式传则回落到 https://api.tenggouwa.com
 PRERENDER_API="${VITE_API_BASE:-https://api.tenggouwa.com}"
@@ -79,12 +86,12 @@ node scripts/generate-og.mjs --dist="$DIST"
 # SPA 兜底：GitHub Pages 只支持根 404.html。
 # 策略：把 web 的 index.html 整个拷贝过来当 404.html——任何 deep-link 刷新时浏览器
 # URL 不变，web SPA 直接 mount，BrowserRouter 自己 match 路由。
-# 唯一例外是 admin 子路径：根 404.html 跑的是 web SPA，basename="/" 不认识 /admin/*，
-# 所以在 <head> 顶部插一段 inline script，把 admin path 先存 sessionStorage 再
-# redirect 到 admin SPA 根，admin/main.tsx 那边再 history.replaceState 还原。
+# 例外是子路径 SPA（admin / casino）：根 404.html 跑的是 web SPA，basename="/" 不认识
+# /admin/* 或 /casino/*，所以在 <head> 顶部插一段 inline script，把子路径先存
+# sessionStorage 再 redirect 到对应 SPA 根，该 SPA 的 main.tsx 再 history.replaceState 还原。
 cp "$DIST/index.html" "$DIST/404.html"
-ADMIN_REDIRECT_SCRIPT=$(cat <<EOF
-<script>(function(){var b="${ADMIN_BASE}";if(location.pathname.indexOf(b)===0&&location.pathname!==b){try{sessionStorage.setItem('tg_spa_redirect',location.pathname+location.search+location.hash);}catch(e){}location.replace(b);}})();</script>
+SUBAPP_REDIRECT_SCRIPT=$(cat <<EOF
+<script>(function(){var bs=["${ADMIN_BASE}","${CASINO_BASE}"];for(var i=0;i<bs.length;i++){var b=bs[i];if(location.pathname.indexOf(b)===0&&location.pathname!==b){try{sessionStorage.setItem('tg_spa_redirect',location.pathname+location.search+location.hash);}catch(e){}location.replace(b);return;}}})();</script>
 EOF
 )
 # 在 <head> 后立刻插入 redirect script
@@ -92,7 +99,7 @@ python3 -c "
 import sys
 p = '$DIST/404.html'
 s = open(p).read()
-inject = '''$ADMIN_REDIRECT_SCRIPT'''
+inject = '''$SUBAPP_REDIRECT_SCRIPT'''
 s = s.replace('<head>', '<head>' + inject, 1)
 open(p, 'w').write(s)
 "

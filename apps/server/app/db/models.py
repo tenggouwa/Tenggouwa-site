@@ -6,7 +6,7 @@ Alembic autogenerate 看不到。Pydantic schema 仍然放在各业务模块的 
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -191,6 +191,94 @@ class PiSnapshotRow(Base):
     metrics: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     __table_args__ = (Index("ix_pi_snapshot_ts", "ts"),)
+
+
+class CasinoWalletRow(Base):
+    """反赌模拟器：一个匿名 device_id 一行钱包。
+
+    积分纯计数、无任何充提功能。初始固定 INITIAL_BALANCE；输光后可 /claim 重领，
+    reclaim_count 累计重领次数。total_wagered / total_payout 累计所有局，用于个人
+    净值与全站真实赔率统计。
+    """
+
+    __tablename__ = "casino_wallet"
+
+    device_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    balance: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reclaim_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    total_wagered: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    total_payout: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    rounds_played: Mapped[int] = mapped_column(nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class CasinoRoundRow(Base):
+    """反赌模拟器：每下一注落一行。
+
+    bet_detail / rng_detail 放 JSONB（不同游戏字段不同，加游戏不用迁移）。RNG 一律
+    后端权威生成，前端只负责把动画演到 rng_detail 描述的结果。net = payout - bet_amount。
+    """
+
+    __tablename__ = "casino_round"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    game: Mapped[str] = mapped_column(String(16), nullable=False)  # dice | roulette | slots | baccarat | blackjack
+    bet_amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    bet_detail: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    payout: Mapped[int] = mapped_column(BigInteger, nullable=False)  # 赢得返还（含本金口径见 service），输为 0
+    net: Mapped[int] = mapped_column(BigInteger, nullable=False)  # payout - bet_amount
+    balance_after: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    rng_detail: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        Index("ix_casino_round_device_id", "device_id", "id"),
+        Index("ix_casino_round_game", "game"),
+    )
+
+
+class CasinoBlackjackRow(Base):
+    """反赌模拟器：每个 device_id 一局进行中的 21 点牌局（多步交互）。
+
+    发牌时一次性把牌靴(shoe)定好存下，后续 hit/stand 从 shoe 顺序抽——RNG 在发牌那刻
+    就固定，客户端无法影响后续牌。一局结束(status=done)后下次 deal 覆盖本行。
+    """
+
+    __tablename__ = "casino_blackjack"
+
+    device_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    bet: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    doubled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    player: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    dealer: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    shoe: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)  # player_turn | done
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class SeoSearchSnapshotRow(Base):
