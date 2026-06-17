@@ -13,12 +13,16 @@ logger = logging.getLogger(__name__)
 # 上报间隔默认 30s；连漏 ~2 次（>75s 没新快照）就判离线。
 ONLINE_THRESHOLD_S = 75.0
 HISTORY_POINTS = 40
+# 快照保留天数：每次上报顺手删更早的，防表无限增长。
+RETENTION_DAYS = 14
 
 
 class PiService:
     async def ingest(self, session: AsyncSession, report: PiReport) -> None:
         payload = {"model": report.model, "metrics": report.metrics}
-        await PiRepository(session).insert(report.hostname, payload)
+        repo = PiRepository(session)
+        await repo.insert(report.hostname, payload)
+        await repo.prune(RETENTION_DAYS)
 
     async def status(self, session: AsyncSession) -> PiStatus:
         repo = PiRepository(session)
