@@ -24,12 +24,16 @@ class PiRepository:
     async def latest(self) -> PiSnapshotRow | None:
         return await self.session.scalar(select(PiSnapshotRow).order_by(PiSnapshotRow.ts.desc()).limit(1))
 
-    async def recent(self, limit: int) -> list[PiSnapshotRow]:
-        """最近 limit 条，按时间正序返回（便于前端直接画图）。"""
+    async def recent(self, hostname: str, limit: int) -> list[PiSnapshotRow]:
+        """某主机最近 limit 条，按时间正序返回（便于前端直接画图）。
+        按 hostname 过滤，避免历史 sparkline 混入别的机器 / 测试数据。"""
         rows = (
             (
                 await self.session.execute(
-                    select(PiSnapshotRow).order_by(PiSnapshotRow.ts.desc()).limit(limit),
+                    select(PiSnapshotRow)
+                    .where(PiSnapshotRow.hostname == hostname)
+                    .order_by(PiSnapshotRow.ts.desc())
+                    .limit(limit),
                 )
             )
             .scalars()
