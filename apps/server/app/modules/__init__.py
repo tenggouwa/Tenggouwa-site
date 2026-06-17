@@ -12,6 +12,8 @@ from .analytics.router import public_router as analytics_public_router
 from .auth.router import router as auth_router
 from .inspirations.router import admin_router as inspiration_admin_router
 from .inspirations.router import public_router as inspiration_public_router
+from .pi.router import agent_router as pi_agent_router
+from .pi.router import public_router as pi_public_router
 from .posts.router import admin_router as post_admin_router
 from .posts.router import public_router as post_public_router
 from .search.router import public_router as search_public_router
@@ -31,12 +33,15 @@ router = APIRouter(prefix="/api")
 router.include_router(post_public_router)
 router.include_router(inspiration_public_router)
 router.include_router(analytics_public_router)
+router.include_router(pi_public_router)
 router.include_router(search_public_router)
 router.include_router(seo_public_router)
 router.include_router(terminal_console_router)  # /api/console/*：自带 voice/TOTP 鉴权
 
 # Mac agent 接入（WSS，bearer agent_token）
 router.include_router(terminal_agent_router)
+# 树莓派 pi-agent 接入（HTTPS POST，bearer PI_AGENT_TOKEN）
+router.include_router(pi_agent_router)
 
 # 管理接口（admin 后台用，需 JWT）
 router.include_router(auth_router)

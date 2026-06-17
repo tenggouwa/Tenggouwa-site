@@ -172,6 +172,27 @@ class WebVitalsRow(Base):
     )
 
 
+class PiSnapshotRow(Base):
+    """树莓派 pi-agent 上报的一条遥测快照。
+
+    每次上报写一行；最新一行 = 当前状态，online/offline 在查询时按 ts 与
+    now 的差值判定。指标体本身放 JSONB，方便后续模块往里加字段不用迁移。
+    """
+
+    __tablename__ = "pi_snapshot"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    hostname: Mapped[str] = mapped_column(String(64), nullable=False)
+    metrics: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (Index("ix_pi_snapshot_ts", "ts"),)
+
+
 class SeoSearchSnapshotRow(Base):
     """每日搜索引擎收录 / 流量快照。GSC / 百度 / Bing 定时任务每天写一批。"""
 

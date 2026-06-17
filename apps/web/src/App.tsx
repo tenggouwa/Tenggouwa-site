@@ -21,6 +21,7 @@ const Reaction = lazy(() => import('./pages/lab/Reaction'));
 const Rope = lazy(() => import('./pages/lab/Rope'));
 const Wave = lazy(() => import('./pages/lab/Wave'));
 const About = lazy(() => import('./pages/About'));
+const Pi = lazy(() => import('./pages/Pi'));
 const Console = lazy(() => import('./pages/Console'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Search = lazy(() => import('./pages/Search'));
@@ -128,6 +129,7 @@ export default function App() {
             <Route path="lab/reaction" element={<Reaction />} />
             <Route path="lab/life" element={<Life />} />
             <Route path="about" element={<About />} />
+            <Route path="pi" element={<Pi />} />
             <Route path="search" element={<Search />} />
             <Route path="series/:tag" element={<Series />} />
             <Route path="*" element={<NotFound />} />

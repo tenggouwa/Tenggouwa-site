@@ -1,0 +1,9 @@
+[project]
+name = "tenggouwa-pi-agent"
+version = "0.1.0"
+description = "树莓派系统遥测 agent：周期采集并上报给 tenggouwa 后端"
+requires-python = ">=3.9"
+dependencies = []  # 纯 stdlib，零三方依赖
+
+[tool.ruff]
+line-length = 120
