@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/web/**'
       - 'apps/admin/**'
+      - 'apps/casino/**'
       - 'content/posts/**'
       - 'scripts/build-pages.sh'
       - 'scripts/prerender.mjs'
