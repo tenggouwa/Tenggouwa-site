@@ -31,6 +31,23 @@ export interface PostHeat {
   pv: number;
 }
 
+// 树莓派实时状态，/pi 面板用
+export interface PiHistoryPoint {
+  ts: string;
+  cpu_temp_c: number | null;
+  load1: number | null;
+}
+
+export interface PiStatus {
+  online: boolean;
+  last_seen: string | null;
+  age_seconds: number | null;
+  hostname: string | null;
+  model: string | null;
+  metrics: Record<string, number> | null;
+  history: PiHistoryPoint[];
+}
+
 // 系列元信息：title / 描述 / 排序前缀，写在前端而不是后端（轻量、好维护）
 export interface SeriesMeta {
   tag: string;       // 用作 tag filter 的字符串，如 'linux-series'

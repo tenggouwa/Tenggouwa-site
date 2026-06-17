@@ -68,6 +68,18 @@ services:
       postgres:
         condition: service_healthy
     # 端口不发布到宿主机：cloudflared 在同一个 docker 网络里通过 app:10095 转发
+    # 健康检查：打 /health/check。镜像是 slim 无 curl，用自带 python。
+    # start_period 给迁移 + gunicorn 启动留足时间，期间失败不计入 retries。
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import urllib.request,sys;
+          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:10095/health/check', timeout=3).getcode()==200 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   cloudflared:
     # 注意：不要用 :latest——国内 docker hub 镜像的 latest 是远古版本（2020.7.0）
@@ -83,7 +95,8 @@ services:
       # "timeout: no recent network activity" / "failed to accept QUIC stream"）。
       TUNNEL_TRANSPORT_PROTOCOL: http2
     depends_on:
-      - app
+      app:
+        condition: service_healthy
 
 volumes:
   pg_data:
