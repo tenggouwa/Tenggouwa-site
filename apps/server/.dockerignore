@@ -1,0 +1,19 @@
+# 别把这些塞进构建上下文 / 镜像
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+logs/
+*.log
+# secret 绝不进镜像（Dockerfile 也没 COPY 它，双保险）
+.env
+.env.*
+!.env.prod.sample
+# 杂项
+.git/
+.gitignore
+*.md
+.DS_Store
