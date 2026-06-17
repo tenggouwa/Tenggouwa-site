@@ -67,6 +67,15 @@ export default function Layout() {
                 {item.label}
               </NavLink>
             ))}
+            {/* casino 是独立 SPA（不同 basename），用整页跳转而非 router Link。
+                ${BASE_URL}casino/ 在子路径(/Tenggouwa-site/casino/)与根域(/casino/)都成立。 */}
+            <a
+              href={`${import.meta.env.BASE_URL}casino/`}
+              className="transition-colors text-terminal-pink hover:text-terminal-green"
+              title="反赌模拟器：用真实赔率看清赌博"
+            >
+              casino
+            </a>
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
