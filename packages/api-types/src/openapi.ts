@@ -115,6 +115,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/pi/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status */
+        get: operations["status_api_public_pi_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/search": {
         parameters: {
             query?: never;
@@ -180,6 +197,23 @@ export interface paths {
         put?: never;
         /** Console Unlock */
         post: operations["console_unlock_api_console_unlock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/pi/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report */
+        post: operations["report_api_agent_pi_report_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -848,6 +882,51 @@ export interface components {
             /** Daily */
             daily: components["schemas"]["DailyPoint"][];
         };
+        /** PiHistoryPoint */
+        PiHistoryPoint: {
+            /** Ts */
+            ts: string;
+            /** Cpu Temp C */
+            cpu_temp_c?: number | null;
+            /** Load1 */
+            load1?: number | null;
+        };
+        /**
+         * PiReport
+         * @description pi-agent 周期上报的一条遥测快照。
+         */
+        PiReport: {
+            /** Hostname */
+            hostname: string;
+            /** Model */
+            model?: string | null;
+            /** Metrics */
+            metrics?: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * PiStatus
+         * @description 前台 /pi 面板用的当前状态。Pi 离线时 online=False，仍返回最后一次快照。
+         */
+        PiStatus: {
+            /** Online */
+            online: boolean;
+            /** Last Seen */
+            last_seen?: string | null;
+            /** Age Seconds */
+            age_seconds?: number | null;
+            /** Hostname */
+            hostname?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Metrics */
+            metrics?: {
+                [key: string]: number;
+            } | null;
+            /** History */
+            history?: components["schemas"]["PiHistoryPoint"][];
+        };
         /** Post */
         Post: {
             /** Id */
@@ -1043,6 +1122,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["OverviewResponse"] | null;
+        };
+        /** ResponseModel[PiStatus] */
+        ResponseModel_PiStatus_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["PiStatus"] | null;
         };
         /** ResponseModel[PostAdminListPage] */
         ResponseModel_PostAdminListPage_: {
@@ -1458,6 +1551,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
         /** VitalsMetricSummary */
         VitalsMetricSummary: {
@@ -1716,6 +1813,26 @@ export interface operations {
             };
         };
     };
+    status_api_public_pi_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_PiStatus_"];
+                };
+            };
+        };
+    };
     search_api_public_search_get: {
         parameters: {
             query: {
@@ -1824,6 +1941,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_ConsoleUnlockResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_api_agent_pi_report_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PiReport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
                 };
             };
             /** @description Validation Error */
