@@ -10,11 +10,11 @@ pre-commit:
   commands:
     ruff-format:
       glob: "apps/server/**/*.py"
-      run: uvx --from ruff==0.12.1 ruff format --config apps/server/pyproject.toml {staged_files}
+      run: uvx --from ruff==0.15.16 ruff format --config apps/server/pyproject.toml {staged_files}
       stage_fixed: true
     ruff-check-fix:
       glob: "apps/server/**/*.py"
-      run: uvx --from ruff==0.12.1 ruff check --fix --config apps/server/pyproject.toml {staged_files}
+      run: uvx --from ruff==0.15.16 ruff check --fix --config apps/server/pyproject.toml {staged_files}
       stage_fixed: true
 
 pre-push:
@@ -23,4 +23,4 @@ pre-push:
     typecheck:
       run: pnpm -r --parallel lint
     ruff:
-      run: cd apps/server && uvx --from ruff==0.12.1 ruff check . && uvx --from ruff==0.12.1 ruff format --check .
+      run: cd apps/server && uvx --from ruff==0.15.16 ruff check . && uvx --from ruff==0.15.16 ruff format --check .
