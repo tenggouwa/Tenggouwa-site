@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.request
 
-from . import telemetry
+from . import __version__, telemetry
 
 logger = logging.getLogger("pi-agent")
 
@@ -31,6 +31,8 @@ def _post(url: str, token: str, body: dict, timeout: float = 10.0) -> None:
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
     req.add_header("Authorization", f"Bearer {token}")
+    # 自定义 UA：Cloudflare 默认会 403 拦 "Python-urllib" 这类 UA（error 1010）
+    req.add_header("User-Agent", f"tenggouwa-pi-agent/{__version__}")
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (固定 https 后端)
         resp.read()
 
