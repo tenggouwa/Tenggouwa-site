@@ -6,18 +6,29 @@ import WalletBar from './WalletBar';
 export default function Layout({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
   const onTruth = loc.pathname.startsWith('/truth');
+  // 主站是另一个 SPA：把 BASE_URL 末尾的 casino/ 去掉即主站根（子路径 / 根域都成立），整页跳回。
+  const mainHome = import.meta.env.BASE_URL.replace(/casino\/$/, '');
 
   return (
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-40 border-b border-terminal-line/60 bg-terminal-bg/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
-          <Link to="/" className="group flex items-baseline gap-2">
-            <span className="text-terminal-pink">~$</span>
-            <span className="font-semibold text-terminal-green transition group-hover:text-terminal-cyan">
-              ./casino
-            </span>
-            <span className="hidden text-xs text-terminal-gray/50 sm:inline">— 赌场真相模拟器</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <a
+              href={mainHome}
+              className="text-xs text-terminal-gray/70 transition hover:text-terminal-green"
+              title="返回 tenggouwa 主站"
+            >
+              ← 主站
+            </a>
+            <Link to="/" className="group flex items-baseline gap-2">
+              <span className="text-terminal-pink">~$</span>
+              <span className="font-semibold text-terminal-green transition group-hover:text-terminal-cyan">
+                ./casino
+              </span>
+              <span className="hidden text-xs text-terminal-gray/50 sm:inline">— 赌场真相模拟器</span>
+            </Link>
+          </div>
           <div className="flex items-center gap-4">
             <WalletBar />
             <Link
