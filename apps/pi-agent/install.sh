@@ -38,6 +38,8 @@ EOF
 fi
 sudo chmod 600 "$ENV_FILE"
 
+chmod +x "$HERE/synctime.sh"
+
 echo "▸ 写入 $UNIT_FILE"
 sudo tee "$UNIT_FILE" >/dev/null <<EOF
 [Unit]
@@ -50,6 +52,9 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$HERE
 EnvironmentFile=$ENV_FILE
+# 开机先校时（Pi 无 RTC，重启时钟会漂 → TLS 证书校验失败）。
+# + 前缀让这步以 root 跑（date -s 需 root），服务本体仍以 $SERVICE_USER 跑。
+ExecStartPre=+$HERE/synctime.sh
 ExecStart=/usr/bin/python3 -m agent.main
 Restart=always
 RestartSec=5
