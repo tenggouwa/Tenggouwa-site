@@ -32,7 +32,7 @@ class PiService:
 
         age = (datetime.now(UTC) - latest.ts).total_seconds()
         payload = latest.metrics or {}
-        rows = await repo.recent(HISTORY_POINTS)
+        rows = await repo.recent(latest.hostname, HISTORY_POINTS)
         history = [
             PiHistoryPoint(
                 ts=r.ts.isoformat(),
