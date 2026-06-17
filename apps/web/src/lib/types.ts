@@ -25,6 +25,12 @@ export interface PostListPage {
   has_more: boolean;
 }
 
+// 单篇文章累计阅读量，列表页画热力条用
+export interface PostHeat {
+  slug: string;
+  pv: number;
+}
+
 // 树莓派实时状态，/pi 面板用
 export interface PiHistoryPoint {
   ts: string;

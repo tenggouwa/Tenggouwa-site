@@ -38,6 +38,11 @@ class CountryStat(BaseModel):
     pv: int
 
 
+class PostHeat(BaseModel):
+    slug: str  # 文章 slug（由 /posts/<slug> 路径解析）
+    pv: int
+
+
 class DeviceStats(BaseModel):
     browsers: list["NameCount"]
     os: list["NameCount"]

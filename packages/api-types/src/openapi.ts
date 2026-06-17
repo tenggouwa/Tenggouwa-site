@@ -115,6 +115,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/track/top": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Post Heat
+         * @description 各文章累计阅读量（热度降序），供前端列表页画热力条。
+         */
+        get: operations["post_heat_api_public_track_top_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/pi/status": {
         parameters: {
             query?: never;
@@ -981,6 +1001,13 @@ export interface components {
             /** Published At */
             published_at?: string | null;
         };
+        /** PostHeat */
+        PostHeat: {
+            /** Slug */
+            slug: string;
+            /** Pv */
+            pv: number;
+        };
         /** PostListPage */
         PostListPage: {
             /** Items */
@@ -1339,6 +1366,21 @@ export interface components {
             message: string;
             /** Data */
             data?: components["schemas"]["KeywordStat"][] | null;
+        };
+        /** ResponseModel[list[PostHeat]] */
+        ResponseModel_list_PostHeat__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["PostHeat"][] | null;
         };
         /** ResponseModel[list[PostSummary]] */
         ResponseModel_list_PostSummary__: {
@@ -1800,6 +1842,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_heat_api_public_track_top_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_PostHeat__"];
                 };
             };
             /** @description Validation Error */

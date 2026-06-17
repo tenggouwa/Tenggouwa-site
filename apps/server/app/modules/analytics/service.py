@@ -68,6 +68,9 @@ class AnalyticsService:
         # 用与写入相同的 normalize，保证查询 path 与存储 path 对齐
         return await AnalyticsRepository(session).path_views(_normalize_path(path))
 
+    async def post_heat(self, session: AsyncSession, limit: int) -> list[dict]:
+        return await AnalyticsRepository(session).post_heat(limit=max(1, min(limit, 200)))
+
     @staticmethod
     def _make_visitor_hash(ip: str | None, ua: str | None) -> str:
         # sha256(ip + ua + YYYYMMDD UTC)[:32]
