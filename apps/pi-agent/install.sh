@@ -20,6 +20,9 @@ read -rp "上报 token (PI_AGENT_TOKEN): " AGENT_TOKEN
 [ -n "$AGENT_TOKEN" ] || { echo "token 不能为空"; exit 1; }
 read -rp "上报间隔秒 [30]: " INTERVAL
 INTERVAL="${INTERVAL:-30}"
+# 出网代理（在公司/校园等需要 HTTP 代理才能出公网的网络下填，如
+# http://192.168.30.55:7890；能直连公网就留空回车）
+read -rp "HTTP 代理 (没有就回车): " HTTP_PROXY_URL
 
 echo "▸ 写入 $ENV_FILE"
 sudo tee "$ENV_FILE" >/dev/null <<EOF
@@ -27,6 +30,12 @@ PI_AGENT_SERVER_URL=$SERVER_URL
 PI_AGENT_TOKEN=$AGENT_TOKEN
 PI_AGENT_INTERVAL=$INTERVAL
 EOF
+if [ -n "$HTTP_PROXY_URL" ]; then
+  sudo tee -a "$ENV_FILE" >/dev/null <<EOF
+http_proxy=$HTTP_PROXY_URL
+https_proxy=$HTTP_PROXY_URL
+EOF
+fi
 sudo chmod 600 "$ENV_FILE"
 
 echo "▸ 写入 $UNIT_FILE"

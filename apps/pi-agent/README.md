@@ -35,6 +35,15 @@ sudo rm /etc/systemd/system/tenggouwa-pi-agent.service /etc/tenggouwa-pi-agent.e
 sudo systemctl daemon-reload
 ```
 
+## 网络 / 环境要求（踩过的坑）
+
+- **能出公网到 `api.tenggouwa.com`**。在需要 HTTP 代理才能出网的网络（公司/校园），
+  `install.sh` 会问代理地址，写进 env 的 `http_proxy`/`https_proxy`（urllib 自动用）。
+- **系统时钟要准**。差太多会让 HTTPS 证书校验失败（`certificate is not yet valid`）。
+  NTP 被挡时可走代理取时间：
+  `sudo date -s "$(curl -sI -x <proxy> http://www.gstatic.com/generate_204 | grep -i '^date:' | cut -d' ' -f2-)"`
+- agent 已设自定义 `User-Agent`，避开 Cloudflare 对 `Python-urllib` 的默认拦截（error 1010）。
+
 ## 本地试跑（不装服务）
 
 ```bash
