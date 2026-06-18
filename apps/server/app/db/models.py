@@ -281,6 +281,67 @@ class CasinoBlackjackRow(Base):
     )
 
 
+class CasinoMinesRow(Base):
+    """反赌模拟器：每个 device_id 一局进行中的 Mines 扫雷（多步交互）。
+
+    开局一次性把地雷位置定好存下，翻格时只对比已存的雷位（后端权威，客户端不能改）。
+    一局结束(status=done)后下次 start 覆盖本行。
+    """
+
+    __tablename__ = "casino_mines"
+
+    device_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    bet: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    mines: Mapped[int] = mapped_column(nullable=False)  # 雷数
+    mine_positions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    revealed: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)  # 已翻开的安全格
+    status: Mapped[str] = mapped_column(String(16), nullable=False)  # active | done
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class CasinoZhajinhuaRow(Base):
+    """反赌模拟器：每个 device_id 一局进行中的炸金花（多轮对庄博弈）。
+
+    开局发牌即定（闲庄各 3 张，存下），后续闷/看/跟/加/比都不改牌。一局结束(status=done)
+    后下次 start 覆盖本行。
+    """
+
+    __tablename__ = "casino_zhajinhua"
+
+    device_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    ante: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    pot: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    player_paid: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    dealer_paid: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    cur_stake: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    looked: Mapped[bool] = mapped_column(nullable=False, default=False)
+    round: Mapped[int] = mapped_column(nullable=False, default=1)
+    player: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    dealer: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)  # active | done
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class SeoSearchSnapshotRow(Base):
     """每日搜索引擎收录 / 流量快照。GSC / 百度 / Bing 定时任务每天写一批。"""
 

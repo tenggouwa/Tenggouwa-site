@@ -15,6 +15,8 @@ const Crash = lazy(() => import('./pages/games/Crash'));
 const MoneyWheel = lazy(() => import('./pages/games/MoneyWheel'));
 const Plinko = lazy(() => import('./pages/games/Plinko'));
 const SicBo = lazy(() => import('./pages/games/SicBo'));
+const Zhajinhua = lazy(() => import('./pages/games/Zhajinhua'));
+const Mines = lazy(() => import('./pages/games/Mines'));
 const Truth = lazy(() => import('./pages/Truth'));
 
 function Loading() {
@@ -43,6 +45,8 @@ export default function App() {
           <Route path="/games/money-wheel" element={<MoneyWheel />} />
           <Route path="/games/plinko" element={<Plinko />} />
           <Route path="/games/sicbo" element={<SicBo />} />
+          <Route path="/games/zhajinhua" element={<Zhajinhua />} />
+          <Route path="/games/mines" element={<Mines />} />
           <Route path="/truth" element={<Truth />} />
           <Route path="*" element={<Lobby />} />
         </Routes>

@@ -2,7 +2,15 @@
 
 import { apiGet, apiPost } from './api';
 import { getDeviceId } from './deviceId';
-import type { BlackjackState, CurveResponse, PlayResult, StatsSummary, Wallet } from './types';
+import type {
+  BlackjackState,
+  CurveResponse,
+  MinesState,
+  PlayResult,
+  StatsSummary,
+  Wallet,
+  ZhajinhuaState,
+} from './types';
 
 export function fetchWallet(): Promise<Wallet> {
   return apiPost<Wallet>('/api/public/casino/wallet', { device_id: getDeviceId() });
@@ -38,6 +46,30 @@ export function bjDeal(betAmount: number): Promise<BlackjackState> {
 
 export function bjAction(action: 'hit' | 'stand' | 'double'): Promise<BlackjackState> {
   return apiPost<BlackjackState>('/api/public/casino/blackjack/action', { device_id: getDeviceId(), action });
+}
+
+export function minesStart(betAmount: number, mines: number): Promise<MinesState> {
+  return apiPost<MinesState>('/api/public/casino/mines/start', {
+    device_id: getDeviceId(),
+    bet_amount: betAmount,
+    mines,
+  });
+}
+
+export function minesReveal(tile: number): Promise<MinesState> {
+  return apiPost<MinesState>('/api/public/casino/mines/reveal', { device_id: getDeviceId(), tile });
+}
+
+export function minesCashout(): Promise<MinesState> {
+  return apiPost<MinesState>('/api/public/casino/mines/cashout', { device_id: getDeviceId() });
+}
+
+export function zjhStart(ante: number): Promise<ZhajinhuaState> {
+  return apiPost<ZhajinhuaState>('/api/public/casino/zhajinhua/start', { device_id: getDeviceId(), ante });
+}
+
+export function zjhAction(action: 'look' | 'call' | 'raise' | 'fold' | 'compare'): Promise<ZhajinhuaState> {
+  return apiPost<ZhajinhuaState>('/api/public/casino/zhajinhua/action', { device_id: getDeviceId(), action });
 }
 
 // 极简全局钱包广播：play / claim 后更新，WalletBar 订阅刷新。

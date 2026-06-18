@@ -111,6 +111,24 @@ const GAMES: GameCard[] = [
     to: '/games/sicbo',
     accent: 'green',
   },
+  {
+    key: 'zhajinhua',
+    name: '炸金花 · 赢三张',
+    cmd: 'play zhajinhua',
+    edge: '2.5%',
+    desc: '华人最火的牌局：闲庄各 3 张比牌型，豹子最大。看着公平，水钱照样磨光你。',
+    to: '/games/zhajinhua',
+    accent: 'pink',
+  },
+  {
+    key: 'mines',
+    name: 'Mines · 扫雷',
+    cmd: 'play mines',
+    edge: '2.00%',
+    desc: '翻格避雷，倍率随翻随涨，随时兑现，踩雷归零。"再翻一个"的侥幸最致命。',
+    to: '/games/mines',
+    accent: 'cyan',
+  },
 ];
 
 const ACCENT: Record<string, string> = {
