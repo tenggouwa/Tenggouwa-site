@@ -64,6 +64,43 @@ export interface PlinkoRng {
   mult: number;
 }
 
+export interface ZhajinhuaState {
+  status: 'active' | 'done';
+  looked: boolean;
+  player: { r: string; s: string }[] | null;
+  dealer: { r: string; s: string }[] | null;
+  pot: number;
+  player_paid: number;
+  cur_stake: number;
+  call_cost: number;
+  round: number;
+  can_compare: boolean;
+  last_dealer_action: string | null;
+  result: 'player' | 'dealer' | 'tie' | null;
+  outcome: 'win' | 'lose' | null;
+  player_rank: string | null;
+  dealer_rank: string | null;
+  payout: number;
+  net: number;
+  balance: number;
+}
+
+export interface MinesState {
+  status: 'active' | 'done';
+  tiles: number;
+  mines: number;
+  revealed: number[];
+  current_mult: number;
+  next_mult: number;
+  can_cashout: boolean;
+  bet: number;
+  mine_positions: number[] | null;
+  busted: boolean;
+  payout: number;
+  net: number;
+  balance: number;
+}
+
 export interface DragonTigerRng {
   dragon: { r: string; s: string };
   tiger: { r: string; s: string };

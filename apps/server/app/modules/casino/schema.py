@@ -94,6 +94,66 @@ class BlackjackState(BaseModel):
     balance: int
 
 
+class ZhajinhuaStartRequest(BaseModel):
+    device_id: str = Field(..., pattern=DEVICE_ID_PATTERN)
+    ante: int = Field(..., gt=0, le=1_000_000)
+
+
+class ZhajinhuaActionRequest(BaseModel):
+    device_id: str = Field(..., pattern=DEVICE_ID_PATTERN)
+    action: str = Field(..., pattern=r"^(look|call|raise|fold|compare)$")
+
+
+class ZhajinhuaState(BaseModel):
+    status: str  # 'active' | 'done'
+    looked: bool
+    player: list[dict] | None = None  # 闷牌时为 None（自己也看不到）；看牌后 / 结算后给出
+    dealer: list[dict] | None = None  # 结算才揭
+    pot: int
+    player_paid: int
+    cur_stake: int
+    call_cost: int  # 当前跟注/比牌花费（闷牌为一半）
+    round: int
+    can_compare: bool
+    last_dealer_action: str | None = None  # 给前端提示"庄家跟注/加注/弃牌/比牌"
+    # 结算后：
+    result: str | None = None  # 'player' | 'dealer' | 'tie'
+    outcome: str | None = None  # 'win' | 'lose'
+    player_rank: str | None = None
+    dealer_rank: str | None = None
+    payout: int = 0
+    net: int = 0
+    balance: int
+
+
+class MinesStartRequest(BaseModel):
+    device_id: str = Field(..., pattern=DEVICE_ID_PATTERN)
+    bet_amount: int = Field(..., gt=0, le=1_000_000)
+    mines: int = Field(..., ge=1, le=24)
+
+
+class MinesRevealRequest(BaseModel):
+    device_id: str = Field(..., pattern=DEVICE_ID_PATTERN)
+    tile: int = Field(..., ge=0, le=24)
+
+
+class MinesState(BaseModel):
+    status: str  # 'active' | 'done'
+    tiles: int = 25
+    mines: int
+    revealed: list[int]
+    current_mult: float  # 当前已翻格对应的兑现倍率（0 翻为 1.0）
+    next_mult: float  # 再翻对一格的倍率
+    can_cashout: bool
+    bet: int
+    # 结算后才有意义：
+    mine_positions: list[int] | None = None
+    busted: bool = False
+    payout: int = 0
+    net: int = 0
+    balance: int
+
+
 class StatsSummary(BaseModel):
     games: list[GameStat]
     total_rounds: int

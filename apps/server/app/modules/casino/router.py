@@ -10,11 +10,17 @@ from .schema import (
     BlackjackDealRequest,
     BlackjackState,
     CurveResponse,
+    MinesRevealRequest,
+    MinesStartRequest,
+    MinesState,
     PlayRequest,
     PlayResult,
     StatsSummary,
     Wallet,
     WalletRequest,
+    ZhajinhuaActionRequest,
+    ZhajinhuaStartRequest,
+    ZhajinhuaState,
 )
 from .service import casino_service
 
@@ -82,3 +88,49 @@ async def blackjack_action(
 ) -> ResponseModel[BlackjackState]:
     """21 点动作：hit 要牌 / stand 停牌 / double 双倍。结算时揭庄家暗牌。"""
     return ResponseModel(data=await casino_service.bj_action(session, payload.device_id, payload.action))
+
+
+@public_router.post("/mines/start", response_model=ResponseModel[MinesState])
+async def mines_start(
+    payload: MinesStartRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[MinesState]:
+    """Mines 开局：托管押注、随机布雷，返回 5×5 空盘。"""
+    state = await casino_service.mines_start(session, payload.device_id, payload.bet_amount, payload.mines)
+    return ResponseModel(data=state)
+
+
+@public_router.post("/mines/reveal", response_model=ResponseModel[MinesState])
+async def mines_reveal(
+    payload: MinesRevealRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[MinesState]:
+    """Mines 翻格：踩雷归零；安全则倍率上涨；翻完所有安全格自动兑现。"""
+    return ResponseModel(data=await casino_service.mines_reveal(session, payload.device_id, payload.tile))
+
+
+@public_router.post("/mines/cashout", response_model=ResponseModel[MinesState])
+async def mines_cashout(
+    payload: WalletRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[MinesState]:
+    """Mines 兑现：按当前倍率结算落袋。"""
+    return ResponseModel(data=await casino_service.mines_cashout(session, payload.device_id))
+
+
+@public_router.post("/zhajinhua/start", response_model=ResponseModel[ZhajinhuaState])
+async def zhajinhua_start(
+    payload: ZhajinhuaStartRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[ZhajinhuaState]:
+    """炸金花开局：闲庄各下底注、发牌（闲默认闷牌）。"""
+    return ResponseModel(data=await casino_service.zjh_start(session, payload.device_id, payload.ante))
+
+
+@public_router.post("/zhajinhua/action", response_model=ResponseModel[ZhajinhuaState])
+async def zhajinhua_action(
+    payload: ZhajinhuaActionRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[ZhajinhuaState]:
+    """炸金花动作：look 看牌 / call 跟注 / raise 加注 / fold 弃牌 / compare 比牌；庄家 bot 自动响应。"""
+    return ResponseModel(data=await casino_service.zjh_action(session, payload.device_id, payload.action))

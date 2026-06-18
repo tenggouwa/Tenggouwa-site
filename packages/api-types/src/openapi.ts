@@ -201,6 +201,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/casino/mines/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mines Start
+         * @description Mines 开局：托管押注、随机布雷，返回 5×5 空盘。
+         */
+        post: operations["mines_start_api_public_casino_mines_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/mines/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mines Reveal
+         * @description Mines 翻格：踩雷归零；安全则倍率上涨；翻完所有安全格自动兑现。
+         */
+        post: operations["mines_reveal_api_public_casino_mines_reveal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/mines/cashout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mines Cashout
+         * @description Mines 兑现：按当前倍率结算落袋。
+         */
+        post: operations["mines_cashout_api_public_casino_mines_cashout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/zhajinhua/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Zhajinhua Start
+         * @description 炸金花开局：闲庄各下底注、发牌（闲默认闷牌）。
+         */
+        post: operations["zhajinhua_start_api_public_casino_zhajinhua_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/zhajinhua/action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Zhajinhua Action
+         * @description 炸金花动作：look 看牌 / call 跟注 / raise 加注 / fold 弃牌 / compare 比牌；庄家 bot 自动响应。
+         */
+        post: operations["zhajinhua_action_api_public_casino_zhajinhua_action_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/inspirations": {
         parameters: {
             query?: never;
@@ -1116,6 +1216,63 @@ export interface components {
             /** Step Token */
             step_token?: string | null;
         };
+        /** MinesRevealRequest */
+        MinesRevealRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Tile */
+            tile: number;
+        };
+        /** MinesStartRequest */
+        MinesStartRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Bet Amount */
+            bet_amount: number;
+            /** Mines */
+            mines: number;
+        };
+        /** MinesState */
+        MinesState: {
+            /** Status */
+            status: string;
+            /**
+             * Tiles
+             * @default 25
+             */
+            tiles: number;
+            /** Mines */
+            mines: number;
+            /** Revealed */
+            revealed: number[];
+            /** Current Mult */
+            current_mult: number;
+            /** Next Mult */
+            next_mult: number;
+            /** Can Cashout */
+            can_cashout: boolean;
+            /** Bet */
+            bet: number;
+            /** Mine Positions */
+            mine_positions?: number[] | null;
+            /**
+             * Busted
+             * @default false
+             */
+            busted: boolean;
+            /**
+             * Payout
+             * @default 0
+             */
+            payout: number;
+            /**
+             * Net
+             * @default 0
+             */
+            net: number;
+            /** Balance */
+            balance: number;
+        };
         /** NameCount */
         NameCount: {
             /** Name */
@@ -1430,6 +1587,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["LoginResponse"] | null;
         };
+        /** ResponseModel[MinesState] */
+        ResponseModel_MinesState_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["MinesState"] | null;
+        };
         /** ResponseModel[OverviewResponse] */
         ResponseModel_OverviewResponse_: {
             /**
@@ -1625,6 +1796,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["Wallet"] | null;
+        };
+        /** ResponseModel[ZhajinhuaState] */
+        ResponseModel_ZhajinhuaState_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["ZhajinhuaState"] | null;
         };
         /** ResponseModel[dict] */
         ResponseModel_dict_: {
@@ -2023,6 +2208,69 @@ export interface components {
             /** Device Id */
             device_id: string;
         };
+        /** ZhajinhuaActionRequest */
+        ZhajinhuaActionRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Action */
+            action: string;
+        };
+        /** ZhajinhuaStartRequest */
+        ZhajinhuaStartRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Ante */
+            ante: number;
+        };
+        /** ZhajinhuaState */
+        ZhajinhuaState: {
+            /** Status */
+            status: string;
+            /** Looked */
+            looked: boolean;
+            /** Player */
+            player?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Dealer */
+            dealer?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Pot */
+            pot: number;
+            /** Player Paid */
+            player_paid: number;
+            /** Cur Stake */
+            cur_stake: number;
+            /** Call Cost */
+            call_cost: number;
+            /** Round */
+            round: number;
+            /** Can Compare */
+            can_compare: boolean;
+            /** Last Dealer Action */
+            last_dealer_action?: string | null;
+            /** Result */
+            result?: string | null;
+            /** Outcome */
+            outcome?: string | null;
+            /** Player Rank */
+            player_rank?: string | null;
+            /** Dealer Rank */
+            dealer_rank?: string | null;
+            /**
+             * Payout
+             * @default 0
+             */
+            payout: number;
+            /**
+             * Net
+             * @default 0
+             */
+            net: number;
+            /** Balance */
+            balance: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -2333,6 +2581,171 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_BlackjackState_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mines_start_api_public_casino_mines_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MinesStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_MinesState_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mines_reveal_api_public_casino_mines_reveal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MinesRevealRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_MinesState_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mines_cashout_api_public_casino_mines_cashout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalletRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_MinesState_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    zhajinhua_start_api_public_casino_zhajinhua_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZhajinhuaStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_ZhajinhuaState_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    zhajinhua_action_api_public_casino_zhajinhua_action_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZhajinhuaActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_ZhajinhuaState_"];
                 };
             };
             /** @description Validation Error */

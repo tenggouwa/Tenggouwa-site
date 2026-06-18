@@ -2,7 +2,13 @@
 
 from dataclasses import dataclass
 
-from db.models import CasinoBlackjackRow, CasinoRoundRow, CasinoWalletRow
+from db.models import (
+    CasinoBlackjackRow,
+    CasinoMinesRow,
+    CasinoRoundRow,
+    CasinoWalletRow,
+    CasinoZhajinhuaRow,
+)
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -138,3 +144,42 @@ class CasinoRepository:
         row.status = status
         await self.session.flush()
         return row
+
+    # —— Mines 进行中牌局 ——
+
+    async def get_mines(self, device_id: str) -> CasinoMinesRow | None:
+        return await self.session.get(CasinoMinesRow, device_id)
+
+    async def upsert_mines(
+        self,
+        *,
+        device_id: str,
+        bet: int,
+        mines: int,
+        mine_positions: list[int],
+        revealed: list[int],
+        status: str,
+    ) -> CasinoMinesRow:
+        row = await self.session.get(CasinoMinesRow, device_id)
+        if row is None:
+            row = CasinoMinesRow(device_id=device_id)
+            self.session.add(row)
+        row.bet = bet
+        row.mines = mines
+        row.mine_positions = mine_positions
+        row.revealed = revealed
+        row.status = status
+        await self.session.flush()
+        return row
+
+    # —— 炸金花进行中牌局 ——
+
+    async def get_zhajinhua(self, device_id: str) -> CasinoZhajinhuaRow | None:
+        return await self.session.get(CasinoZhajinhuaRow, device_id)
+
+    async def save_zhajinhua(self, row: CasinoZhajinhuaRow) -> None:
+        self.session.add(row)
+        await self.session.flush()
+
+    def new_zhajinhua(self, **kwargs) -> CasinoZhajinhuaRow:
+        return CasinoZhajinhuaRow(**kwargs)
