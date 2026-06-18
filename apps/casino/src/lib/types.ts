@@ -46,6 +46,42 @@ export interface BaccaratRng {
   result: 'player' | 'banker' | 'tie';
 }
 
+export interface SicBoRng {
+  dice: [number, number, number];
+  total: number;
+  triple: boolean;
+}
+
+export interface MoneyWheelRng {
+  segment: string;
+  index: number;
+  win: boolean;
+}
+
+export interface PlinkoRng {
+  path: ('L' | 'R')[];
+  slot: number;
+  mult: number;
+}
+
+export interface DragonTigerRng {
+  dragon: { r: string; s: string };
+  tiger: { r: string; s: string };
+  result: 'dragon' | 'tiger' | 'tie';
+}
+
+export interface KenoRng {
+  draw: number[];
+  picks: number[];
+  hits: number;
+}
+
+export interface CrashRng {
+  crash: number;
+  target: number;
+  cashed: boolean;
+}
+
 export interface BlackjackState {
   status: 'player_turn' | 'done';
   player: { r: string; s: string }[];

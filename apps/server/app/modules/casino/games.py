@@ -33,6 +33,12 @@ THEORETICAL_HOUSE_EDGE: dict[str, float] = {
     "slots": 0.0604,  # 三轴老虎机：赔率表 + 卷轴权重精确算出 RTP=93.96%
     "baccarat": 0.0106,  # 百家乐：以最常见的"押庄"为基准 1.06%（押闲 1.24%，押和 8:1 约 14.4%）
     "blackjack": 0.005,  # 21 点：基本策略约 0.5%——但乱玩会远高于此，正好对比"实测 vs 理论"
+    "dragon_tiger": 0.0385,  # 龙虎：押龙/虎和局退一半，约 3.85%（押和 8:1 约 30%）
+    "keno": 0.28,  # 基诺：随选号数浮动，各档 RTP≈0.72，约 28%，全场最坑之一
+    "crash": 0.04,  # 崩盘：P(crash≥T)=(1-e)/T 使任意目标 RTP 恒为 1-e=96%，庄家优势 4%
+    "money_wheel": 0.111,  # 幸运大转盘：以最好的"押 1"为基准 11.1%（押越大的格优势越高，至 22%）
+    "plinko": 0.04,  # Plinko：倍率表调成 RTP≈96%，庄家优势约 4%
+    "sicbo": 0.0278,  # 完整骰宝：以最好的"大/小"为基准 2.78%（押单点/对/总和/豹子优势高得多）
 }
 
 # 欧式轮盘的红色号码（其余 1-36 为黑，0 为绿）。
@@ -232,11 +238,199 @@ def _play_baccarat(bet_amount: int, bet_detail: dict) -> GameOutcome:
     )
 
 
+def _dragon_tiger_value(rank: str) -> int:
+    return _BACCARAT_RANKS.index(rank) + 1  # A=1 … K=13
+
+
+def _play_dragon_tiger(bet_amount: int, bet_detail: dict) -> GameOutcome:
+    """龙虎斗：龙、虎各发一张比单牌大小（A 最小、K 最大）。
+
+    押龙/虎赢 1:1、遇和退一半；押和 8:1。押龙/虎庄家优势约 3.85%，押和约 30%（陷阱）。
+    """
+    side = bet_detail.get("type")
+    if side not in ("dragon", "tiger", "tie"):
+        raise GameError("龙虎下注必须是 dragon / tiger / tie")
+
+    dragon = _baccarat_draw()
+    tiger = _baccarat_draw()
+    dv = _dragon_tiger_value(dragon["r"])
+    tv = _dragon_tiger_value(tiger["r"])
+    result = "dragon" if dv > tv else ("tiger" if tv > dv else "tie")
+
+    if side == "tie":
+        payout = bet_amount * 9 if result == "tie" else 0
+    elif result == "tie":
+        payout = bet_amount // 2  # 押龙/虎遇和退一半
+    elif side == result:
+        payout = bet_amount * 2
+    else:
+        payout = 0
+
+    return GameOutcome(
+        payout=payout,
+        rng_detail={"dragon": dragon, "tiger": tiger, "result": result},
+    )
+
+
+# 基诺赔付表：spots(选号数) -> {hits(命中数): 返还倍率}。未列出的命中数 = 0。
+# 经超几何分布调成各选号数 RTP≈0.72（庄家优势约 28%）。
+_KENO_PAYTABLE: dict[int, dict[int, int]] = {
+    1: {1: 3},
+    2: {2: 12},
+    3: {2: 1, 3: 42},
+    4: {2: 1, 3: 4, 4: 98},
+    5: {3: 2, 4: 14, 5: 560},
+    6: {3: 1, 4: 5, 5: 84, 6: 1300},
+    7: {4: 3, 5: 28, 6: 145, 7: 8000},
+    8: {5: 15, 6: 77, 7: 1200, 8: 13000},
+    9: {5: 6, 6: 34, 7: 250, 8: 4600, 9: 31000},
+    10: {5: 3, 6: 25, 7: 100, 8: 560, 9: 5600, 10: 111000},
+}
+
+
+def _play_keno(bet_amount: int, bet_detail: dict) -> GameOutcome:
+    """基诺：从 1-80 选 1-10 个号，机开 20 个，按命中数查赔付表。庄家优势普遍 25-30%。"""
+    picks = bet_detail.get("picks")
+    if not isinstance(picks, list) or not 1 <= len(picks) <= 10:
+        raise GameError("基诺需选 1-10 个号码")
+    picks_set = {p for p in picks if isinstance(p, int) and 1 <= p <= 80}
+    if len(picks_set) != len(picks):
+        raise GameError("号码须为 1-80 且不重复")
+
+    draw = _rng.sample(range(1, 81), 20)
+    hits = len(picks_set & set(draw))
+    mult = _KENO_PAYTABLE[len(picks_set)].get(hits, 0)
+    payout = bet_amount * mult
+    return GameOutcome(
+        payout=payout,
+        rng_detail={"draw": sorted(draw), "picks": sorted(picks_set), "hits": hits},
+    )
+
+
+_CRASH_EDGE = 0.04
+
+
+def _play_crash(bet_amount: int, bet_detail: dict) -> GameOutcome:
+    """崩盘（自动兑现）：预设目标倍率 target，后端出崩盘点 crash。crash≥target 则赢 bet×target。
+
+    崩盘点满足 P(crash≥m) = (1-e)/m，于是任意 target 的 RTP 恒为 1-e（庄家优势 e=4%）。
+    目标越贪心，越容易在到点前崩盘归零——这就是崩盘类游戏的成瘾陷阱。
+    """
+    target = bet_detail.get("target")
+    if not isinstance(target, int | float) or not 1.01 <= target <= 1000:
+        raise GameError("目标倍率须在 1.01 - 1000 之间")
+
+    # e 的概率直接崩在 1.00（庄家优势）；否则 crash = 1/(1-U)，使 P(crash≥m)=1/m。
+    raw = 1.0 if _rng.random() < _CRASH_EDGE else min(1000.0, 1.0 / (1.0 - _rng.random()))
+    crash = max(1.0, int(raw * 100) / 100)  # 截到两位小数
+
+    won = crash >= target
+    payout = int(bet_amount * target) if won else 0
+    return GameOutcome(
+        payout=payout,
+        rng_detail={"crash": crash, "target": round(float(target), 2), "cashed": won},
+    )
+
+
+# 幸运大转盘（Big Six）：54 格，符号均匀打散排列（真钱轮的样子，概率只看每种数量）。
+# 顺序与前端 MoneyWheelScene 的 SEGMENTS 必须完全一致（按 index 落点）。
+_WHEEL_SEGMENTS = [
+    "1", "2", "1", "5", "2", "1", "10", "1", "2", "1", "5", "1", "2", "20", "1", "2", "1", "1",
+    "5", "2", "10", "1", "2", "1", "1", "2", "5", "40", "joker", "1", "1", "2", "1", "10", "2", "5",
+    "1", "1", "2", "1", "20", "2", "1", "5", "1", "2", "1", "10", "1", "2", "5", "1", "2", "1",
+]  # fmt: skip
+_WHEEL_PAYOUT = {"1": 2, "2": 3, "5": 6, "10": 11, "20": 21, "40": 41, "joker": 46}
+
+
+def _play_money_wheel(bet_amount: int, bet_detail: dict) -> GameOutcome:
+    """幸运大转盘：押某个符号，转盘停在哪格定输赢。庄家优势按格 11.1%–22.2% 不等。"""
+    pick = bet_detail.get("bet")
+    if pick not in _WHEEL_PAYOUT:
+        raise GameError("大转盘下注须是 1/2/5/10/20/40/joker 之一")
+    idx = _rng.randrange(len(_WHEEL_SEGMENTS))
+    seg = _WHEEL_SEGMENTS[idx]
+    payout = bet_amount * _WHEEL_PAYOUT[pick] if seg == pick else 0
+    return GameOutcome(payout=payout, rng_detail={"segment": seg, "index": idx, "win": seg == pick})
+
+
+# Plinko：12 排钉，13 个落袋的倍率（对称，边缘高、中间 <1）。已调成 RTP≈96%。
+_PLINKO_ROWS = 12
+_PLINKO_MULT = [50.0, 12.0, 5.0, 2.0, 1.0, 0.5, 0.25, 0.5, 1.0, 2.0, 5.0, 12.0, 50.0]
+
+
+def _play_plinko(bet_amount: int, _bet_detail: dict) -> GameOutcome:
+    """Plinko：小球穿过 12 排钉，每排 50/50 左右弹，落入底部 13 格之一按倍率赔。"""
+    path = ["R" if _rng.random() < 0.5 else "L" for _ in range(_PLINKO_ROWS)]
+    slot = sum(1 for d in path if d == "R")  # 0..12
+    mult = _PLINKO_MULT[slot]
+    payout = int(bet_amount * mult)
+    return GameOutcome(payout=payout, rng_detail={"path": path, "slot": slot, "mult": mult})
+
+
+# 完整骰宝总和投注的赔率表（总和 -> 含本金返还倍率，X:1 即 X+1）。
+_SICBO_TOTAL_PAYOUT = {
+    4: 51, 5: 19, 6: 15, 7: 13, 8: 9, 9: 7, 10: 7,
+    11: 7, 12: 7, 13: 9, 14: 13, 15: 15, 16: 19, 17: 51,
+}  # fmt: skip
+
+
+def _play_sicbo(bet_amount: int, bet_detail: dict) -> GameOutcome:
+    """完整骰宝：三颗骰子，多种投注。
+
+    big/small 大小 1:1（豹子通杀）；number 押单点按出现次数 1:1 每颗；total 押总和查表；
+    any_triple 任意豹子 30:1；triple 指定豹子 150:1；double 指定对子（≥2 颗）10:1。
+    """
+    dice = [_rng.randint(1, 6) for _ in range(3)]
+    total = sum(dice)
+    counts = Counter(dice)
+    is_triple = len(counts) == 1
+    bet_type = bet_detail.get("type")
+    value = bet_detail.get("value")
+
+    payout = 0
+    if bet_type == "big":
+        payout = bet_amount * 2 if (not is_triple and 11 <= total <= 17) else 0
+    elif bet_type == "small":
+        payout = bet_amount * 2 if (not is_triple and 4 <= total <= 10) else 0
+    elif bet_type == "number":
+        if value not in (1, 2, 3, 4, 5, 6):
+            raise GameError("单点投注须是 1-6")
+        n = counts.get(value, 0)
+        payout = bet_amount * (1 + n) if n > 0 else 0  # 出现 n 颗 → n:1
+    elif bet_type == "total":
+        if value not in _SICBO_TOTAL_PAYOUT:
+            raise GameError("总和投注须是 4-17")
+        payout = bet_amount * _SICBO_TOTAL_PAYOUT[value] if total == value else 0
+    elif bet_type == "any_triple":
+        payout = bet_amount * 31 if is_triple else 0
+    elif bet_type == "triple":
+        if value not in (1, 2, 3, 4, 5, 6):
+            raise GameError("指定豹子须是 1-6")
+        payout = bet_amount * 151 if (is_triple and dice[0] == value) else 0
+    elif bet_type == "double":
+        if value not in (1, 2, 3, 4, 5, 6):
+            raise GameError("指定对子须是 1-6")
+        payout = bet_amount * 11 if counts.get(value, 0) >= 2 else 0
+    else:
+        raise GameError(f"未知骰宝玩法: {bet_type}")
+
+    return GameOutcome(
+        payout=payout,
+        rng_detail={"dice": dice, "total": total, "triple": is_triple},
+    )
+
+
 _ENGINES: dict[str, Callable[[int, dict], GameOutcome]] = {
     "dice": _play_dice,
     "roulette": _play_roulette,
     "slots": _play_slots,
     "baccarat": _play_baccarat,
+    "dragon_tiger": _play_dragon_tiger,
+    "keno": _play_keno,
+    "crash": _play_crash,
+    "money_wheel": _play_money_wheel,
+    "plinko": _play_plinko,
+    "sicbo": _play_sicbo,
 }
 
 

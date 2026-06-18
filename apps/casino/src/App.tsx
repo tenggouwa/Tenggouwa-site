@@ -9,6 +9,12 @@ const Roulette = lazy(() => import('./pages/games/Roulette'));
 const Slots = lazy(() => import('./pages/games/Slots'));
 const Baccarat = lazy(() => import('./pages/games/Baccarat'));
 const Blackjack = lazy(() => import('./pages/games/Blackjack'));
+const DragonTiger = lazy(() => import('./pages/games/DragonTiger'));
+const Keno = lazy(() => import('./pages/games/Keno'));
+const Crash = lazy(() => import('./pages/games/Crash'));
+const MoneyWheel = lazy(() => import('./pages/games/MoneyWheel'));
+const Plinko = lazy(() => import('./pages/games/Plinko'));
+const SicBo = lazy(() => import('./pages/games/SicBo'));
 const Truth = lazy(() => import('./pages/Truth'));
 
 function Loading() {
@@ -31,6 +37,12 @@ export default function App() {
           <Route path="/games/slots" element={<Slots />} />
           <Route path="/games/baccarat" element={<Baccarat />} />
           <Route path="/games/blackjack" element={<Blackjack />} />
+          <Route path="/games/dragon-tiger" element={<DragonTiger />} />
+          <Route path="/games/keno" element={<Keno />} />
+          <Route path="/games/crash" element={<Crash />} />
+          <Route path="/games/money-wheel" element={<MoneyWheel />} />
+          <Route path="/games/plinko" element={<Plinko />} />
+          <Route path="/games/sicbo" element={<SicBo />} />
           <Route path="/truth" element={<Truth />} />
           <Route path="*" element={<Lobby />} />
         </Routes>
