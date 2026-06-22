@@ -68,6 +68,12 @@ ignore = [
     "UP046",
 ]
 
+[tool.ruff.lint.isort]
+# alembic 是三方库，但 CI 全项目跑时 ruff 因 alembic/ 目录把它当一方包、单独
+# 分组；lefthook 单文件跑时探测不到 → 分组不一致，迁移文件反复 I001。
+# 显式钉成 first-party，两种上下文一致（与现有迁移风格相同）。
+known-first-party = ["alembic"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
