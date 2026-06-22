@@ -48,6 +48,15 @@ export interface PiStatus {
   history: PiHistoryPoint[];
 }
 
+// Pi 每日产物（它自己算的 ASCII 曼德博集合）
+export interface PiArtifact {
+  kind: string;
+  title: string;
+  content: string;
+  meta: Record<string, unknown>;
+  ts: string | null;
+}
+
 // 系列元信息：title / 描述 / 排序前缀，写在前端而不是后端（轻量、好维护）
 export interface SeriesMeta {
   tag: string;       // 用作 tag filter 的字符串，如 'linux-series'

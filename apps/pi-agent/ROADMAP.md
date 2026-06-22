@@ -10,13 +10,14 @@
   `/pi` 实时显示，离线显示最后快照。含开机校时（无 RTC）、代理出网、绕 CF UA。
 - **部署链路加固**：健康校验 + sha 回滚 + BuildKit cache + frozen-only + .dockerignore。
 - **快照保留**：ingest 时删 >14 天旧行，表不无限涨。
+- **Day A 遥测收尾**：`/pi` history 按 hostname 过滤（#81），测试行被动消失（过滤 + prune）。
 
 ## ⬜ 待办（按天）
 
-### Day A — 遥测收尾（小）
-- [ ] `/pi` history 按 hostname 过滤（现在混进了 mactest/uatest 测试行）。
-- [ ] 删掉 pi_snapshot 里的 mactest/uatest 测试行（一次性）。
-- [ ] （可选）/pi 面板加网络吞吐 / 进程数等指标。
+### Day A — 遥测收尾（小）✅ 完成
+- [x] `/pi` history 按 hostname 过滤（#81）。
+- [x] 测试行：过滤后不显示 + 保留策略 14 天内 prune（不强删 prod DB）。
+- [ ] （可选，未做）/pi 面板加网络吞吐 / 进程数等指标。
 
 ### Day B — Phase 2：Pi 接进 `/console` 终端 fleet
 - [ ] 复用 mac-agent 的 outbound WSS PTY 协议，让 Pi 注册成一个 terminal agent。
@@ -30,12 +31,15 @@
 - [ ] `/pi` 加打字机面板（终端风输入框 + 发送）。
 - [ ] 安全：只对自己的机器、明确授权场景。
 
-### Day E — Phase 4："Live on a Pi" /lab 算力
-- [ ] Pi 上 module 服务端实时算 Mandelbrot / 反应扩散 的帧，推给网页。
-- [ ] `/lab` 玩具挂徽章"此动画由我房间的树莓派实时计算"，离线回退到本地算。
+### Phase 4 + 5 — "Pi 每日产物" ✅ 完成（合并实现）
+- [x] Pi 每天自己算一张 ASCII 曼德博集合（区域随日期变）+ 真实渲染耗时（Phase 4 "live on a Pi"）。
+- [x] 每日生成 + POST，`/pi` 展示 + "🍓 由 ops-pi 实时计算 · Xms" 徽章 + 每日一句（Phase 5）。
+- [x] 后端 `pi_artifact` 表 + ingest/public 端点；走已验证的 stdlib-HTTP-经代理路。
+- 后续可加更多 kind（fortune / git 活动图）。
 
-### Day F — Phase 5：每日生成器
-- [ ] Pi cron 每天生成 ASCII 艺术 / fortune / git 活动图，POST 给后端，网站展示。
+### ⬜ 仍未做
+- **Phase 2 /console PTY**：这网最难（WSS 穿代理 + 装 websockets + Pi 无 pip/venv），暂缓。
+- **Phase 3 HID 远程打字机**：签名玩法；传输走 HTTP 易，难点是把 `/dev/hidg0` gadget 跑起来。
 
 ## 🔧 Backlog（跟 pi 无关，顺带记）
 

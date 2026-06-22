@@ -392,6 +392,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/pi/artifact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact
+         * @description 前台展示 Pi 最新每日产物；还没有就返回 null。
+         */
+        get: operations["get_artifact_api_public_pi_artifact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/search": {
         parameters: {
             query?: never;
@@ -474,6 +494,26 @@ export interface paths {
         put?: never;
         /** Report */
         post: operations["report_api_agent_pi_report_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/pi/artifact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Artifact
+         * @description Pi 上报每日产物（如它自己算的 ASCII 曼德博集合）。
+         */
+        post: operations["artifact_api_agent_pi_artifact_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1293,6 +1333,40 @@ export interface components {
             /** Daily */
             daily: components["schemas"]["DailyPoint"][];
         };
+        /** PiArtifact */
+        PiArtifact: {
+            /** Kind */
+            kind: string;
+            /** Title */
+            title: string;
+            /** Content */
+            content: string;
+            /** Meta */
+            meta: {
+                [key: string]: unknown;
+            };
+            /** Ts */
+            ts?: string | null;
+        };
+        /**
+         * PiArtifactReport
+         * @description Pi 每日产物上报（如它自己算的 ASCII 曼德博集合）。
+         */
+        PiArtifactReport: {
+            /** Kind */
+            kind: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /** Content */
+            content: string;
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
         /** PiHistoryPoint */
         PiHistoryPoint: {
             /** Ts */
@@ -1768,6 +1842,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["TotpVerifyResponse"] | null;
+        };
+        /** ResponseModel[Union[PiArtifact, NoneType]] */
+        ResponseModel_Union_PiArtifact__NoneType__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["PiArtifact"] | null;
         };
         /** ResponseModel[VitalsOverview] */
         ResponseModel_VitalsOverview_: {
@@ -2906,6 +2994,26 @@ export interface operations {
             };
         };
     };
+    get_artifact_api_public_pi_artifact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_Union_PiArtifact__NoneType__"];
+                };
+            };
+        };
+    };
     search_api_public_search_get: {
         parameters: {
             query: {
@@ -3039,6 +3147,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PiReport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artifact_api_agent_pi_artifact_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PiArtifactReport"];
             };
         };
         responses: {

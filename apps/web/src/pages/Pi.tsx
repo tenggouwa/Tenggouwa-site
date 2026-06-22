@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../lib/api';
-import type { PiStatus } from '../lib/types';
+import type { PiArtifact, PiStatus } from '../lib/types';
 
 const POLL_MS = 4000;
 
@@ -72,6 +72,7 @@ function Card({ label, children }: { label: string; children: React.ReactNode })
 export default function Pi() {
   const [status, setStatus] = useState<PiStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [artifact, setArtifact] = useState<PiArtifact | null>(null);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -95,6 +96,13 @@ export default function Pi() {
     };
   }, []);
 
+  // 每日产物（变化慢，拉一次即可）；没有就不显示，不报错
+  useEffect(() => {
+    apiGet<PiArtifact | null>('/api/public/pi/artifact')
+      .then((a) => setArtifact(a))
+      .catch(() => {});
+  }, []);
+
   const m = status?.metrics ?? {};
   const online = status?.online ?? false;
   const tempHist = (status?.history ?? []).map((p) => p.cpu_temp_c).filter((v): v is number => v != null);
@@ -102,6 +110,12 @@ export default function Pi() {
   const diskRatio = m.disk_total_gb ? (m.disk_used_gb ?? 0) / m.disk_total_gb : 0;
   const loadRatio = m.cpu_count ? (m.load1 ?? 0) / m.cpu_count : 0;
   const host = status?.hostname ?? 'raspberrypi';
+  const artMeta = (artifact?.meta ?? {}) as {
+    aphorism?: string;
+    render_ms?: number;
+    host?: string;
+    region?: string;
+  };
   // 拉取失败(500/网络) 或 从没上报过，统一当"离线无信号"，绝不把原始报错摔给访客
   const hasData = status != null && status.last_seen != null;
 
@@ -212,6 +226,34 @@ export default function Pi() {
           )}
         </div>
       </div>
+
+      {/* 每日产物：Pi 自己算的 ASCII 曼德博集合 */}
+      {artifact && (
+        <div
+          className="rounded-lg border border-terminal-line overflow-hidden"
+          style={{ boxShadow: '0 0 24px rgba(90,247,142,0.08)' }}
+        >
+          <div className="flex items-center gap-2 border-b border-terminal-line/60 bg-terminal-panel/50 px-3 py-2">
+            <span className="h-3 w-3 rounded-full" style={{ background: '#ff5f57' }} />
+            <span className="h-3 w-3 rounded-full" style={{ background: '#febc2e' }} />
+            <span className="h-3 w-3 rounded-full" style={{ background: '#28c840' }} />
+            <span className="ml-2 text-xs text-terminal-gray/60 font-mono">~/pi/today</span>
+            <span className="ml-auto text-[11px] text-terminal-gray/45 font-mono">每日产物</span>
+          </div>
+          <div className="p-4 space-y-3 font-mono">
+            <div className="text-sm text-terminal-green">{artifact.title}</div>
+            <pre className="overflow-x-auto text-[9px] leading-[1.05] text-terminal-green/85 sm:text-[11px]">
+              {artifact.content}
+            </pre>
+            <div className="text-xs text-terminal-gray/55">
+              🍓 由 {artMeta.host ?? 'pi'} 实时计算
+              {artMeta.render_ms != null && ` · ${artMeta.render_ms}ms`}
+              {artMeta.region && ` · ${artMeta.region}`}
+            </div>
+            {artMeta.aphorism && <div className="text-xs text-terminal-gray/45 italic">{artMeta.aphorism}</div>}
+          </div>
+        </div>
+      )}
 
       <p className="text-xs text-terminal-gray/45">
         <span className="text-terminal-pink">$ </span># more coming — 这台 pi 的玩法还在往上叠（终端 / HID / lab 算力…）

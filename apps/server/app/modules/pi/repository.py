@@ -1,8 +1,8 @@
-"""pi_snapshot 读写。最新一行 = 当前状态；recent 给前端画 sparkline。"""
+"""pi_snapshot / pi_artifact 读写。"""
 
 from datetime import UTC, datetime, timedelta
 
-from db.models import PiSnapshotRow
+from db.models import PiArtifactRow, PiSnapshotRow
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,3 +40,16 @@ class PiRepository:
             .all()
         )
         return list(reversed(rows))
+
+    # ---- 每日产物 -----------------------------------------------------------
+
+    async def insert_artifact(self, kind: str, title: str, content: str, meta: dict) -> None:
+        self.session.add(PiArtifactRow(kind=kind, title=title, content=content, meta=meta))
+        await self.session.flush()
+
+    async def latest_artifact(self) -> PiArtifactRow | None:
+        return await self.session.scalar(select(PiArtifactRow).order_by(PiArtifactRow.ts.desc()).limit(1))
+
+    async def prune_artifacts(self, days: int) -> None:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        await self.session.execute(delete(PiArtifactRow).where(PiArtifactRow.ts < cutoff))
