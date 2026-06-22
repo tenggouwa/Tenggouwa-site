@@ -10,17 +10,18 @@ import socket
 import time
 
 # 曼德博集合里几个好看的区域：(名字, 中心实部, 中心虚部, 视野宽度=复平面单位)
+# 偏浅的缩放在 ASCII 分辨率下结构更清晰；深缩放靠高 max_iter 兜。
+# 精选 5 个：全景 + 跨在边界上的几处（实体 + 逃逸光晕，最出结构）
 REGIONS = [
-    ("全景", -0.6, 0.0, 3.2),
-    ("海马谷", -0.745, 0.113, 0.05),
-    ("象鼻谷", 0.282, 0.012, 0.05),
-    ("触角末梢", -1.2549, 0.0202, 0.06),
-    ("迷你曼德博", -1.7687, 0.0017, 0.012),
-    ("螺旋", -0.7269, 0.1889, 0.012),
-    ("闪电", -0.235, 0.827, 0.10),
+    ("全景", -0.6, 0.0, 3.2),  # 经典甲虫全貌
+    ("象鼻谷", 0.275, 0.0, 0.12),  # 右侧对称象鼻卷须
+    ("海马谷", -0.745, 0.113, 0.05),  # 海马尾螺旋
+    ("迷你集合", -1.7685, 0.0018, 0.028),  # 一个微缩的完整曼德博
+    ("北触角", -0.10, 0.835, 0.30),  # 顶部触须 + 头
 ]
 
-GRADIENT = " .,:;irsXA253hMHGS#9B&@"
+# 由疏到密的灰阶：边界处迭代多 → 用密字符，远处逃逸快 → 用疏字符
+GRADIENT = " .:-=+*#%@"
 
 # 每日一句（Phase 5 味道，当 caption）
 APHORISMS = [
@@ -52,12 +53,13 @@ def _mandelbrot(cx: float, cy: float, view_w: float, width: int, height: int, ma
             while x * x + y * y <= 4.0 and i < max_iter:
                 x, y = x * x - y * y + x0, 2.0 * x * y + y0
                 i += 1
-            line.append(" " if i >= max_iter else GRADIENT[i * n // max_iter])
+            # 集合内部(没逃逸)填最密的字符 → 实心主体；外部按逃逸快慢做光晕
+            line.append(GRADIENT[n] if i >= max_iter else GRADIENT[i * n // max_iter])
         rows.append("".join(line))
     return "\n".join(rows)
 
 
-def generate(width: int = 78, height: int = 30, max_iter: int = 90) -> dict:
+def generate(width: int = 76, height: int = 38, max_iter: int = 150) -> dict:
     gm = time.gmtime()
     doy = gm.tm_yday
     date_str = time.strftime("%Y-%m-%d", gm)
