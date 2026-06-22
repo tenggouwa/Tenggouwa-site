@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.request
 
-from . import __version__, telemetry
+from . import __version__, artifact, telemetry
 
 logger = logging.getLogger("pi-agent")
 
@@ -44,6 +44,7 @@ def run() -> None:
     if not server or not token:
         raise SystemExit("[pi-agent] 缺少 PI_AGENT_SERVER_URL / PI_AGENT_TOKEN 环境变量")
     url = f"{server}/api/agent/pi/report"
+    artifact_url = f"{server}/api/agent/pi/artifact"
 
     stop = {"v": False}
 
@@ -55,6 +56,7 @@ def run() -> None:
 
     logger.info("pi-agent up, reporting to %s every %.0fs", url, interval)
     backoff = 1.0
+    last_artifact_day = None
     while not stop["v"]:
         wait = interval
         try:
@@ -66,6 +68,16 @@ def run() -> None:
             logger.warning("report failed: %s (retry in %.0fs)", e, backoff)
             wait = backoff
             backoff = min(backoff * 2, 30.0)
+
+        # 每日产物：每天首次成功上报后，让 Pi 自己算一张 ASCII 曼德博集合推上去
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        if today != last_artifact_day:
+            try:
+                _post(artifact_url, token, artifact.generate())
+                last_artifact_day = today
+                logger.info("posted daily artifact for %s", today)
+            except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
+                logger.warning("artifact post failed: %s", e)
 
         slept = 0.0
         while slept < wait and not stop["v"]:

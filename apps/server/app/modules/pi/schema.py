@@ -26,3 +26,20 @@ class PiStatus(BaseModel):
     model: str | None = None
     metrics: dict[str, float] | None = None
     history: list[PiHistoryPoint] = Field(default_factory=list)
+
+
+class PiArtifactReport(BaseModel):
+    """Pi 每日产物上报（如它自己算的 ASCII 曼德博集合）。"""
+
+    kind: str = Field(..., min_length=1, max_length=32)
+    title: str = Field(default="", max_length=200)
+    content: str = Field(..., max_length=20000)
+    meta: dict = Field(default_factory=dict)
+
+
+class PiArtifact(BaseModel):
+    kind: str
+    title: str
+    content: str
+    meta: dict
+    ts: str | None = None

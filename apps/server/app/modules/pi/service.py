@@ -6,7 +6,7 @@ from common.config_manager import config
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .repository import PiRepository
-from .schema import PiHistoryPoint, PiReport, PiStatus
+from .schema import PiArtifact, PiArtifactReport, PiHistoryPoint, PiReport, PiStatus
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,8 @@ ONLINE_THRESHOLD_S = 75.0
 HISTORY_POINTS = 40
 # 快照保留天数：每次上报顺手删更早的，防表无限增长。
 RETENTION_DAYS = 14
+# 每日产物保留天数。
+ARTIFACT_RETENTION_DAYS = 60
 
 
 class PiService:
@@ -49,6 +51,19 @@ class PiService:
             model=payload.get("model"),
             metrics=payload.get("metrics"),
             history=history,
+        )
+
+    async def ingest_artifact(self, session: AsyncSession, report: PiArtifactReport) -> None:
+        repo = PiRepository(session)
+        await repo.insert_artifact(report.kind, report.title, report.content, report.meta)
+        await repo.prune_artifacts(ARTIFACT_RETENTION_DAYS)
+
+    async def get_artifact(self, session: AsyncSession) -> PiArtifact | None:
+        row = await PiRepository(session).latest_artifact()
+        if row is None:
+            return None
+        return PiArtifact(
+            kind=row.kind, title=row.title, content=row.content, meta=row.meta or {}, ts=row.ts.isoformat()
         )
 
     @staticmethod

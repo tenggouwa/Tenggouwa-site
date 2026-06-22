@@ -193,6 +193,29 @@ class PiSnapshotRow(Base):
     __table_args__ = (Index("ix_pi_snapshot_ts", "ts"),)
 
 
+class PiArtifactRow(Base):
+    """树莓派每日生成的产物（如 Pi 实时算的 ASCII 曼德博集合）。
+
+    每天一条，前台 /pi 取最新一条展示。content 放 ASCII 文本，meta 放
+    渲染参数 / 耗时等（JSONB，便于扩展不同 kind 的产物）。
+    """
+
+    __tablename__ = "pi_artifact"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)  # 'fractal' 等
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (Index("ix_pi_artifact_ts", "ts"),)
+
+
 class CasinoWalletRow(Base):
     """反赌模拟器：一个匿名 device_id 一行钱包。
 
