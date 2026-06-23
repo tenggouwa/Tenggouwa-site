@@ -21,12 +21,12 @@ import time
 import urllib.error
 import urllib.request
 
-from . import __version__, artifact, telemetry
+from . import __version__, artifact, probe, telemetry
 
 logger = logging.getLogger("pi-agent")
 
 
-def _post(url: str, token: str, body: dict, timeout: float = 10.0) -> None:
+def _post(url: str, token: str, body: dict | list, timeout: float = 10.0) -> None:
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
@@ -45,6 +45,8 @@ def run() -> None:
         raise SystemExit("[pi-agent] 缺少 PI_AGENT_SERVER_URL / PI_AGENT_TOKEN 环境变量")
     url = f"{server}/api/agent/pi/report"
     artifact_url = f"{server}/api/agent/pi/artifact"
+    probe_url = f"{server}/api/agent/pi/probe"
+    probe_every = 60.0  # 每 60s 跑一轮监控探针
 
     stop = {"v": False}
 
@@ -57,6 +59,7 @@ def run() -> None:
     logger.info("pi-agent up, reporting to %s every %.0fs", url, interval)
     backoff = 1.0
     last_artifact_day = None
+    last_probe = 0.0
     while not stop["v"]:
         wait = interval
         try:
@@ -78,6 +81,15 @@ def run() -> None:
                 logger.info("posted daily artifact for %s", today)
             except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
                 logger.warning("artifact post failed: %s", e)
+
+        # 监控探针：每 60s 跑一轮（HTTP 延迟 + 下行吞吐），结果 POST 上去
+        now_m = time.monotonic()
+        if now_m - last_probe >= probe_every:
+            last_probe = now_m
+            try:
+                _post(probe_url, token, probe.run())
+            except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
+                logger.warning("probe post failed: %s", e)
 
         slept = 0.0
         while slept < wait and not stop["v"]:

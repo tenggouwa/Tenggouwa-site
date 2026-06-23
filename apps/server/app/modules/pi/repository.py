@@ -2,8 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
-from db.models import PiArtifactRow, PiSnapshotRow
-from sqlalchemy import delete, select
+from db.models import PiArtifactRow, PiProbeRow, PiSnapshotRow
+from sqlalchemy import delete, distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -53,3 +53,33 @@ class PiRepository:
     async def prune_artifacts(self, days: int) -> None:
         cutoff = datetime.now(UTC) - timedelta(days=days)
         await self.session.execute(delete(PiArtifactRow).where(PiArtifactRow.ts < cutoff))
+
+    # ---- 监控探针 -----------------------------------------------------------
+
+    async def insert_probes(self, rows: list[dict]) -> None:
+        self.session.add_all([PiProbeRow(**r) for r in rows])
+        await self.session.flush()
+
+    async def probe_names(self, days: int = 2) -> list[str]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        result = await self.session.execute(
+            select(distinct(PiProbeRow.name)).where(PiProbeRow.ts >= cutoff).order_by(PiProbeRow.name),
+        )
+        return [r[0] for r in result.all()]
+
+    async def recent_probes(self, name: str, limit: int) -> list[PiProbeRow]:
+        """某目标最近 limit 条，时间正序。"""
+        rows = (
+            (
+                await self.session.execute(
+                    select(PiProbeRow).where(PiProbeRow.name == name).order_by(PiProbeRow.ts.desc()).limit(limit),
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return list(reversed(rows))
+
+    async def prune_probes(self, days: int) -> None:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        await self.session.execute(delete(PiProbeRow).where(PiProbeRow.ts < cutoff))

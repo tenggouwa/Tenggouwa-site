@@ -57,6 +57,16 @@ export interface PiArtifact {
   ts: string | null;
 }
 
+// Pi 监控探针：某目标的当前状态 + 历史序列
+export interface PiProbe {
+  name: string;
+  ok: boolean;
+  value: number | null;
+  unit: string;
+  ts: string | null;
+  history: (number | null)[];
+}
+
 // 系列元信息：title / 描述 / 排序前缀，写在前端而不是后端（轻量、好维护）
 export interface SeriesMeta {
   tag: string;       // 用作 tag filter 的字符串，如 'linux-series'

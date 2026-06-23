@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../lib/api';
-import type { PiArtifact, PiStatus } from '../lib/types';
+import type { PiArtifact, PiProbe, PiStatus } from '../lib/types';
 
 const POLL_MS = 4000;
+
+const PROBE_LABEL: Record<string, string> = { api: '后端 api', site: '站点', speed: '下行测速' };
 
 function fmtUptime(s: number | undefined): string {
   if (s == null) return '—';
@@ -73,6 +75,7 @@ export default function Pi() {
   const [status, setStatus] = useState<PiStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<PiArtifact | null>(null);
+  const [probes, setProbes] = useState<PiProbe[]>([]);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -86,6 +89,12 @@ export default function Pi() {
         }
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : String(e));
+      }
+      try {
+        const p = await apiGet<PiProbe[]>('/api/public/pi/probes');
+        if (alive) setProbes(p);
+      } catch {
+        /* 探针拉取失败不影响其它面板 */
       }
     };
     tick();
@@ -226,6 +235,38 @@ export default function Pi() {
           )}
         </div>
       </div>
+
+      {/* 监控探针：Pi 从它的视角看你的服务 */}
+      {probes.length > 0 && (
+        <div className="rounded-lg border border-terminal-line overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-terminal-line/60 bg-terminal-panel/50 px-3 py-2">
+            <span className="h-3 w-3 rounded-full" style={{ background: '#ff5f57' }} />
+            <span className="h-3 w-3 rounded-full" style={{ background: '#febc2e' }} />
+            <span className="h-3 w-3 rounded-full" style={{ background: '#28c840' }} />
+            <span className="ml-2 text-xs text-terminal-gray/60 font-mono">~/pi/probes</span>
+            <span className="ml-auto text-[11px] text-terminal-gray/45 font-mono">监控探针</span>
+          </div>
+          <div className="p-4 font-mono space-y-3">
+            {probes.map((p) => {
+              const hist = p.history.filter((v): v is number => v != null);
+              return (
+                <div key={p.name} className="flex items-center gap-3">
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${p.ok ? 'bg-terminal-green' : 'bg-red-400'}`} />
+                  <span className="w-20 text-sm text-terminal-gray shrink-0">{PROBE_LABEL[p.name] ?? p.name}</span>
+                  <span
+                    className={`w-24 text-sm shrink-0 tabular-nums ${p.ok ? 'text-terminal-cyan' : 'text-terminal-gray/45'}`}
+                  >
+                    {p.value != null ? `${p.value} ${p.unit}` : '—'}
+                  </span>
+                  <div className="flex-1 min-w-0 text-terminal-green/70">
+                    <Sparkline points={hist} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 每日产物：Pi 自己算的 ASCII 曼德博集合 */}
       {artifact && (
