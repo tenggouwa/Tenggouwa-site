@@ -238,7 +238,10 @@ export default function Pi() {
 
       {/* 监控探针：Pi 从它的视角看你的服务 */}
       {probes.length > 0 && (
-        <div className="rounded-lg border border-terminal-line overflow-hidden">
+        <div
+          className="rounded-lg border border-terminal-line overflow-hidden"
+          style={{ boxShadow: '0 0 24px rgba(90,247,142,0.10)' }}
+        >
           <div className="flex items-center gap-2 border-b border-terminal-line/60 bg-terminal-panel/50 px-3 py-2">
             <span className="h-3 w-3 rounded-full" style={{ background: '#ff5f57' }} />
             <span className="h-3 w-3 rounded-full" style={{ background: '#febc2e' }} />
@@ -272,7 +275,7 @@ export default function Pi() {
       {artifact && (
         <div
           className="rounded-lg border border-terminal-line overflow-hidden"
-          style={{ boxShadow: '0 0 24px rgba(90,247,142,0.08)' }}
+          style={{ boxShadow: '0 0 24px rgba(90,247,142,0.10)' }}
         >
           <div className="flex items-center gap-2 border-b border-terminal-line/60 bg-terminal-panel/50 px-3 py-2">
             <span className="h-3 w-3 rounded-full" style={{ background: '#ff5f57' }} />
