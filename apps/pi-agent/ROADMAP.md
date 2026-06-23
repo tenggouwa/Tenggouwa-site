@@ -31,6 +31,10 @@
 - [ ] `/pi` 加打字机面板（终端风输入框 + 发送）。
 - [ ] 安全：只对自己的机器、明确授权场景。
 
+### 监控探针 ✅ 完成
+- [x] Pi 每 60s 探测：你的服务 HTTP 延迟/可用性（api/site）+ Cloudflare speed 端点下行吞吐。
+- [x] 后端 `pi_probe` 表 + ingest/public 端点；`/pi` 每目标一行：状态点 + 当前值 + sparkline。
+
 ### Phase 4 + 5 — "Pi 每日产物" ✅ 完成（合并实现）
 - [x] Pi 每天自己算一张 ASCII 曼德博集合（区域随日期变）+ 真实渲染耗时（Phase 4 "live on a Pi"）。
 - [x] 每日生成 + POST，`/pi` 展示 + "🍓 由 ops-pi 实时计算 · Xms" 徽章 + 每日一句（Phase 5）。

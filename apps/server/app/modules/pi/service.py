@@ -6,7 +6,15 @@ from common.config_manager import config
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .repository import PiRepository
-from .schema import PiArtifact, PiArtifactReport, PiHistoryPoint, PiReport, PiStatus
+from .schema import (
+    PiArtifact,
+    PiArtifactReport,
+    PiHistoryPoint,
+    PiProbe,
+    PiProbeReport,
+    PiReport,
+    PiStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +25,9 @@ HISTORY_POINTS = 40
 RETENTION_DAYS = 14
 # 每日产物保留天数。
 ARTIFACT_RETENTION_DAYS = 60
+# 探针保留天数 + 每目标历史点数。
+PROBE_RETENTION_DAYS = 7
+PROBE_HISTORY_POINTS = 60
 
 
 class PiService:
@@ -65,6 +76,33 @@ class PiService:
         return PiArtifact(
             kind=row.kind, title=row.title, content=row.content, meta=row.meta or {}, ts=row.ts.isoformat()
         )
+
+    async def ingest_probes(self, session: AsyncSession, reports: list[PiProbeReport]) -> None:
+        repo = PiRepository(session)
+        rows = [{"name": r.name, "ok": r.ok, "value": r.value, "unit": r.unit} for r in reports]
+        if rows:
+            await repo.insert_probes(rows)
+        await repo.prune_probes(PROBE_RETENTION_DAYS)
+
+    async def get_probes(self, session: AsyncSession) -> list[PiProbe]:
+        repo = PiRepository(session)
+        out: list[PiProbe] = []
+        for name in await repo.probe_names():
+            rows = await repo.recent_probes(name, PROBE_HISTORY_POINTS)
+            if not rows:
+                continue
+            latest = rows[-1]
+            out.append(
+                PiProbe(
+                    name=name,
+                    ok=latest.ok,
+                    value=latest.value,
+                    unit=latest.unit,
+                    ts=latest.ts.isoformat(),
+                    history=[r.value for r in rows],
+                )
+            )
+        return out
 
     @staticmethod
     def verify_token(provided: str | None) -> bool:

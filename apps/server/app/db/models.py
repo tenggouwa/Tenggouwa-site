@@ -216,6 +216,28 @@ class PiArtifactRow(Base):
     __table_args__ = (Index("ix_pi_artifact_ts", "ts"),)
 
 
+class PiProbeRow(Base):
+    """树莓派监控探针的一次测量：HTTP 延迟 / 下行吞吐等。
+
+    每个目标每轮一行；前台按 name 分组取最新 + 近 N 条画 sparkline。
+    """
+
+    __tablename__ = "pi_probe"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    name: Mapped[str] = mapped_column(String(32), nullable=False)  # 'api' / 'site' / 'speed'
+    ok: Mapped[bool] = mapped_column(nullable=False, default=False)
+    value: Mapped[float | None] = mapped_column(nullable=True)  # ms / MB·s⁻¹ 等
+    unit: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+
+    __table_args__ = (Index("ix_pi_probe_name_ts", "name", "ts"),)
+
+
 class CasinoWalletRow(Base):
     """反赌模拟器：一个匿名 device_id 一行钱包。
 

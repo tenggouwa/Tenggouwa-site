@@ -412,6 +412,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/pi/probes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Probes
+         * @description 前台展示各监控探针目标的当前状态 + 历史序列。
+         */
+        get: operations["get_probes_api_public_pi_probes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/search": {
         parameters: {
             query?: never;
@@ -514,6 +534,26 @@ export interface paths {
          * @description Pi 上报每日产物（如它自己算的 ASCII 曼德博集合）。
          */
         post: operations["artifact_api_agent_pi_artifact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/pi/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe
+         * @description Pi 上报一轮监控探针结果（HTTP 延迟 / 下行吞吐等）。
+         */
+        post: operations["probe_api_agent_pi_probe_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1377,6 +1417,44 @@ export interface components {
             load1?: number | null;
         };
         /**
+         * PiProbe
+         * @description 前台展示：某探针目标的当前值 + 历史序列。
+         */
+        PiProbe: {
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+            /** Value */
+            value?: number | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /** Ts */
+            ts?: string | null;
+            /** History */
+            history?: (number | null)[];
+        };
+        /**
+         * PiProbeReport
+         * @description 一次探针测量（HTTP 延迟 / 下行吞吐等）。
+         */
+        PiProbeReport: {
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+            /** Value */
+            value?: number | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+        };
+        /**
          * PiReport
          * @description pi-agent 周期上报的一条遥测快照。
          */
@@ -1975,6 +2053,21 @@ export interface components {
             message: string;
             /** Data */
             data?: components["schemas"]["KeywordStat"][] | null;
+        };
+        /** ResponseModel[list[PiProbe]] */
+        ResponseModel_list_PiProbe__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["PiProbe"][] | null;
         };
         /** ResponseModel[list[PostHeat]] */
         ResponseModel_list_PostHeat__: {
@@ -3014,6 +3107,26 @@ export interface operations {
             };
         };
     };
+    get_probes_api_public_pi_probes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_PiProbe__"];
+                };
+            };
+        };
+    };
     search_api_public_search_get: {
         parameters: {
             query: {
@@ -3182,6 +3295,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PiArtifactReport"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_api_agent_pi_probe_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PiProbeReport"][];
             };
         };
         responses: {

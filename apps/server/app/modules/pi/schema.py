@@ -43,3 +43,23 @@ class PiArtifact(BaseModel):
     content: str
     meta: dict
     ts: str | None = None
+
+
+class PiProbeReport(BaseModel):
+    """一次探针测量（HTTP 延迟 / 下行吞吐等）。"""
+
+    name: str = Field(..., min_length=1, max_length=32)
+    ok: bool
+    value: float | None = None
+    unit: str = Field(default="", max_length=16)
+
+
+class PiProbe(BaseModel):
+    """前台展示：某探针目标的当前值 + 历史序列。"""
+
+    name: str
+    ok: bool
+    value: float | None = None
+    unit: str = ""
+    ts: str | None = None
+    history: list[float | None] = Field(default_factory=list)
