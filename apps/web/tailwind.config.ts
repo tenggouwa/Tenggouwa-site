@@ -39,6 +39,8 @@ const config: Config = {
         blink: 'blink 1s steps(1) infinite',
         'noise-pan': 'noisePan 8s linear infinite',
         shimmer: 'shimmer 1.6s ease-in-out infinite',
+        'pet-idle': 'petIdle 3.2s ease-in-out infinite',
+        'pet-breathe': 'petBreathe 4.5s ease-in-out infinite',
       },
       keyframes: {
         blink: {
@@ -52,6 +54,15 @@ const config: Config = {
         shimmer: {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(100%)' },
+        },
+        // 终端宠物：醒着轻微呼吸 + 左右摇摆，让它不那么"立正"
+        petIdle: {
+          '0%, 100%': { transform: 'translateY(0) rotate(-2deg)' },
+          '50%': { transform: 'translateY(-2px) rotate(2deg)' },
+        },
+        petBreathe: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-1px)' },
         },
       },
       typography: () => ({
