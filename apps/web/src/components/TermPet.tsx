@@ -70,10 +70,10 @@ export default function TermPet() {
       () =>
         setMood((m) => {
           if (m !== 'idle') return m;
-          window.setTimeout(() => setMood((cur) => (cur === 'blink' ? 'idle' : cur)), 170);
+          window.setTimeout(() => setMood((cur) => (cur === 'blink' ? 'idle' : cur)), 150);
           return 'blink';
         }),
-      3500 + Math.random() * 2500,
+      2000 + Math.random() * 1800,
     );
     return () => window.clearInterval(id);
   }, [hidden]);
@@ -160,7 +160,9 @@ export default function TermPet() {
             sleeping ? 'text-terminal-gray/55' : 'text-terminal-green/80'
           }`}
         >
-          <pre className="m-0">{frame(mood)}</pre>
+          <pre className={`m-0 origin-bottom ${sleeping ? 'animate-pet-breathe' : 'animate-pet-idle'}`}>
+            {frame(mood)}
+          </pre>
         </button>
         <button
           type="button"
