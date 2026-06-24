@@ -251,7 +251,7 @@ export default function TermPet() {
             onClick={pet}
             aria-label="撸猫"
             title={`撸了 ${pets} 次`}
-            className={`block text-left text-base leading-[1.2] transition-colors hover:text-terminal-green ${
+            className={`block cursor-pointer border-0 bg-transparent p-0 text-left text-base leading-[1.2] transition-colors hover:text-terminal-green ${
               sleeping ? 'text-terminal-gray/55' : 'text-terminal-green/85'
             }`}
           >
