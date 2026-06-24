@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { trackPageView } from '../lib/track';
 import SearchModal from './SearchModal';
 import SkeletonScreen from './SkeletonScreen';
+import TermPet from './TermPet';
 
 const NAV = [
   { to: '/', label: '~', exact: true },
@@ -113,6 +114,7 @@ export default function Layout() {
         </Suspense>
       </main>
       <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} />
+      <TermPet />
       <footer className="border-t border-terminal-line/60 text-xs text-terminal-gray/70">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:justify-between gap-1">
           <span>© {new Date().getFullYear()} tenggouwa · made with caffeine ☕</span>
