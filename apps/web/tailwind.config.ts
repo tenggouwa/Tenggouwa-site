@@ -41,6 +41,7 @@ const config: Config = {
         shimmer: 'shimmer 1.6s ease-in-out infinite',
         'pet-idle': 'petIdle 3.2s ease-in-out infinite',
         'pet-breathe': 'petBreathe 4.5s ease-in-out infinite',
+        'pet-tail': 'petTail 0.9s ease-in-out infinite',
       },
       keyframes: {
         blink: {
@@ -63,6 +64,10 @@ const config: Config = {
         petBreathe: {
           '0%, 100%': { transform: 'translateY(0)' },
           '50%': { transform: 'translateY(-1px)' },
+        },
+        petTail: {
+          '0%, 100%': { transform: 'rotate(-22deg)' },
+          '50%': { transform: 'rotate(16deg)' },
         },
       },
       typography: () => ({
