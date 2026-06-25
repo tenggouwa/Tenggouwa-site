@@ -8,6 +8,7 @@ import type {
   MinesState,
   PlayResult,
   StatsSummary,
+  VideoPokerState,
   Wallet,
   ZhajinhuaState,
 } from './types';
@@ -62,6 +63,17 @@ export function minesReveal(tile: number): Promise<MinesState> {
 
 export function minesCashout(): Promise<MinesState> {
   return apiPost<MinesState>('/api/public/casino/mines/cashout', { device_id: getDeviceId() });
+}
+
+export function vpDeal(betAmount: number): Promise<VideoPokerState> {
+  return apiPost<VideoPokerState>('/api/public/casino/videopoker/deal', {
+    device_id: getDeviceId(),
+    bet_amount: betAmount,
+  });
+}
+
+export function vpDraw(holds: number[]): Promise<VideoPokerState> {
+  return apiPost<VideoPokerState>('/api/public/casino/videopoker/draw', { device_id: getDeviceId(), holds });
 }
 
 export function zjhStart(ante: number): Promise<ZhajinhuaState> {

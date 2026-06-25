@@ -154,6 +154,31 @@ class MinesState(BaseModel):
     balance: int
 
 
+class VideoPokerDealRequest(BaseModel):
+    device_id: str = Field(..., pattern=DEVICE_ID_PATTERN)
+    bet_amount: int = Field(..., gt=0, le=1_000_000)
+
+
+class VideoPokerDrawRequest(BaseModel):
+    device_id: str = Field(..., pattern=DEVICE_ID_PATTERN)
+    holds: list[int] = Field(default_factory=list, max_length=5)  # 要留下的牌位 0-4
+
+
+class VideoPokerState(BaseModel):
+    status: str  # 'dealt'（待换牌）| 'done'（已结算）
+    hand: list[dict]  # 当前 5 张（发牌后是初始 5 张；换牌后是最终 5 张）
+    bet: int
+    # 结算后才有意义：
+    held: list[int] | None = None  # 换牌时留下的牌位（前端只翻没留的）
+    category: str | None = None  # 最终牌型 key
+    category_name: str | None = None  # 牌型中文名
+    multiplier: int = 0  # 含本金返还倍率
+    outcome: str | None = None  # 'win' | 'lose' | 'push'
+    payout: int = 0
+    net: int = 0
+    balance: int
+
+
 class StatsSummary(BaseModel):
     games: list[GameStat]
     total_rounds: int

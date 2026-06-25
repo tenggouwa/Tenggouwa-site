@@ -101,6 +101,30 @@ export interface MinesState {
   balance: number;
 }
 
+export interface NiuNiuRng {
+  player: { r: string; s: string }[];
+  banker: { r: string; s: string }[];
+  player_niu: number;
+  banker_niu: number;
+  player_mult: number;
+  banker_mult: number;
+  result: 'player' | 'banker' | 'tie';
+}
+
+export interface VideoPokerState {
+  status: 'dealt' | 'done';
+  hand: { r: string; s: string }[];
+  bet: number;
+  held: number[] | null;
+  category: string | null;
+  category_name: string | null;
+  multiplier: number;
+  outcome: 'win' | 'lose' | 'push' | null;
+  payout: number;
+  net: number;
+  balance: number;
+}
+
 export interface DragonTigerRng {
   dragon: { r: string; s: string };
   tiger: { r: string; s: string };

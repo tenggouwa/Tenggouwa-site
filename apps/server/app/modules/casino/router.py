@@ -16,6 +16,9 @@ from .schema import (
     PlayRequest,
     PlayResult,
     StatsSummary,
+    VideoPokerDealRequest,
+    VideoPokerDrawRequest,
+    VideoPokerState,
     Wallet,
     WalletRequest,
     ZhajinhuaActionRequest,
@@ -116,6 +119,24 @@ async def mines_cashout(
 ) -> ResponseModel[MinesState]:
     """Mines 兑现：按当前倍率结算落袋。"""
     return ResponseModel(data=await casino_service.mines_cashout(session, payload.device_id))
+
+
+@public_router.post("/videopoker/deal", response_model=ResponseModel[VideoPokerState])
+async def videopoker_deal(
+    payload: VideoPokerDealRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[VideoPokerState]:
+    """视频扑克开局：托管押注、洗牌发 5 张，返回待换牌的手牌。"""
+    return ResponseModel(data=await casino_service.vp_deal(session, payload.device_id, payload.bet_amount))
+
+
+@public_router.post("/videopoker/draw", response_model=ResponseModel[VideoPokerState])
+async def videopoker_draw(
+    payload: VideoPokerDrawRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[VideoPokerState]:
+    """视频扑克换牌：留下 holds 指定的牌位，其余按牌堆顺序补，按最终牌型结算。"""
+    return ResponseModel(data=await casino_service.vp_draw(session, payload.device_id, payload.holds))
 
 
 @public_router.post("/zhajinhua/start", response_model=ResponseModel[ZhajinhuaState])

@@ -6,6 +6,7 @@ from db.models import (
     CasinoBlackjackRow,
     CasinoMinesRow,
     CasinoRoundRow,
+    CasinoVideoPokerRow,
     CasinoWalletRow,
     CasinoZhajinhuaRow,
 )
@@ -183,3 +184,28 @@ class CasinoRepository:
 
     def new_zhajinhua(self, **kwargs) -> CasinoZhajinhuaRow:
         return CasinoZhajinhuaRow(**kwargs)
+
+    # —— 视频扑克进行中牌局 ——
+
+    async def get_videopoker(self, device_id: str) -> CasinoVideoPokerRow | None:
+        return await self.session.get(CasinoVideoPokerRow, device_id)
+
+    async def upsert_videopoker(
+        self,
+        *,
+        device_id: str,
+        bet: int,
+        hand: list[dict],
+        deck: list[dict],
+        status: str,
+    ) -> CasinoVideoPokerRow:
+        row = await self.session.get(CasinoVideoPokerRow, device_id)
+        if row is None:
+            row = CasinoVideoPokerRow(device_id=device_id)
+            self.session.add(row)
+        row.bet = bet
+        row.hand = hand
+        row.deck = deck
+        row.status = status
+        await self.session.flush()
+        return row
