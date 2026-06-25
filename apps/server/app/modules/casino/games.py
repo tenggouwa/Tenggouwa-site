@@ -13,7 +13,11 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from . import niuniu
+
 _rng = secrets.SystemRandom()
+
+_NIUNIU_RAKE = 0.05  # 牛牛闲赢抽水比例（庄家优势来源，约 2.46%）
 
 
 class GameError(ValueError):
@@ -40,6 +44,8 @@ THEORETICAL_HOUSE_EDGE: dict[str, float] = {
     "plinko": 0.04,  # Plinko：倍率表调成 RTP≈96%，庄家优势约 4%
     "sicbo": 0.0278,  # 完整骰宝：以最好的"大/小"为基准 2.78%（押单点/对/总和/豹子优势高得多）
     "zhajinhua": 0.05,  # 炸金花：多步对庄博弈，闲赢时池子抽 5% 水（约等于庄家优势）
+    "niuniu": 0.0246,  # 牛牛：闲庄各 5 张比牛，均注 1:1 闲赢抽 5% 水，实测庄家优势约 2.46%
+    "videopoker": 0.0046,  # 视频扑克：9/6 Jacks or Better，最优留牌 RTP≈99.54%；乱留远不止
 }
 
 # 欧式轮盘的红色号码（其余 1-36 为黑，0 为绿）。
@@ -421,6 +427,41 @@ def _play_sicbo(bet_amount: int, bet_detail: dict) -> GameOutcome:
     )
 
 
+def _play_niuniu(bet_amount: int, _bet_detail: dict) -> GameOutcome:
+    """牛牛（斗牛）：闲庄各 5 张比牛，牛大者赢（牛值同则比点数）。
+
+    均注 1:1，闲赢抽 5% 水（payout = 本金 + 0.95×本金）；平牌退本金。牛型倍数仅作展示，
+    不改赔付。抽水使庄家优势约 2.46%——看着对半开，赢了照样被刮一刀。
+    """
+    player, banker = niuniu.deal_two_hands()
+    pe = niuniu.evaluate(player)
+    be = niuniu.evaluate(banker)
+
+    if pe > be:
+        result = "player"
+        win = bet_amount - int(bet_amount * _NIUNIU_RAKE)  # 1:1 赢额抽 5% 水
+        payout = bet_amount + win
+    elif pe < be:
+        result = "banker"
+        payout = 0
+    else:
+        result = "tie"
+        payout = bet_amount  # 平牌退本金
+
+    return GameOutcome(
+        payout=payout,
+        rng_detail={
+            "player": player,
+            "banker": banker,
+            "player_niu": pe[0],
+            "banker_niu": be[0],
+            "player_mult": niuniu.niu_multiplier(pe[0]),
+            "banker_mult": niuniu.niu_multiplier(be[0]),
+            "result": result,
+        },
+    )
+
+
 _ENGINES: dict[str, Callable[[int, dict], GameOutcome]] = {
     "dice": _play_dice,
     "roulette": _play_roulette,
@@ -432,6 +473,7 @@ _ENGINES: dict[str, Callable[[int, dict], GameOutcome]] = {
     "money_wheel": _play_money_wheel,
     "plinko": _play_plinko,
     "sicbo": _play_sicbo,
+    "niuniu": _play_niuniu,
 }
 
 

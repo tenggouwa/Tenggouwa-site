@@ -387,6 +387,34 @@ class CasinoZhajinhuaRow(Base):
     )
 
 
+class CasinoVideoPokerRow(Base):
+    """反赌模拟器：每个 device_id 一局进行中的视频扑克（发牌→留牌换牌，多步交互）。
+
+    发牌即把整副洗好的牌堆定下（hand 为发出的 5 张，deck 为剩余牌堆顺序）；换牌时未留的
+    位置按 deck 顺序补牌——RNG 在发牌那刻固定，客户端只能选留哪几张，改不了补上来的牌。
+    一局结束(status=done)后下次 deal 覆盖本行。
+    """
+
+    __tablename__ = "casino_videopoker"
+
+    device_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    bet: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    hand: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)  # 当前 5 张
+    deck: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)  # 剩余牌堆（顺序补牌）
+    status: Mapped[str] = mapped_column(String(16), nullable=False)  # dealt | done
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class SeoSearchSnapshotRow(Base):
     """每日搜索引擎收录 / 流量快照。GSC / 百度 / Bing 定时任务每天写一批。"""
 

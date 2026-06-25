@@ -11,7 +11,7 @@ import secrets
 from dependencies import DetailedHTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import blackjack, games, zhajinhua
+from . import blackjack, games, videopoker, zhajinhua
 from .repository import CasinoRepository
 from .schema import (
     BlackjackState,
@@ -22,6 +22,7 @@ from .schema import (
     PlayRequest,
     PlayResult,
     StatsSummary,
+    VideoPokerState,
     Wallet,
     ZhajinhuaState,
 )
@@ -573,6 +574,71 @@ class CasinoService:
             can_compare=True,
             last_dealer_action=last_dealer_action,
             balance=balance,
+        )
+
+    # —— 视频扑克（发牌→留牌换牌，多步） ——
+
+    async def vp_deal(self, session: AsyncSession, device_id: str, bet_amount: int) -> VideoPokerState:
+        repo = CasinoRepository(session)
+        wallet = await repo.get_or_create_wallet(device_id, initial_balance=INITIAL_BALANCE)
+
+        # 有未换牌的旧局：退回押注重开。
+        existing = await repo.get_videopoker(device_id)
+        if existing is not None and existing.status == "dealt":
+            wallet.balance += existing.bet
+
+        if bet_amount > wallet.balance:
+            raise DetailedHTTPException(status_code=400, detail="积分不足", full_detail=f"bet={bet_amount}")
+        wallet.balance -= bet_amount  # 押注托管
+
+        deck = videopoker.make_deck()
+        hand = [deck.pop() for _ in range(5)]
+        row = await repo.upsert_videopoker(device_id=device_id, bet=bet_amount, hand=hand, deck=deck, status="dealt")
+        return VideoPokerState(status="dealt", hand=list(row.hand), bet=row.bet, balance=wallet.balance)
+
+    async def vp_draw(self, session: AsyncSession, device_id: str, holds: list[int]) -> VideoPokerState:
+        repo = CasinoRepository(session)
+        wallet = await repo.get_or_create_wallet(device_id, initial_balance=INITIAL_BALANCE)
+        row = await repo.get_videopoker(device_id)
+        if row is None or row.status != "dealt":
+            raise DetailedHTTPException(status_code=400, detail="没有进行中的牌局", full_detail="")
+
+        held = sorted({i for i in holds if 0 <= i <= 4})
+        deck = list(row.deck)
+        hand = [card if i in held else deck.pop() for i, card in enumerate(row.hand)]  # 未留的按牌堆顺序换
+
+        category = videopoker.evaluate(hand)
+        mult = videopoker.PAYTABLE[category]
+        payout = row.bet * mult
+        net = payout - row.bet
+
+        wallet.balance += payout
+        wallet.total_wagered += row.bet
+        wallet.total_payout += payout
+        wallet.rounds_played += 1
+        await repo.add_round(
+            device_id=device_id,
+            game="videopoker",
+            bet_amount=row.bet,
+            bet_detail={"held": held},
+            payout=payout,
+            net=net,
+            balance_after=wallet.balance,
+            rng_detail={"hand": hand, "category": category, "held": held},
+        )
+        await repo.upsert_videopoker(device_id=device_id, bet=row.bet, hand=hand, deck=[], status="done")
+        return VideoPokerState(
+            status="done",
+            hand=hand,
+            bet=row.bet,
+            held=held,
+            category=category,
+            category_name=videopoker.CATEGORY_NAME[category],
+            multiplier=mult,
+            outcome="win" if net > 0 else ("push" if net == 0 else "lose"),
+            payout=payout,
+            net=net,
+            balance=wallet.balance,
         )
 
 

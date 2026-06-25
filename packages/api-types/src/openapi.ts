@@ -261,6 +261,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/casino/videopoker/deal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Videopoker Deal
+         * @description 视频扑克开局：托管押注、洗牌发 5 张，返回待换牌的手牌。
+         */
+        post: operations["videopoker_deal_api_public_casino_videopoker_deal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/casino/videopoker/draw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Videopoker Draw
+         * @description 视频扑克换牌：留下 holds 指定的牌位，其余按牌堆顺序补，按最终牌型结算。
+         */
+        post: operations["videopoker_draw_api_public_casino_videopoker_draw_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/casino/zhajinhua/start": {
         parameters: {
             query?: never;
@@ -1935,6 +1975,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["PiArtifact"] | null;
         };
+        /** ResponseModel[VideoPokerState] */
+        ResponseModel_VideoPokerState_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["VideoPokerState"] | null;
+        };
         /** ResponseModel[VitalsOverview] */
         ResponseModel_VitalsOverview_: {
             /**
@@ -2312,6 +2366,56 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VideoPokerDealRequest */
+        VideoPokerDealRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Bet Amount */
+            bet_amount: number;
+        };
+        /** VideoPokerDrawRequest */
+        VideoPokerDrawRequest: {
+            /** Device Id */
+            device_id: string;
+            /** Holds */
+            holds?: number[];
+        };
+        /** VideoPokerState */
+        VideoPokerState: {
+            /** Status */
+            status: string;
+            /** Hand */
+            hand: {
+                [key: string]: unknown;
+            }[];
+            /** Bet */
+            bet: number;
+            /** Held */
+            held?: number[] | null;
+            /** Category */
+            category?: string | null;
+            /** Category Name */
+            category_name?: string | null;
+            /**
+             * Multiplier
+             * @default 0
+             */
+            multiplier: number;
+            /** Outcome */
+            outcome?: string | null;
+            /**
+             * Payout
+             * @default 0
+             */
+            payout: number;
+            /**
+             * Net
+             * @default 0
+             */
+            net: number;
+            /** Balance */
+            balance: number;
         };
         /** VitalsMetricSummary */
         VitalsMetricSummary: {
@@ -2861,6 +2965,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_MinesState_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    videopoker_deal_api_public_casino_videopoker_deal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VideoPokerDealRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_VideoPokerState_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    videopoker_draw_api_public_casino_videopoker_draw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VideoPokerDrawRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_VideoPokerState_"];
                 };
             };
             /** @description Validation Error */

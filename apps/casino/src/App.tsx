@@ -17,6 +17,8 @@ const Plinko = lazy(() => import('./pages/games/Plinko'));
 const SicBo = lazy(() => import('./pages/games/SicBo'));
 const Zhajinhua = lazy(() => import('./pages/games/Zhajinhua'));
 const Mines = lazy(() => import('./pages/games/Mines'));
+const NiuNiu = lazy(() => import('./pages/games/NiuNiu'));
+const VideoPoker = lazy(() => import('./pages/games/VideoPoker'));
 const Truth = lazy(() => import('./pages/Truth'));
 
 function Loading() {
@@ -47,6 +49,8 @@ export default function App() {
           <Route path="/games/sicbo" element={<SicBo />} />
           <Route path="/games/zhajinhua" element={<Zhajinhua />} />
           <Route path="/games/mines" element={<Mines />} />
+          <Route path="/games/niuniu" element={<NiuNiu />} />
+          <Route path="/games/videopoker" element={<VideoPoker />} />
           <Route path="/truth" element={<Truth />} />
           <Route path="*" element={<Lobby />} />
         </Routes>

@@ -129,6 +129,24 @@ const GAMES: GameCard[] = [
     to: '/games/mines',
     accent: 'cyan',
   },
+  {
+    key: 'niuniu',
+    name: '牛牛 · 斗牛',
+    cmd: 'play niuniu',
+    edge: '2.46%',
+    desc: '闲庄各 5 张比牛，牛大者赢。牌对半开，赢了就抽 5% 水——公平外壳下的稳定刮刀。',
+    to: '/games/niuniu',
+    accent: 'pink',
+  },
+  {
+    key: 'videopoker',
+    name: '视频扑克 · Video Poker',
+    cmd: 'play videopoker',
+    edge: '~0.5%',
+    desc: '发 5 张留牌换牌，按牌型赔付。返还率最高的机器，但最优解仍是负期望，乱留更亏。',
+    to: '/games/videopoker',
+    accent: 'green',
+  },
 ];
 
 const ACCENT: Record<string, string> = {
