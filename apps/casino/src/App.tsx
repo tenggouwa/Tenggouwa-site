@@ -19,6 +19,7 @@ const Zhajinhua = lazy(() => import('./pages/games/Zhajinhua'));
 const Mines = lazy(() => import('./pages/games/Mines'));
 const NiuNiu = lazy(() => import('./pages/games/NiuNiu'));
 const VideoPoker = lazy(() => import('./pages/games/VideoPoker'));
+const Scratch = lazy(() => import('./pages/games/Scratch'));
 const Truth = lazy(() => import('./pages/Truth'));
 
 function Loading() {
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/games/mines" element={<Mines />} />
           <Route path="/games/niuniu" element={<NiuNiu />} />
           <Route path="/games/videopoker" element={<VideoPoker />} />
+          <Route path="/games/scratch" element={<Scratch />} />
           <Route path="/truth" element={<Truth />} />
           <Route path="*" element={<Lobby />} />
         </Routes>
