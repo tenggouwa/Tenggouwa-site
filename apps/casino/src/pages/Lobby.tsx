@@ -147,6 +147,15 @@ const GAMES: GameCard[] = [
     to: '/games/videopoker',
     accent: 'green',
   },
+  {
+    key: 'scratch',
+    name: '刮刮乐 · Scratch',
+    cmd: 'play scratch',
+    edge: '~43%',
+    desc: '即开彩票，刮 9 格三连中奖。庄家优势全场最高，用万分之一的大奖撑起最差的期望。',
+    to: '/games/scratch',
+    accent: 'pink',
+  },
 ];
 
 const ACCENT: Record<string, string> = {

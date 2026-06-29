@@ -101,6 +101,13 @@ export interface MinesState {
   balance: number;
 }
 
+export interface ScratchRng {
+  grid: string[]; // 9 个符号
+  symbol: string | null; // 中奖符号；未中为 null
+  mult: number; // 0 为未中
+  win: boolean;
+}
+
 export interface NiuNiuRng {
   player: { r: string; s: string }[];
   banker: { r: string; s: string }[];

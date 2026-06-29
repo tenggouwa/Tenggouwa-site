@@ -45,6 +45,7 @@ THEORETICAL_HOUSE_EDGE: dict[str, float] = {
     "sicbo": 0.0278,  # 完整骰宝：以最好的"大/小"为基准 2.78%（押单点/对/总和/豹子优势高得多）
     "zhajinhua": 0.05,  # 炸金花：多步对庄博弈，闲赢时池子抽 5% 水（约等于庄家优势）
     "niuniu": 0.0246,  # 牛牛：闲庄各 5 张比牛，均注 1:1 闲赢抽 5% 水，实测庄家优势约 2.46%
+    "scratch": 0.435,  # 刮刮乐：即开彩票，奖表 RTP≈56.5%，庄家优势约 43.5%——回报率最低一类
     "videopoker": 0.0046,  # 视频扑克：9/6 Jacks or Better，最优留牌 RTP≈99.54%；乱留远不止
 }
 
@@ -427,6 +428,57 @@ def _play_sicbo(bet_amount: int, bet_detail: dict) -> GameOutcome:
     )
 
 
+# 刮刮乐（即开彩票）：9 格刮开，三个相同符号中对应奖。每个奖级对应一个符号，
+# 中奖即在 9 格里正好放 3 个该符号。奖表按 概率×倍率 定出 RTP≈56.5%（庄家优势约 43.5%）。
+_SCRATCH_PRIZES = [
+    # (符号, 含本金返还倍率, 中奖概率)
+    ("clover", 2, 0.12),
+    ("bell", 3, 0.05),
+    ("bar", 5, 0.015),
+    ("seven", 10, 0.005),
+    ("star", 50, 0.0006),
+    ("gem", 500, 0.00004),
+]
+_SCRATCH_SYMBOLS = [s for s, _, _ in _SCRATCH_PRIZES]
+
+
+def _scratch_build_grid(win_symbol: str | None) -> list[str]:
+    """造 9 格符号：中奖则正好 3 个 win_symbol、其余符号各 ≤2（不产生第二个三连）；
+    未中则所有符号各 ≤2（没有任何三连）。这样刮开的画面与后端判定的输赢严格一致。"""
+    counts = dict.fromkeys(_SCRATCH_SYMBOLS, 0)
+    cells: list[str] = []
+    if win_symbol is not None:
+        cells = [win_symbol] * 3
+        counts[win_symbol] = 3
+    while len(cells) < 9:
+        pick = _rng.choice([s for s in _SCRATCH_SYMBOLS if counts[s] < 2])
+        cells.append(pick)
+        counts[pick] += 1
+    _rng.shuffle(cells)
+    return cells
+
+
+def _play_scratch(bet_amount: int, _bet_detail: dict) -> GameOutcome:
+    """刮刮乐：买一张票刮开 9 格，三个相同符号中奖。奖表 RTP≈56.5%、庄家优势约 43.5%——
+    用偶尔的大奖掩盖极差期望，是回报率最低的一类博彩。"""
+    roll = _rng.random()
+    cum = 0.0
+    win_symbol: str | None = None
+    mult = 0
+    for symbol, m, p in _SCRATCH_PRIZES:
+        cum += p
+        if roll < cum:
+            win_symbol, mult = symbol, m
+            break
+
+    grid = _scratch_build_grid(win_symbol)
+    payout = bet_amount * mult
+    return GameOutcome(
+        payout=payout,
+        rng_detail={"grid": grid, "symbol": win_symbol, "mult": mult, "win": mult > 0},
+    )
+
+
 def _play_niuniu(bet_amount: int, _bet_detail: dict) -> GameOutcome:
     """牛牛（斗牛）：闲庄各 5 张比牛，牛大者赢（牛值同则比点数）。
 
@@ -474,6 +526,7 @@ _ENGINES: dict[str, Callable[[int, dict], GameOutcome]] = {
     "plinko": _play_plinko,
     "sicbo": _play_sicbo,
     "niuniu": _play_niuniu,
+    "scratch": _play_scratch,
 }
 
 
