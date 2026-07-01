@@ -28,6 +28,7 @@ class Post(BaseModel):
     tags: list[str]
     content: str
     published_at: datetime
+    updated_at: datetime
 
 
 class PostSummary(BaseModel):

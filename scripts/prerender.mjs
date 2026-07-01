@@ -162,6 +162,7 @@ async function collectPosts() {
       summary: d.summary ?? '',
       tags: Array.isArray(d.tags) ? d.tags : [],
       publishedAt: d.published_at ?? '',
+      updatedAt: d.updated_at ?? d.published_at ?? '',
       body: d.content ?? '',
     });
   });
@@ -217,6 +218,8 @@ const NAV_ITEMS = [
   { to: '/inspirations', label: 'inspirations', match: (cp) => cp.startsWith('/inspirations') },
   { to: '/lab', label: 'lab', match: (cp) => cp.startsWith('/lab') },
   { to: '/about', label: 'about', match: (cp) => cp.startsWith('/about') },
+  // casino 是独立 SPA（不同 basename），整页链接；与 Layout.tsx 的 nav 保持一致
+  { to: '/casino/', label: 'casino', match: (cp) => cp.startsWith('/casino') },
 ];
 
 function navHtml(currentPath) {
@@ -337,7 +340,30 @@ ${items || '<li class="py-5 text-terminal-gray/60">空空如也。</li>'}
   `;
 }
 
-function postDetailBody(post, { prev, next }) {
+function relatedHtml(related) {
+  if (!related || !related.length) return '';
+  const items = related
+    .map(
+      (p) => `<li>
+          <a href="${pageUrl(`/posts/${p.slug}/`)}" class="group block p-2 rounded border border-terminal-line/40 hover:border-terminal-green/50 hover:bg-terminal-green/5 transition-all">
+            <div class="flex items-baseline justify-between gap-3">
+              <span class="text-terminal-gray group-hover:text-terminal-green transition-colors text-sm">${escapeHtml(p.title)}</span>
+              <span class="text-[10px] text-terminal-gray/50 shrink-0">${escapeHtml((p.publishedAt || '').slice(0, 10))}</span>
+            </div>
+            ${p.summary ? `<p class="text-xs text-terminal-gray/70 mt-1">${escapeHtml(p.summary)}</p>` : ''}
+          </a>
+        </li>`,
+    )
+    .join('\n');
+  return `<section class="mt-12 pt-6 border-t border-terminal-line/60">
+        <h3 class="text-terminal-green text-sm mb-3"><span class="text-terminal-pink">$</span> ls related/</h3>
+        <ul class="space-y-2">
+${items}
+        </ul>
+      </section>`;
+}
+
+function postDetailBody(post, { prev, next, related }) {
   const date = (post.publishedAt || '').slice(0, 10);
   const tagBadges = post.tags
     .map(
@@ -365,9 +391,23 @@ function postDetailBody(post, { prev, next }) {
       <div class="prose prose-invert max-w-none">
 ${html}
       </div>
+      ${relatedHtml(related)}
       ${nav}
     </article>
   `;
+}
+
+// 按共享标签数给 post 找相关文章（近似后端 /related：标签重叠越多越相关），
+// 排除自身与 prev/next，取前 3。给爬虫一张内链关系网。
+function relatedPosts(post, all, exclude) {
+  const skip = new Set([post.slug, ...exclude.filter(Boolean).map((p) => p.slug)]);
+  return all
+    .filter((p) => !skip.has(p.slug))
+    .map((p) => ({ p, overlap: p.tags.filter((t) => post.tags.includes(t)).length }))
+    .filter((x) => x.overlap > 0)
+    .sort((a, b) => b.overlap - a.overlap || (b.p.publishedAt || '').localeCompare(a.p.publishedAt || ''))
+    .slice(0, 3)
+    .map((x) => x.p);
 }
 
 // ---------- JSON-LD ----------
@@ -388,6 +428,22 @@ function websiteLd() {
   };
 }
 
+// 作者实体：给 AI 引擎一个可识别的 Person 节点（E-E-A-T / 作者权威性）。
+// 复用在首页 / about / 文章的 author-publisher 上，统一实体标识。
+function personLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name: AUTHOR,
+    url: PUBLISHER_URL,
+    jobTitle: '软件工程师',
+    knowsAbout: ['AI 大模型', 'Linux 系统', '前端工程', 'FastAPI', '工具开发'],
+  };
+}
+
+// 文章 author / publisher 复用的精简 Person（不带 @context，供内嵌）
+const authorRef = { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL };
+
 // CJK 没有空格，按「中文字符数 + 拉丁词数」粗算字数，给 AI 引擎一个体量信号
 function wordCount(md = '') {
   const cjk = (md.match(/[一-鿿]/g) || []).length;
@@ -404,9 +460,9 @@ function blogPostingLd(post) {
     description: post.summary,
     inLanguage: 'zh-CN',
     datePublished: post.publishedAt,
-    dateModified: post.publishedAt,
-    author: { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL },
-    publisher: { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL },
+    dateModified: post.updatedAt || post.publishedAt,
+    author: authorRef,
+    publisher: authorRef,
     isPartOf: { '@type': 'WebSite', name: SITE_TITLE, url: ORIGIN + '/' },
     mainEntityOfPage: canonical(`/posts/${post.slug}/`),
     url: canonical(`/posts/${post.slug}/`),
@@ -502,12 +558,90 @@ function labToyBody(toy) {
   `;
 }
 
+// ---------- 首页 ----------
+// tenggouwa figlet（与 Home.tsx 的 ASCII 一致）。逐行单引号字面量，避开模板字符串
+// 里反引号 / 反斜杠的转义坑。
+const HOME_ASCII = [
+  ' _',
+  '| |_ ___ _ __   __ _  __ _  ___  _   ___      ____ _',
+  '| __/ _ \\ \'_ \\ / _` |/ _` |/ _ \\| | | \\ \\ /\\ / / _` |',
+  '| ||  __/ | | | (_| | (_| | (_) | |_| |\\ V  V / (_| |',
+  ' \\__\\___|_| |_|\\__, |\\__, |\\___/ \\__,_| \\_/\\_/ \\__,_|',
+  '               |___/ |___/',
+].join('\n');
+
+// 首页导航卡片：与 Home.tsx 的三大区块 + casino 对齐，纯文字/链接，爬虫首屏即拿到
+const HOME_CARDS = [
+  { to: '/posts/', title: 'posts/', desc: '技术 / 思考 / 折腾笔记' },
+  { to: '/inspirations', title: 'inspirations/', desc: '随手记的小灵感 & 闪念' },
+  { to: '/lab', title: 'lab/', desc: '跑在浏览器里的生成式小玩具' },
+  { to: '/casino/', title: 'casino/', desc: '反赌教育模拟器：用假积分跑真赔率' },
+];
+
+function homeBody(posts) {
+  const cards = HOME_CARDS.map(
+    (c) => `<a href="${pageUrl(c.to)}" class="group block border border-terminal-line/70 bg-terminal-panel/50 rounded-lg p-5 transition-colors hover:border-terminal-green/60">
+          <div class="text-terminal-green font-semibold mb-1">${escapeHtml(c.title)}</div>
+          <div class="text-sm text-terminal-gray/80">${escapeHtml(c.desc)}</div>
+        </a>`,
+  ).join('\n        ');
+  const latest = posts
+    .slice(0, 5)
+    .map(
+      (p) => `<li class="py-3 border-b border-terminal-line/60">
+          <a href="${pageUrl(`/posts/${p.slug}/`)}" class="group flex items-baseline justify-between gap-4">
+            <span class="text-terminal-gray group-hover:text-terminal-green transition-colors">${escapeHtml(p.title)}</span>
+            <span class="text-xs text-terminal-gray/60 shrink-0">${escapeHtml((p.publishedAt || '').slice(0, 10))}</span>
+          </a>
+        </li>`,
+    )
+    .join('\n        ');
+  return `
+    <div class="space-y-10">
+      <pre class="text-terminal-green text-[10px] md:text-xs leading-tight overflow-x-auto shadow-glow">${escapeHtml(HOME_ASCII)}</pre>
+      <p class="text-terminal-gray/85 leading-relaxed max-w-2xl">
+        <span class="text-terminal-pink">~$</span> 腾构娃的极客小站 —— 一个写前端、写后端、写脚本、写诗的工程师。
+        这里有 AI 大模型 / Linux 系统 / 前端与工具的笔记、灵感与实验。
+      </p>
+      <section class="grid md:grid-cols-2 gap-4">
+        ${cards}
+      </section>
+      <section class="space-y-3">
+        <h2 class="text-terminal-green text-lg"><span class="text-terminal-pink">$ </span>cat posts/*.md | head</h2>
+        <ul>
+        ${latest || '<li class="py-3 text-terminal-gray/60">空空如也。</li>'}
+        </ul>
+        <a href="${pageUrl('/posts/')}" class="text-sm text-terminal-cyan hover:underline">→ 全部文章</a>
+      </section>
+    </div>
+  `;
+}
+
+// 与 apps/web/index.html 顶部的 SPA deep-link 还原脚本保持一致：预渲染覆盖首页
+// index.html 后，build-pages.sh 会把它 cp 成 404.html，这段脚本必须随之保留，
+// 否则子路径 SPA(admin/casino) 的兜底 bounce 无法还原原始 URL。
+const SPA_REDIRECT_RESTORE = `<script>
+      (function () {
+        try {
+          var r = sessionStorage.getItem('tg_spa_redirect');
+          if (!r) return;
+          sessionStorage.removeItem('tg_spa_redirect');
+          if (r.indexOf('/Tenggouwa-site/') !== 0) return;
+          if (r.indexOf('/Tenggouwa-site/admin/') === 0) return;
+          if (r.indexOf('/Tenggouwa-site/casino/') === 0) return;
+          if (r === location.pathname + location.search + location.hash) return;
+          history.replaceState(null, '', r);
+        } catch (e) {}
+      })();
+    </script>`;
+
 // ---------- sitemap / robots / feed ----------
 function buildSitemap(posts, tags) {
   const urls = [
     { loc: canonical('/'), changefreq: 'weekly', priority: '1.0' },
     { loc: canonical('/posts/'), changefreq: 'weekly', priority: '0.9' },
     { loc: canonical('/about'), changefreq: 'monthly', priority: '0.6' },
+    { loc: canonical('/casino/'), changefreq: 'monthly', priority: '0.7' },
     { loc: canonical('/lab'), changefreq: 'monthly', priority: '0.5' },
     ...LAB_TOYS.map((t) => ({
       loc: canonical(`/lab/${t.slug}`),
@@ -655,6 +789,7 @@ function buildLlmsTxt(posts) {
     '## Optional',
     '',
     `- [全文合集](${canonical('/llms-full.txt')}): 所有文章正文合并的 markdown，可一次性喂给模型`,
+    `- [反赌模拟器](${canonical('/casino/')}): 用假积分跑真实赌场赔率，用数据讲清「长期必输」的数学真相`,
     `- [RSS](${canonical('/feed.xml')}): 更新订阅源`,
     `- [关于](${canonical('/about')}): 关于作者与本站`,
     '',
@@ -693,6 +828,7 @@ async function main() {
     // posts 是按时间倒序的；prev 表示更早一篇，next 表示更新一篇
     const next = posts[i - 1];
     const prev = posts[i + 1];
+    const related = relatedPosts(post, posts, [prev, next]);
     const path0 = `/posts/${post.slug}/`;
     const html = shell({
       title: post.title,
@@ -711,7 +847,7 @@ async function main() {
           { name: post.title, path: path0 },
         ]),
       ],
-      bodyHtml: postDetailBody(post, { prev, next }),
+      bodyHtml: postDetailBody(post, { prev, next, related }),
     });
     writeFile(`posts/${post.slug}/index.html`, html);
     if (!NOINDEX) {
@@ -765,7 +901,13 @@ async function main() {
         title: meta.title ?? 'About',
         description: meta.summary ?? '关于腾构娃。',
         currentPath: '/about',
-        jsonLd: websiteLd(),
+        jsonLd: [
+          personLd(),
+          breadcrumbLd([
+            { name: 'Home', path: '/' },
+            { name: 'About', path: '/about' },
+          ]),
+        ],
         bodyHtml: `<article class="prose prose-invert max-w-none">${renderMd(body)}</article>`,
       }),
     );
@@ -801,6 +943,20 @@ async function main() {
       }),
     );
   }
+
+  // 首页：最后写，避免覆盖 vite 的 index.html 影响前面各页读取 head 资源 / 入口脚本。
+  // extraHead 带上 SPA deep-link 还原脚本（build-pages.sh 会把本文件 cp 成 404.html）。
+  writeFile(
+    'index.html',
+    shell({
+      title: SITE_TITLE,
+      description: SITE_DESC,
+      currentPath: '/',
+      extraHead: SPA_REDIRECT_RESTORE,
+      jsonLd: [websiteLd(), personLd()],
+      bodyHtml: homeBody(posts),
+    }),
+  );
 
   // sitemap / robots / feed
   writeFile('sitemap.xml', buildSitemap(posts, allTags));

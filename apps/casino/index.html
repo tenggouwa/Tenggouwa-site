@@ -4,15 +4,150 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <meta name="robots" content="noindex" />
     <meta
       name="description"
-      content="反赌模拟器：用纯计数积分跑真实赔率的赌场游戏，记录输赢曲线，让数据告诉你长期必输。"
+      content="反赌教育模拟器：用纯计数积分跑真实赌场赔率（骰子/轮盘/老虎机/百家乐/21点等 16 款），记录输赢曲线与全站庄家优势，用数据讲清「长期必输」的数学真相。"
     />
-    <title>赌场真相 · tenggouwa</title>
+    <link rel="canonical" href="https://tenggouwa.com/casino/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="赌场真相 · 反赌教育模拟器" />
+    <meta
+      property="og:description"
+      content="用假积分跑真实赌场赔率，用数据告诉你为什么长期必输。"
+    />
+    <meta property="og:url" content="https://tenggouwa.com/casino/" />
+    <meta property="og:image" content="https://tenggouwa.com/og-default.png" />
+    <title>赌场真相 · 反赌教育模拟器 · tenggouwa</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "赌场真相 · 反赌教育模拟器",
+        "url": "https://tenggouwa.com/casino/",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Web",
+        "inLanguage": "zh-CN",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" },
+        "author": { "@type": "Person", "name": "tenggouwa", "url": "https://tenggouwa.com" },
+        "description": "用纯计数积分（无充值、无提现）复刻 16 款真实赌场游戏的赔率，记录个人输赢曲线与全站庄家优势排行榜，用大数定律直观演示赌博为什么长期必输。"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "长期输是不是只是我运气差？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "不是。这是大数定律：玩的局数越多，你的实际返还率就越贴近理论值，运气的波动会被抹平，只剩下庄家优势这个负期望。每个游戏的庄家优势是写死在规则里的，跟手气无关。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "我上次明明赢了，怎么解释？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "短期方差。单局甚至连续几十局赢钱完全正常，但每一局的数学期望都是负的，样本越大越会被拉回庄家一侧。赢钱的记忆会让人继续下注，这正是庄家依赖的机制。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "庄家优势是怎么算出来的？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "庄家优势 = 每一局你平均损失的金额占下注额的比例。例如骰子押大小约 2.78%、欧式轮盘 2.70%、百家乐押庄仅 1.06%，而刮刮乐高达约 43%。下注额乘以这个比例，就是长期平均每局送给庄家的钱。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "老虎机标称 RTP 96% 是真的吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "标称 RTP 通常是长期理论值，且往往低于宣传。本模拟器的老虎机 RTP 为 93.96%（庄家优势 6.04%），意味着每投入 100 分，长期平均只能拿回约 94 分，剩下的稳定流向庄家。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "哪个游戏最坑、哪个相对良心？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "最坑的是刮刮乐（约 43%）和基诺（约 28%），用极小概率的大奖掩盖极差的期望。相对良心的是 21 点和视频扑克（最优策略下约 0.5%）、百家乐押庄（1.06%）——但期望依旧是负的，长期仍然亏。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "有没有必胜或稳定回本的策略？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "没有。负期望游戏不存在长期正收益的下注策略。加倍下注（马丁格尔）等打法只会在遇到连输时加速爆仓，并不能改变每一局的负期望。唯一稳赢的位置是庄家。"
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body class="bg-terminal-bg text-terminal-gray font-mono">
-    <div id="root"></div>
+    <!-- GEO 静态内容：给不执行 JS 的 AI / 搜索爬虫的首屏可读文本。React createRoot
+         挂载后会整体替换 #root。庄家优势数值需与 src/pages/Lobby.tsx 的 GAMES 保持一致。 -->
+    <div id="root">
+      <main class="max-w-3xl mx-auto px-4 py-8 space-y-8">
+        <header class="space-y-2">
+          <h1 class="text-2xl font-semibold text-terminal-green">用假积分，跑真赔率 —— 反赌教育模拟器</h1>
+          <p class="text-sm leading-relaxed text-terminal-gray/85">
+            这里没有充值、没有提现。发 1000 假积分，输光可重领，但每一局都会被记录。玩够多就会发现：
+            <span class="text-terminal-pink">庄家从不靠运气，靠的是数学</span>。下面是 16 款游戏各自的理论庄家优势，
+            以及为什么长期必输的解释。
+          </p>
+        </header>
+
+        <section class="space-y-3">
+          <h2 class="text-lg text-terminal-green">各游戏庄家优势（house edge）</h2>
+          <ul class="text-sm space-y-1 text-terminal-gray/85">
+            <li><a class="text-terminal-cyan hover:underline" href="games/baccarat">百家乐 · Baccarat</a> —— 押庄 1.06%（押「和」14.4% 陷阱）</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/blackjack">21点 · Blackjack</a> —— 基本策略约 0.5%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/videopoker">视频扑克 · Video Poker</a> —— 最优解约 0.5%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/mines">扫雷 · Mines</a> —— 2.00%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/niuniu">牛牛 · 斗牛</a> —— 2.46%（赢家抽 5% 水）</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/zhajinhua">炸金花 · 赢三张</a> —— 2.5%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/roulette">轮盘 · Roulette</a> —— 欧式单零 2.70%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/dice">骰子 · 大小</a> —— 2.78%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/sicbo">骰宝 · Sic Bo</a> —— 大小 2.78%（高赔项更坑）</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/dragon-tiger">龙虎斗 · Dragon Tiger</a> —— 3.85%（押「和」是陷阱）</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/crash">崩盘 · Crash</a> —— 4.00%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/plinko">Plinko · 落球</a> —— 4.00%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/slots">老虎机 · Slots</a> —— 6.04%（RTP 93.96%）</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/money-wheel">幸运大转盘 · Money Wheel</a> —— 11–24%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/keno">基诺 · Keno</a> —— 约 28%</li>
+            <li><a class="text-terminal-cyan hover:underline" href="games/scratch">刮刮乐 · Scratch</a> —— 约 43%（全场最坑）</li>
+          </ul>
+        </section>
+
+        <section class="space-y-2">
+          <h2 class="text-lg text-terminal-green">为什么长期必输</h2>
+          <p class="text-sm leading-relaxed text-terminal-gray/85">
+            每个游戏的庄家优势是写死在规则里的负期望。短期内方差会让你赢或输，但玩的局数越多，实际返还率就越贴近理论值——
+            这就是<span class="text-terminal-pink">大数定律</span>。下注额 × 庄家优势 = 长期平均每局送给庄家的钱，
+            局数越多，这笔账越准，跟运气与技巧无关（21点/视频扑克的最优策略也只是把优势压到约 0.5%，仍为负）。
+            <a class="text-terminal-cyan hover:underline" href="truth">→ 看全站真实输赢数据与庄家优势排行榜</a>
+          </p>
+        </section>
+
+        <section class="space-y-3">
+          <h2 class="text-lg text-terminal-green">常见顾虑</h2>
+          <dl class="space-y-3 text-sm text-terminal-gray/85">
+            <div><dt class="text-terminal-yellow">是不是只是我运气差？</dt><dd>不是。大数定律下局数越多，实际返还率越贴近理论庄家优势，运气波动会被抹平，跟手气无关。</dd></div>
+            <div><dt class="text-terminal-yellow">我上次明明赢了怎么解释？</dt><dd>短期方差。每一局期望都是负的，样本越大越会被拉回庄家一侧。</dd></div>
+            <div><dt class="text-terminal-yellow">庄家优势怎么算的？</dt><dd>每局平均损失占下注额的比例。骰子大小约 2.78%、百家乐押庄 1.06%、刮刮乐约 43%。</dd></div>
+            <div><dt class="text-terminal-yellow">老虎机 RTP 96% 是真的吗？</dt><dd>本模拟器老虎机 RTP 93.96%，即每 100 分平均只拿回约 94 分。</dd></div>
+            <div><dt class="text-terminal-yellow">有没有必胜/回本策略？</dt><dd>没有。负期望游戏无长期正收益策略；马丁格尔加倍只会加速爆仓。</dd></div>
+          </dl>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

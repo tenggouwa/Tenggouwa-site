@@ -19,6 +19,7 @@ def _row_to_schema(row: PostRow) -> Post:
         tags=list(row.tags or []),
         content=row.content,
         published_at=row.published_at,
+        updated_at=row.updated_at,
     )
 
 
