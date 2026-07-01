@@ -69,6 +69,17 @@ echo "==> 构建 apps/casino (base=$CASINO_BASE, api=${VITE_API_BASE:-<empty>})"
 VITE_BASE="$CASINO_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/casino build
 mkdir -p "$DIST/casino"
 cp -R apps/casino/dist/. "$DIST/casino/"
+# 子路径镜像（GitHub Pages）给 casino 打 noindex，避免与根域 tenggouwa.com/casino/ 双收录；
+# 根域(Cloudflare)产物保持可索引（casino index.html 已 canonical 到根域）。
+if [ -n "$PRERENDER_NOINDEX" ]; then
+  python3 -c "
+p = '$DIST/casino/index.html'
+s = open(p).read()
+if 'name=\"robots\"' not in s:
+    s = s.replace('<head>', '<head>\n    <meta name=\"robots\" content=\"noindex\" />', 1)
+    open(p, 'w').write(s)
+"
+fi
 
 echo "==> 预渲染博客静态页 + sitemap / robots / feed (origin=$SITE_ORIGIN)"
 # prerender 从 API 拉数据（DB 是唯一真相），未显式传则回落到 https://api.tenggouwa.com
