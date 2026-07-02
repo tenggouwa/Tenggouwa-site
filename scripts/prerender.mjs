@@ -173,6 +173,23 @@ async function collectPosts() {
   return posts;
 }
 
+// 小灵感：短文本闪念，一次列表拉全（规模很小）。失败不影响正文构建（posts 才是命脉）。
+async function collectInspirations() {
+  if (!API_BASE) return [];
+  try {
+    const page = await fetchJson(`${API_BASE}/api/public/inspirations?limit=100&offset=0`);
+    const items = Array.isArray(page?.items) ? page.items : [];
+    return items.map((it) => ({
+      content: it.content ?? '',
+      mood: it.mood ?? '',
+      createdAt: it.created_at ?? '',
+    }));
+  } catch (e) {
+    console.warn(`skip inspirations: ${e instanceof Error ? e.message : e}`);
+    return [];
+  }
+}
+
 // ---------- 复用 vite 构建产物的 CSS / 字体 ----------
 function findHeadAssets() {
   const idxPath = path.join(DIST, 'index.html');
@@ -561,16 +578,16 @@ function writeFile(rel, content) {
 // 与 apps/web/src/pages/Lab.tsx 的 TOYS 保持同步：新增玩具两边都要加，
 // 否则该玩具的深链接会回退到 SPA（首次请求 404）。
 const LAB_TOYS = [
-  { slug: 'matrix', title: 'matrix-rain', desc: '经典数字雨。半角假名 + ASCII，自带 bloom。', accent: 'green' },
-  { slug: 'flock', title: 'flock.boids', desc: 'Boids 鸟群算法。鼠标当吸引子，发光拖尾。', accent: 'cyan' },
-  { slug: 'donut', title: 'donut.c', desc: '致敬 a1k0n。3D torus 投影到 ASCII 字符。', accent: 'cyan' },
-  { slug: 'wave', title: 'wave.field', desc: '2D 波动方程 + 阻尼。点 / 拖产生字符涟漪。', accent: 'cyan' },
-  { slug: 'rope', title: 'rope.verlet', desc: 'Verlet 物理绳。鼠标拖任意节点，gravity 可调。', accent: 'pink' },
-  { slug: 'snake', title: 'snake.sh', desc: '终端栅格贪吃蛇。方向键 / hjkl 操作。', accent: 'pink' },
-  { slug: '2048', title: '2048.exe', desc: '经典数字消除。↑↓←→ 移动方块，merge same number。', accent: 'yellow' },
-  { slug: 'life', title: 'conway.life', desc: '生命游戏。点格子编辑，可播放 / 步进 / 随机化。', accent: 'yellow' },
-  { slug: 'mandelbrot', title: 'mandelbrot.ascii', desc: '逃逸时间分形，按字符密度渲染。点击放大、拖动平移、无限下钻。', accent: 'green' },
-  { slug: 'reaction', title: 'reaction.diffusion', desc: 'Gray-Scott 反应扩散。自组织出珊瑚 / 分裂 / 斑点，点击注入、切换预设。', accent: 'cyan' },
+  { slug: 'matrix', title: 'matrix-rain', desc: '经典数字雨。半角假名 + ASCII，自带 bloom。', accent: 'green', how: '每列字符按帧下落、尾部渐隐，落到底或随机时重置起点，叠加辉光模拟《黑客帝国》数字雨。' },
+  { slug: 'flock', title: 'flock.boids', desc: 'Boids 鸟群算法。鼠标当吸引子，发光拖尾。', accent: 'cyan', how: 'Boids 三条局部规则——分离 / 对齐 / 聚合，每个个体只看邻居就涌现出整体鸟群行为。' },
+  { slug: 'donut', title: 'donut.c', desc: '致敬 a1k0n。3D torus 投影到 ASCII 字符。', accent: 'cyan', how: '把环面参数方程逐点旋转投影到 2D 屏幕，按表面法向量与光源的点积挑选 ASCII 亮度字符。' },
+  { slug: 'wave', title: 'wave.field', desc: '2D 波动方程 + 阻尼。点 / 拖产生字符涟漪。', accent: 'cyan', how: '把 2D 波动方程离散化，用邻格高度差分逐帧传播、再乘阻尼系数衰减，得到字符涟漪。' },
+  { slug: 'rope', title: 'rope.verlet', desc: 'Verlet 物理绳。鼠标拖任意节点，gravity 可调。', accent: 'pink', how: 'Verlet 积分：用前后两帧位置隐式推出速度，再多次迭代距离约束维持节点间距，形成柔韧绳子。' },
+  { slug: 'snake', title: 'snake.sh', desc: '终端栅格贪吃蛇。方向键 / hjkl 操作。', accent: 'pink', how: '栅格状态机：蛇身是一条队列，蛇头入队、蛇尾出队；吃到食物时不出队即实现增长。' },
+  { slug: '2048', title: '2048.exe', desc: '经典数字消除。↑↓←→ 移动方块，merge same number。', accent: 'yellow', how: '每步把一行 / 列的非空格向一侧靠拢、相邻同值合并一次，再在随机空格生成 2 或 4。' },
+  { slug: 'life', title: 'conway.life', desc: '生命游戏。点格子编辑，可播放 / 步进 / 随机化。', accent: 'yellow', how: 'Conway 规则：每格看 8 个邻居，活格 2~3 个邻居存活、死格恰 3 个邻居复活，其余死亡。' },
+  { slug: 'mandelbrot', title: 'mandelbrot.ascii', desc: '逃逸时间分形，按字符密度渲染。点击放大、拖动平移、无限下钻。', accent: 'green', how: '对每个点迭代 z = z² + c，按其模长逃逸出阈值所需的步数映射字符密度，即逃逸时间算法。' },
+  { slug: 'reaction', title: 'reaction.diffusion', desc: 'Gray-Scott 反应扩散。自组织出珊瑚 / 分裂 / 斑点，点击注入、切换预设。', accent: 'cyan', how: 'Gray-Scott 模型：两种化学物质各自扩散并按非线性速率反应，参数差异自组织出珊瑚 / 斑点等图案。' },
 ];
 
 const LAB_ACCENT_TEXT = {
@@ -613,11 +630,74 @@ function labToyBody(toy) {
       </div>
       <h1 class="text-2xl ${LAB_ACCENT_TEXT[toy.accent]}"><span class="text-terminal-pink">$ </span>./${escapeHtml(toy.title)}</h1>
       <p class="text-sm text-terminal-gray">${escapeHtml(toy.desc)}</p>
+      ${toy.how ? `<p class="text-sm text-terminal-gray/75 leading-relaxed"><span class="text-terminal-green"># 原理</span> ${escapeHtml(toy.how)}</p>` : ''}
       <div class="rounded-lg overflow-hidden border border-terminal-line/70 bg-terminal-panel/40">
         <div class="p-8 text-center text-sm text-terminal-gray/60">正在加载交互组件…</div>
       </div>
     </div>
   `;
+}
+
+// ---------- inspirations 小灵感 ----------
+function inspirationsBody(items) {
+  const cards = items
+    .map(
+      (i) => `<li class="py-4 border-b border-terminal-line/60">
+        <div class="text-sm whitespace-pre-wrap text-terminal-gray">${escapeHtml(i.content)}</div>
+        <div class="mt-2 text-xs text-terminal-gray/60 flex items-center gap-3">
+          <span>${escapeHtml((i.createdAt || '').slice(0, 16).replace('T', ' '))}</span>
+          ${i.mood ? `<span class="text-terminal-yellow">${escapeHtml(i.mood)}</span>` : ''}
+        </div>
+      </li>`,
+    )
+    .join('\n');
+  return `
+    <div class="space-y-6">
+      <h1 class="text-terminal-pink text-2xl"><span class="text-terminal-pink">$ </span>tail -f thoughts.log</h1>
+      <p class="text-sm text-terminal-gray/70">随手记的小灵感 &amp; 闪念。</p>
+      <ul>
+${cards || '<li class="py-4 text-terminal-gray/60">空空如也。</li>'}
+      </ul>
+    </div>
+  `;
+}
+
+// ---------- 站点 FAQ ----------
+const SITE_FAQ = [
+  ['这个站点是什么？', '腾构娃的极客小站，覆盖 AI 大模型 / Linux 系统 / 前端与工具的笔记、灵感与实验；另有前端实验室（跑在浏览器里的生成式小玩具）和反赌教育模拟器（用假积分跑真实赌场赔率，用数据讲清「长期必输」的数学）。'],
+  ['作者是谁？', 'tenggouwa，一名软件工程师，写前端 / 后端 / 脚本 / 诗。联系邮箱 tenggouwa@gmail.com。'],
+  ['技术栈 / 是否开源？', '整站是一个 monorepo：前端 Vite + React + TypeScript，挂 Cloudflare Pages / GitHub Pages；后端 FastAPI + PostgreSQL 自部署在云服务器。'],
+  ['怎么订阅更新？', '订阅 RSS：/feed.xml。面向 LLM 的站点索引见 /llms.txt，全文合集见 /llms-full.txt。'],
+  ['可以转载或被 AI 引用吗？', '欢迎搜索引擎与生成式 AI 引擎抓取并引用本站内容（见 robots.txt 与 /llms.txt 的显式声明）。'],
+];
+
+function faqBody() {
+  const items = SITE_FAQ.map(
+    ([q, a]) => `<div class="space-y-1">
+        <dt class="text-terminal-yellow">${escapeHtml(q)}</dt>
+        <dd class="text-sm text-terminal-gray/85 leading-relaxed">${escapeHtml(a)}</dd>
+      </div>`,
+  ).join('\n');
+  return `
+    <div class="space-y-6">
+      <h1 class="text-terminal-green text-2xl"><span class="text-terminal-pink">$ </span>cat FAQ.md</h1>
+      <dl class="space-y-4">
+${items}
+      </dl>
+    </div>
+  `;
+}
+
+function faqPageLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: SITE_FAQ.map(([q, a]) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: { '@type': 'Answer', text: a },
+    })),
+  };
 }
 
 // ---------- 首页 ----------
@@ -703,6 +783,8 @@ function buildSitemap(posts, tags, series = []) {
     { loc: canonical('/'), changefreq: 'weekly', priority: '1.0' },
     { loc: canonical('/posts/'), changefreq: 'weekly', priority: '0.9' },
     { loc: canonical('/about'), changefreq: 'monthly', priority: '0.6' },
+    { loc: canonical('/faq'), changefreq: 'monthly', priority: '0.5' },
+    { loc: canonical('/inspirations'), changefreq: 'weekly', priority: '0.6' },
     { loc: canonical('/casino/'), changefreq: 'monthly', priority: '0.7' },
     ...series.map((t) => ({
       loc: canonical(`/series/${encodeURIComponent(t)}/`),
@@ -886,6 +968,8 @@ async function main() {
   console.log(`==> prerender into ${DIST} (base=${BASE}, origin=${ORIGIN}, api=${API_BASE}, noindex=${NOINDEX})`);
   const posts = await collectPosts();
   console.log(`==> ${posts.length} posts`);
+  const inspirations = await collectInspirations();
+  console.log(`==> ${inspirations.length} inspirations`);
 
   const allTags = [...new Set(posts.flatMap((p) => p.tags))].sort();
 
@@ -1042,6 +1126,39 @@ async function main() {
       }),
     );
   }
+
+  // inspirations 小灵感（短文本闪念，可索引）
+  writeFile(
+    'inspirations/index.html',
+    shell({
+      title: 'Inspirations · tenggouwa',
+      description: '随手记的小灵感 & 闪念：关于工程、生活与折腾的短思。',
+      currentPath: '/inspirations',
+      jsonLd: breadcrumbLd([
+        { name: 'Home', path: '/' },
+        { name: 'Inspirations', path: '/inspirations' },
+      ]),
+      bodyHtml: inspirationsBody(inspirations),
+    }),
+  );
+
+  // 站点 FAQ（作者 / 技术栈 / 订阅 / AI 引用），带 FAQPage 结构化数据
+  writeFile(
+    'faq/index.html',
+    shell({
+      title: 'FAQ · tenggouwa',
+      description: '关于本站与作者的常见问题：这是什么、作者是谁、技术栈、如何订阅、能否被 AI 引用。',
+      currentPath: '/faq',
+      jsonLd: [
+        faqPageLd(),
+        breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'FAQ', path: '/faq' },
+        ]),
+      ],
+      bodyHtml: faqBody(),
+    }),
+  );
 
   // 首页：最后写，避免覆盖 vite 的 index.html 影响前面各页读取 head 资源 / 入口脚本。
   // extraHead 带上 SPA deep-link 还原脚本（build-pages.sh 会把本文件 cp 成 404.html）。
