@@ -91,6 +91,14 @@ node scripts/prerender.mjs \
   --api="$PRERENDER_API" \
   $PRERENDER_NOINDEX
 
+echo "==> 预渲染 casino 游戏页（可索引静态壳 + Game/FAQ schema）"
+# 在 web prerender 之后跑：此时 $DIST/casino/index.html 与 $DIST/sitemap.xml 都已就绪
+node scripts/prerender-casino.mjs \
+  --dist="$DIST" \
+  --base="$CASINO_BASE" \
+  --origin="$SITE_ORIGIN" \
+  $PRERENDER_NOINDEX
+
 echo "==> 生成 OG 封面 (PNG)"
 node scripts/generate-og.mjs --dist="$DIST"
 
