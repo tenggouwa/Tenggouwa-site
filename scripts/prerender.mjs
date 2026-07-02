@@ -340,6 +340,35 @@ ${items || '<li class="py-5 text-terminal-gray/60">空空如也。</li>'}
   `;
 }
 
+// 系列页：把该系列文章按发布顺序（升序）排成一条「第 N 篇」的阅读线。
+// 这条路由（/series/<tag>）被首页 / 列表 / 详情页三处内链指向，之前没预渲染，
+// 爬虫点进去是空壳；这里出静态正文闭合缺口。
+function seriesBody(seriesPosts, label) {
+  const items = seriesPosts
+    .map((p, i) => {
+      const date = (p.publishedAt || '').slice(0, 10);
+      return `<li class="py-4 border-b border-terminal-line/60">
+        <a href="${pageUrl(`/posts/${p.slug}/`)}" class="group block">
+          <div class="flex items-baseline justify-between gap-4">
+            <h2 class="text-base text-terminal-gray group-hover:text-terminal-green transition-colors"><span class="text-terminal-cyan mr-2">${String(i + 1).padStart(2, '0')}.</span>${escapeHtml(p.title)}</h2>
+            <span class="text-xs text-terminal-gray/70 shrink-0">${escapeHtml(date)}</span>
+          </div>
+          <p class="text-sm text-terminal-gray/80 mt-1">${escapeHtml(p.summary)}</p>
+        </a>
+      </li>`;
+    })
+    .join('\n');
+  return `
+    <div class="space-y-6">
+      <h1 class="text-terminal-green text-2xl"><span class="text-terminal-pink">$ </span>cd series/<span class="text-terminal-yellow">${escapeHtml(label)}</span></h1>
+      <p class="text-sm text-terminal-gray/70">按发布顺序阅读，共 ${seriesPosts.length} 篇。</p>
+      <ul class="divide-y divide-terminal-line/60">
+${items || '<li class="py-5 text-terminal-gray/60">空空如也。</li>'}
+      </ul>
+    </div>
+  `;
+}
+
 function relatedHtml(related) {
   if (!related || !related.length) return '';
   const items = related
@@ -372,6 +401,10 @@ function postDetailBody(post, { prev, next, related }) {
     )
     .join('\n          ');
   const html = renderMd(post.body);
+  const seriesTag = seriesTagOf(post);
+  const seriesLink = seriesTag
+    ? `<a href="${pageUrl(`/series/${encodeURIComponent(seriesTag)}/`)}" class="text-xs text-terminal-cyan hover:underline">◈ ${escapeHtml(seriesLabel(seriesTag))}</a>`
+    : '';
   const nav = (prev || next)
     ? `<nav class="mt-12 pt-6 border-t border-terminal-line/60 flex justify-between gap-4 text-sm">
         ${prev ? `<a href="${pageUrl(`/posts/${prev.slug}/`)}" class="text-terminal-cyan hover:underline">← ${escapeHtml(prev.title)}</a>` : '<span></span>'}
@@ -383,7 +416,10 @@ function postDetailBody(post, { prev, next, related }) {
       <a href="${pageUrl('/posts/')}" class="text-xs text-terminal-cyan hover:underline">← cd ../posts</a>
       <header class="space-y-2 border-b border-terminal-line/60 pb-4">
         <h1 class="text-2xl text-terminal-green">${escapeHtml(post.title)}</h1>
-        <div class="text-xs text-terminal-gray/80">${escapeHtml(date)}</div>
+        <div class="flex items-center gap-3 text-xs text-terminal-gray/80">
+          <span>${escapeHtml(date)}</span>
+          ${seriesLink}
+        </div>
         <div class="flex gap-2 flex-wrap">
           ${tagBadges}
         </div>
@@ -444,6 +480,15 @@ function personLd() {
 // 文章 author / publisher 复用的精简 Person（不带 @context，供内嵌）
 const authorRef = { '@type': 'Person', name: AUTHOR, url: PUBLISHER_URL };
 
+// dateModified 不能早于 datePublished：AI 系列按未来 published_at 排期发布，而
+// updated_at 是过去的行写入时间，直接用会得到「改早于发」的非法语义（schema 校验告警）。
+// ISO 8601 字符串可直接字典序比较，取较晚的一个。
+function laterDate(a, b) {
+  const x = a || '';
+  const y = b || '';
+  return x > y ? x : y;
+}
+
 // CJK 没有空格，按「中文字符数 + 拉丁词数」粗算字数，给 AI 引擎一个体量信号
 function wordCount(md = '') {
   const cjk = (md.match(/[一-鿿]/g) || []).length;
@@ -460,7 +505,7 @@ function blogPostingLd(post) {
     description: post.summary,
     inLanguage: 'zh-CN',
     datePublished: post.publishedAt,
-    dateModified: post.updatedAt || post.publishedAt,
+    dateModified: laterDate(post.updatedAt, post.publishedAt),
     author: authorRef,
     publisher: authorRef,
     isPartOf: { '@type': 'WebSite', name: SITE_TITLE, url: ORIGIN + '/' },
@@ -483,6 +528,23 @@ function breadcrumbLd(items) {
       position: i + 1,
       name: it.name,
       item: canonical(it.path),
+    })),
+  };
+}
+
+// 文章集合的有序清单：给 AI / 搜索引擎一个显式的「这页有哪些文章」结构信号。
+// name 可选传（如系列名），默认全站文章列表。
+function itemListLd(posts, { name } = {}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    ...(name ? { name } : {}),
+    numberOfItems: posts.length,
+    itemListElement: posts.map((p, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: canonical(`/posts/${p.slug}/`),
+      name: p.title,
     })),
   };
 }
@@ -636,12 +698,17 @@ const SPA_REDIRECT_RESTORE = `<script>
     </script>`;
 
 // ---------- sitemap / robots / feed ----------
-function buildSitemap(posts, tags) {
+function buildSitemap(posts, tags, series = []) {
   const urls = [
     { loc: canonical('/'), changefreq: 'weekly', priority: '1.0' },
     { loc: canonical('/posts/'), changefreq: 'weekly', priority: '0.9' },
     { loc: canonical('/about'), changefreq: 'monthly', priority: '0.6' },
     { loc: canonical('/casino/'), changefreq: 'monthly', priority: '0.7' },
+    ...series.map((t) => ({
+      loc: canonical(`/series/${encodeURIComponent(t)}/`),
+      changefreq: 'weekly',
+      priority: '0.6',
+    })),
     { loc: canonical('/lab'), changefreq: 'monthly', priority: '0.5' },
     ...LAB_TOYS.map((t) => ({
       loc: canonical(`/lab/${t.slug}`),
@@ -868,6 +935,7 @@ async function main() {
           { name: 'Home', path: '/' },
           { name: 'Posts', path: '/posts/' },
         ]),
+        itemListLd(posts),
       ],
       bodyHtml: postListBody(posts),
     }),
@@ -887,6 +955,37 @@ async function main() {
           { name: `#${tag}`, path: `/tags/${tag}/` },
         ]),
         bodyHtml: postListBody(posts, { tag }),
+      }),
+    );
+  }
+
+  // 系列聚合页（/series/<tag>）：被首页 / 列表 / 详情页三处内链指向
+  const seriesGroups = new Map();
+  for (const p of posts) {
+    const s = seriesTagOf(p);
+    if (!s) continue;
+    if (!seriesGroups.has(s)) seriesGroups.set(s, []);
+    seriesGroups.get(s).push(p);
+  }
+  for (const [tag, group] of seriesGroups) {
+    // 系列内按发布时间升序 = 阅读顺序
+    const ordered = group.slice().sort((a, b) => (a.publishedAt || '').localeCompare(b.publishedAt || ''));
+    const label = seriesLabel(tag);
+    writeFile(
+      `series/${tag}/index.html`,
+      shell({
+        title: `${label} · tenggouwa`,
+        description: `${label}：按发布顺序阅读的 ${ordered.length} 篇系列文章。`,
+        currentPath: `/series/${tag}/`,
+        jsonLd: [
+          breadcrumbLd([
+            { name: 'Home', path: '/' },
+            { name: 'Posts', path: '/posts/' },
+            { name: label, path: `/series/${tag}/` },
+          ]),
+          itemListLd(ordered, { name: label }),
+        ],
+        bodyHtml: seriesBody(ordered, label),
       }),
     );
   }
@@ -959,7 +1058,7 @@ async function main() {
   );
 
   // sitemap / robots / feed
-  writeFile('sitemap.xml', buildSitemap(posts, allTags));
+  writeFile('sitemap.xml', buildSitemap(posts, allTags, [...seriesGroups.keys()]));
   writeFile('robots.txt', buildRobots());
   writeFile('feed.xml', buildRss(posts));
 
