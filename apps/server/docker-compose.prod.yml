@@ -27,6 +27,12 @@ services:
     mem_limit: 256m
     memswap_limit: 384m
     cpus: 0.5
+    # 日志封顶，防止容器 json 日志无限增长撑爆磁盘
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_USER: tenggouwa
       POSTGRES_PASSWORD: ${POSTGRES_DEFAULT_PASSWORD}
@@ -60,6 +66,11 @@ services:
     mem_limit: 384m
     memswap_limit: 512m
     cpus: 0.7
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     env_file:
       - .env
     environment:
@@ -86,6 +97,17 @@ services:
     image: cloudflare/cloudflared:2025.5.0
     container_name: tenggouwa-cloudflared
     restart: unless-stopped
+    # cloudflared 之前没有内存上限：38 天不重启后缓慢涨内存，把 1.6G 机器拖进 OOM
+    # thrash（journald/snapd crash-loop + SSH banner 超时 + API 530）。封顶后即便泄漏
+    # 也只是容器被 OOM-kill + 自动重启（隧道秒级重连），不再拖垮整机。正常仅 ~30MB。
+    mem_limit: 192m
+    memswap_limit: 256m
+    cpus: 0.3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
