@@ -11,6 +11,7 @@ const NAV = [
   { to: '/posts', label: 'posts' },
   { to: '/inspirations', label: 'inspirations' },
   { to: '/lab', label: 'lab' },
+  { to: '/ask', label: 'ask' },
   { to: '/pi', label: 'pi' },
   { to: '/about', label: 'about' },
 ];
