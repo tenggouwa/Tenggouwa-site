@@ -6,7 +6,7 @@ Alembic autogenerate 看不到。Pydantic schema 仍然放在各业务模块的 
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -438,3 +438,56 @@ class SeoSearchSnapshotRow(Base):
         Index("ix_seo_snapshot_date_channel", "snapshot_date", "channel"),
         Index("ix_seo_snapshot_url", "url"),
     )
+
+
+# ---------- KB：个人知识库（源无关，blog 为第一个源）----------
+# v0 无嵌入：检索走 pg_trgm（对中文友好，扩展已启用），embedding 列日后升级时再加。
+
+
+class KBSourceRow(Base):
+    """知识库数据源：一类内容的接入点（blog / notes / code / web ...）。"""
+
+    __tablename__ = "kb_source"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)  # blog | notes | code | web
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("uq_kb_source_kind_name", "kind", "name", unique=True),)
+
+
+class KBDocumentRow(Base):
+    """知识库文档：源里的一个条目（一篇文章 / 一个笔记文件 ...）。"""
+
+    __tablename__ = "kb_document"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("kb_source.id", ondelete="CASCADE"), nullable=False)
+    external_id: Mapped[str] = mapped_column(String(200), nullable=False)  # post.slug / 文件路径
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 引用回链
+    raw_md: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # 增量：变了才重嵌
+    meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (Index("uq_kb_document_source_ext", "source_id", "external_id", unique=True),)
+
+
+class KBChunkRow(Base):
+    """知识库分块：检索最小单元。v0 检索按 content 做 pg_trgm 相似度。"""
+
+    __tablename__ = "kb_chunk"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("kb_document.id", ondelete="CASCADE"), nullable=False)
+    ord: Mapped[int] = mapped_column(nullable=False)  # 块在文档内的序
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    __table_args__ = (Index("uq_kb_chunk_doc_ord", "document_id", "ord", unique=True),)
