@@ -122,12 +122,13 @@ class Embedder:     # 向量化：独立端点（见下方决策点）
 ```
 
 > ✅ **已定（实测确认）：**
-> - **生成**走 OpenRouter：`KB_LLM_BASE_URL=https://openrouter.ai/api/v1`、`KB_LLM_MODEL=deepseek/deepseek-v4-flash`
->   （1M 上下文、$0.089/$0.180 每 M token）、`KB_LLM_API_KEY=<放 .env>`。实测 chat 正常。
-> - **嵌入暂缺**：OpenRouter 无 embedding 模型（models 列表筛 embed = 0），`google/gemini-embedding-2`
->   旁门已被 provider ToS 封（所有请求 403）。故 **v0 先不做嵌入**（`embedding` 列留空），检索只用
->   Postgres 全文（§5）。日后拿一个专用嵌入 key（SiliconFlow bge-m3 / OpenAI / Google AI 直连），
->   填 `KB_EMBED_*` 跑一次 reindex 即无缝升级成混合检索——表结构与代码都不用改。
+> - **生成**直连 DeepSeek 官方：`KB_LLM_BASE_URL=https://api.deepseek.com`、`KB_LLM_MODEL=deepseek-chat`
+>   （官方现已指向 deepseek-v4-flash）、`KB_LLM_API_KEY=<放 .env>`。实测 chat 正常、余额可用。
+>   （曾评估经 OpenRouter，但直连省中间商；env 可切换，改三个变量即回退到任意 OpenAI 兼容端点。）
+> - **嵌入暂缺**：OpenRouter 无 embedding 模型、`google/gemini-embedding-2` 旁门被 ToS 封（403），
+>   DeepSeek 官方也无 embeddings。故 **v0 先不做嵌入**（不建 embedding 列），检索只用 Postgres
+>   pg_trgm 全文（§5）。日后拿一个专用嵌入 key（SiliconFlow bge-m3 / OpenAI / Google AI 直连），
+>   填 `KB_EMBED_*` + 迁移加 embedding 列 + 跑一次 reindex 即无缝升级成混合检索——检索代码微调即可。
 > - 升级后维度随所选嵌入模型定（bge-m3=1024 / openai-3-small=1536 / gemini=3072），`VECTOR(dim)` 见 §2。
 
 ---

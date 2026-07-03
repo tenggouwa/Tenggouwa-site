@@ -1,11 +1,11 @@
-"""KB 的 LLM 提供方：OpenAI 兼容 chat（默认 OpenRouter deepseek-v4-flash）。
+"""KB 的 LLM 提供方：OpenAI 兼容 chat（默认直连 DeepSeek 官方 deepseek-chat）。
 
 env 配置，换供应商不改代码：
-  KB_LLM_BASE_URL  默认 https://openrouter.ai/api/v1
+  KB_LLM_BASE_URL  默认 https://api.deepseek.com
   KB_LLM_API_KEY   （放 .env，勿提交）
-  KB_LLM_MODEL     默认 deepseek/deepseek-v4-flash
+  KB_LLM_MODEL     默认 deepseek-chat（官方现已指向 deepseek-v4-flash）
 
-v0 只用生成；嵌入暂缺（OpenRouter 无 embedding 模型，见 docs/kb-design.md §3）。
+v0 只用生成；嵌入暂缺（需另配专用嵌入端点，见 docs/kb-design.md §3）。
 """
 
 import json
@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 
 class ChatLLM:
     def __init__(self) -> None:
-        self.base_url = (os.environ.get("KB_LLM_BASE_URL") or "https://openrouter.ai/api/v1").rstrip("/")
+        self.base_url = (os.environ.get("KB_LLM_BASE_URL") or "https://api.deepseek.com").rstrip("/")
         self.api_key = os.environ.get("KB_LLM_API_KEY", "")
-        self.model = os.environ.get("KB_LLM_MODEL") or "deepseek/deepseek-v4-flash"
+        self.model = os.environ.get("KB_LLM_MODEL") or "deepseek-chat"
 
     async def stream(
         self,
