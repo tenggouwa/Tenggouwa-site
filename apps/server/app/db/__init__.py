@@ -4,6 +4,9 @@ from .models import (
     AdminTotpRow,
     AgentRow,
     InspirationRow,
+    KBChunkRow,
+    KBDocumentRow,
+    KBSourceRow,
     PageViewRow,
     PostRow,
     SeoSearchSnapshotRow,
@@ -24,4 +27,7 @@ __all__ = [
     "TerminalSessionRow",
     "WebVitalsRow",
     "SeoSearchSnapshotRow",
+    "KBSourceRow",
+    "KBDocumentRow",
+    "KBChunkRow",
 ]

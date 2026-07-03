@@ -25,6 +25,7 @@ const Pi = lazy(() => import('./pages/Pi'));
 const Console = lazy(() => import('./pages/Console'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Search = lazy(() => import('./pages/Search'));
+const Ask = lazy(() => import('./pages/Ask'));
 const Series = lazy(() => import('./pages/Series'));
 const MatrixCanvas = lazy(() => import('./components/MatrixCanvas'));
 
@@ -130,6 +131,7 @@ export default function App() {
             <Route path="lab/life" element={<Life />} />
             <Route path="about" element={<About />} />
             <Route path="pi" element={<Pi />} />
+            <Route path="ask" element={<Ask />} />
             <Route path="search" element={<Search />} />
             <Route path="series/:tag" element={<Series />} />
             <Route path="*" element={<NotFound />} />

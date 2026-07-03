@@ -13,6 +13,8 @@ from .auth.router import router as auth_router
 from .casino.router import public_router as casino_public_router
 from .inspirations.router import admin_router as inspiration_admin_router
 from .inspirations.router import public_router as inspiration_public_router
+from .kb.router import admin_router as kb_admin_router
+from .kb.router import public_router as kb_public_router
 from .pi.router import agent_router as pi_agent_router
 from .pi.router import public_router as pi_public_router
 from .posts.router import admin_router as post_admin_router
@@ -34,6 +36,7 @@ router = APIRouter(prefix="/api")
 router.include_router(post_public_router)
 router.include_router(casino_public_router)
 router.include_router(inspiration_public_router)
+router.include_router(kb_public_router)
 router.include_router(analytics_public_router)
 router.include_router(pi_public_router)
 router.include_router(search_public_router)
@@ -50,6 +53,7 @@ router.include_router(auth_router)
 router.include_router(totp_router)
 router.include_router(post_admin_router)
 router.include_router(inspiration_admin_router)
+router.include_router(kb_admin_router)
 router.include_router(analytics_admin_router)
 router.include_router(seo_admin_router)
 router.include_router(terminal_admin_router)
