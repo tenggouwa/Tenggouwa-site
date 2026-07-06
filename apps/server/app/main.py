@@ -45,10 +45,15 @@ def create_app() -> FastAPI:
         from modules.seo.scheduler import start_seo_scheduler, stop_seo_scheduler
 
         start_seo_scheduler()
+        # KB 调度器：每日 06:00 增量 reindex blog，让新发布/调度到期的文章进知识库
+        from modules.kb.scheduler import start_kb_scheduler, stop_kb_scheduler
+
+        start_kb_scheduler()
         logger.info("tenggouwa-server started.")
         yield
         logger.info("Stopping tenggouwa-server...")
         stop_seo_scheduler()
+        stop_kb_scheduler()
         logger.info("tenggouwa-server stopped.")
 
     app = FastAPI(
