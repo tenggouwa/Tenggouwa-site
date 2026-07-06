@@ -42,8 +42,10 @@ asyncio.run(m())"'
 - [ ] `CodeIngester`（读 git repo）/ `WebIngester`（抓 URL）
 - [ ] `/ask` 支持按源过滤/加权（后端 `sources` 参数已留，前端加个源选择）
 
-### 3. reindex 自动化
-- [ ] 发文/改文后 hook 触发增量 reindex（现在纯手动，按 `content_hash` 已支持增量）
+### 3. reindex 自动化 ✅（每日 cron）
+- [x] APScheduler 每天 06:00 UTC+8 增量 reindex blog（`app/modules/kb/scheduler.py`，lifespan 挂载）。
+      比 write-hook 更稳：能覆盖 published_at 到期的调度发布（没有写事件）。按 content_hash 增量。
+- [ ] 可选：admin 改文后立即触发（即时性，daily 已够用）
 
 ### 4. 小优化
 - [ ] prerender 静态首页 nav 加 `ask`（目前只 SPA nav 有，爬虫看不到；interactive 页优先级低）
