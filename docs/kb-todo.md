@@ -33,8 +33,8 @@ asyncio.run(m())"'
 - [x] 迁移 `20260706_0100`：`ALTER TABLE kb_chunk ADD COLUMN embedding vector(1024)` + hnsw 索引；postgres 镜像换 `pgvector/pgvector:pg16`（prod+dev，数据卷兼容）
 - [x] `provider.Embedder`（OpenAI 兼容 `/embeddings`，批量，未配 key 自动降级）；reindex 里对每块嵌入
 - [x] `repository.search_chunks` 改混合：向量 `<=>` + pg_trgm 双路 RRF(k=60) 融合；无 qvec 降级纯 trigram
-- [ ] **部署 + reindex 一次**（需授权换 postgres 镜像；服务器 .env 配 `KB_EMBED_API_KEY`）
-- **修的短板**：trigram 对中文语义查询召回不准（如"作者是谁""大模型怎么省显存"）
+- [x] **已部署 + reindex（2026-07-07）**：postgres 换 pgvector、558 块灌向量、实测"作者是谁"能答了 ✅
+- **修的短板**：trigram 对中文语义查询召回不准（如"作者是谁""大模型怎么省显存"）—— 已修
 
 ### 2. 多源接入（验证"blog 只是其一"）
 - [ ] `NotesIngester`（读 markdown 文件夹 / Obsidian vault）
@@ -47,7 +47,7 @@ asyncio.run(m())"'
 - [ ] 可选：admin 改文后立即触发（即时性，daily 已够用）
 
 ### 4. 小优化
-- [ ] prerender 静态首页 nav 加 `ask`（目前只 SPA nav 有，爬虫看不到；interactive 页优先级低）
+- [x] prerender 静态首页 nav 加 `ask`（爬虫/LLM 在静态页也能发现问答入口）
 - [ ] 可选：Contextual Retrieval（每块嵌入前用 LLM 加一句上下文，检索失败 -49%）
 - [ ] 可选：中文全文分词升级 pg_jieba/zhparser（若精确匹配需求强）
 
