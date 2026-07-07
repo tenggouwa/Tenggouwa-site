@@ -28,14 +28,13 @@ asyncio.run(m())"'
 
 ## ⏳ 待办（按价值排序）
 
-### 1. 接嵌入 → 混合检索（最高价值，"能用→好用"）
-- [ ] 拿一个专用嵌入 key（**SiliconFlow bge-m3** 1024 维，推荐 / OpenAI 3-small 1536 / Voyage）
-- [ ] 迁移 `ALTER TABLE kb_chunk ADD COLUMN embedding vector(<dim>)`（需 postgres 镜像换 `pgvector/pgvector:pg16`，数据卷兼容）
-- [ ] `provider.py` 加 `Embedder`（OpenAI 兼容 `/embeddings`，env 配置）；ingest 里对每块嵌入
-- [ ] `repository.search_chunks` 改混合：向量召回 + pg_trgm/全文，RRF(k≈60) 融合
-- [ ] reindex 一次
-- **修的短板**：v0 trigram 对中文语义查询召回不准（如"大模型怎么省显存"问不出来）
-- 参考骨架：`Azure-Samples/rag-postgres-openai-python`（RRF SQL 现成）
+### 1. 接嵌入 → 混合检索（最高价值，"能用→好用"）✅ 代码完成（PR，待部署）
+- [x] 嵌入端点：**OpenRouter `baai/bge-m3`（1024 维）** —— 实测能用/稳定/批量，复用现有 OpenRouter key（走 Parasail，无 gemini 那种 ToS 403）
+- [x] 迁移 `20260706_0100`：`ALTER TABLE kb_chunk ADD COLUMN embedding vector(1024)` + hnsw 索引；postgres 镜像换 `pgvector/pgvector:pg16`（prod+dev，数据卷兼容）
+- [x] `provider.Embedder`（OpenAI 兼容 `/embeddings`，批量，未配 key 自动降级）；reindex 里对每块嵌入
+- [x] `repository.search_chunks` 改混合：向量 `<=>` + pg_trgm 双路 RRF(k=60) 融合；无 qvec 降级纯 trigram
+- [ ] **部署 + reindex 一次**（需授权换 postgres 镜像；服务器 .env 配 `KB_EMBED_API_KEY`）
+- **修的短板**：trigram 对中文语义查询召回不准（如"作者是谁""大模型怎么省显存"）
 
 ### 2. 多源接入（验证"blog 只是其一"）
 - [ ] `NotesIngester`（读 markdown 文件夹 / Obsidian vault）

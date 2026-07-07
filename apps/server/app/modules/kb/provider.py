@@ -65,3 +65,49 @@ class ChatLLM:
 
 
 chat_llm = ChatLLM()
+
+
+class Embedder:
+    """OpenAI 兼容嵌入（默认 OpenRouter baai/bge-m3，1024 维）。
+
+    env：KB_EMBED_BASE_URL / KB_EMBED_API_KEY / KB_EMBED_MODEL。
+    未配 key 时 configured=False，检索/灌库自动降级到纯 pg_trgm。
+    """
+
+    def __init__(self) -> None:
+        self.base_url = (os.environ.get("KB_EMBED_BASE_URL") or "https://openrouter.ai/api/v1").rstrip("/")
+        self.api_key = os.environ.get("KB_EMBED_API_KEY", "")
+        self.model = os.environ.get("KB_EMBED_MODEL") or "baai/bge-m3"
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_key)
+
+    async def embed(self, texts: list[str], *, batch: int = 64) -> list[list[float]]:
+        """批量嵌入，分批发送。texts 空则返回 []。"""
+        if not self.configured:
+            raise RuntimeError("KB_EMBED_API_KEY 未配置")
+        if not texts:
+            return []
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        out: list[list[float]] = []
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+            for start in range(0, len(texts), batch):
+                part = texts[start : start + batch]
+                resp = await client.post(
+                    f"{self.base_url}/embeddings",
+                    headers=headers,
+                    json={"model": self.model, "input": part},
+                )
+                resp.raise_for_status()
+                data = resp.json().get("data", [])
+                data.sort(key=lambda d: d.get("index", 0))
+                out.extend(d["embedding"] for d in data)
+        return out
+
+    async def embed_one(self, text: str) -> list[float]:
+        vecs = await self.embed([text])
+        return vecs[0]
+
+
+embedder = Embedder()

@@ -17,7 +17,9 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector/pgvector:pg16 = 官方 postgres:16 + pgvector 扩展。与旧 16-alpine 数据卷
+    # 同为 PG16、格式兼容，仅换镜像（KB 语义检索需要 vector 扩展）。
+    image: pgvector/pgvector:pg16
     container_name: tenggouwa-postgres
     restart: unless-stopped
     # 只绑 127.0.0.1：公网摸不到，DataGrip 等只能经 SSH 隧道连
