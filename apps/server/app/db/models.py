@@ -6,6 +6,7 @@ Alembic autogenerate 看不到。Pydantic schema 仍然放在各业务模块的 
 
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -480,7 +481,7 @@ class KBDocumentRow(Base):
 
 
 class KBChunkRow(Base):
-    """知识库分块：检索最小单元。v0 检索按 content 做 pg_trgm 相似度。"""
+    """知识库分块：检索最小单元。检索 = pg_trgm(content) + 向量(embedding) 双路 RRF。"""
 
     __tablename__ = "kb_chunk"
 
@@ -488,6 +489,8 @@ class KBChunkRow(Base):
     document_id: Mapped[int] = mapped_column(ForeignKey("kb_document.id", ondelete="CASCADE"), nullable=False)
     ord: Mapped[int] = mapped_column(nullable=False)  # 块在文档内的序
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # bge-m3 = 1024 维；nullable 让未嵌入的块（缺 KB_EMBED_API_KEY 时）也能存、走纯 trigram
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
     meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     __table_args__ = (Index("uq_kb_chunk_doc_ord", "document_id", "ord", unique=True),)

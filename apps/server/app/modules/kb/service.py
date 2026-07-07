@@ -5,6 +5,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .ingest import INGESTERS, chunk_markdown, content_hash
+from .provider import embedder
 from .repository import KBRepository
 from .schema import Citation, ReindexResult
 
@@ -35,7 +36,9 @@ class KBService:
             if not changed and not force:
                 continue
             chunks = chunk_markdown(doc["raw_md"])
-            await repo.replace_chunks(docrow.id, chunks)
+            # 配了嵌入就一起算向量存下；没配则 embedding 留空、检索降级为纯 trigram
+            embeddings = await embedder.embed(chunks) if embedder.configured else None
+            await repo.replace_chunks(docrow.id, chunks, embeddings)
             changed_docs += 1
             total_chunks += len(chunks)
         await repo.touch_source(source.id)
@@ -49,7 +52,13 @@ class KBService:
     async def retrieve(
         self, session: AsyncSession, q: str, sources: list[str] | None, *, limit: int = TOP_K
     ) -> list[dict]:
-        return await KBRepository(session).search_chunks(q, limit=limit, sources=sources)
+        qvec: list[float] | None = None
+        if embedder.configured:
+            try:
+                qvec = await embedder.embed_one(q)
+            except Exception:
+                logger.exception("query embed failed; 降级为纯 trigram 检索")
+        return await KBRepository(session).search_chunks(q, qvec, limit=limit, sources=sources)
 
     def build_messages(self, q: str, hits: list[dict]) -> list[dict]:
         blocks = [f"[{i}] 《{h['title']}》\n{h['content']}" for i, h in enumerate(hits, 1)]
