@@ -557,6 +557,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/agent/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Chat */
+        post: operations["chat_api_public_agent_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/vitals": {
         parameters: {
             query?: never;
@@ -1164,6 +1181,11 @@ export interface components {
             revoked_at: string | null;
             /** Online */
             online: boolean;
+        };
+        /** AgentChatRequest */
+        AgentChatRequest: {
+            /** Q */
+            q: string;
         };
         /** AgentIssueRequest */
         AgentIssueRequest: {
@@ -3653,6 +3675,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_list_SkillInfo__"];
+                };
+            };
+        };
+    };
+    chat_api_public_agent_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

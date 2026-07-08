@@ -63,6 +63,33 @@ class ChatLLM:
                 if delta:
                     yield delta
 
+    async def complete(
+        self,
+        messages: list[dict],
+        *,
+        tools: list[dict] | None = None,
+        tool_choice: str = "auto",
+        max_tokens: int = 1024,
+        temperature: float = 0.3,
+    ) -> dict:
+        """非流式，返回 choices[0].message（含 content / tool_calls）。M4 agent 的工具决策用。"""
+        if not self.api_key:
+            raise RuntimeError("KB_LLM_API_KEY 未配置")
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = tool_choice
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
+            resp = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
+            resp.raise_for_status()
+            return (resp.json().get("choices") or [{}])[0].get("message", {})
+
 
 chat_llm = ChatLLM()
 

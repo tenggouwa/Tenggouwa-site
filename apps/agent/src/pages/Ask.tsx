@@ -1,27 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../lib/api';
 
-// M1：先直接问知识库（SSE 到 /api/public/kb/ask）。
-// M4 会把这里升级成能自主调用多个 skill 的 agent 对话（tool-calling）。
+// agent 对话：POST /api/public/agent/chat，SSE 事件 tool / token / done。
+// 模型自主决定是否调用 skill（如 kb_search 查知识库），再流式作答。
 
-interface Citation {
-  title: string;
-  url?: string | null;
+interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
 }
 
 interface Turn {
   q: string;
+  tools: ToolCall[];
   answer: string;
-  citations: Citation[];
   error?: string;
   done: boolean;
 }
 
-// 引用回链指向主站（agent 在 /agent/ 子路径，相对链接会错）
-const SITE = 'https://tenggouwa.com';
-const abs = (u?: string | null) => (u ? (u.startsWith('http') ? u : SITE + u) : undefined);
-
 const SUGGESTIONS = ['这个站点的作者是谁？', '大模型推理怎么省显存？', '轮盘为什么长期必输？'];
+
+const fmtArgs = (a: Record<string, unknown>) =>
+  Object.entries(a)
+    .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+    .join(' ');
 
 export default function Ask() {
   const [q, setQ] = useState('');
@@ -45,23 +46,25 @@ export default function Ask() {
       else if (line.startsWith('data:')) data += line.slice(5).trim();
     }
     if (!data) return;
-    let obj: { delta?: string; citations?: Citation[]; message?: string };
+    let obj: { delta?: string; name?: string; args?: Record<string, unknown>; message?: string };
     try {
       obj = JSON.parse(data);
     } catch {
       return;
     }
-    if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
-    else if (event === 'done') updateTurn(idx, (t) => ({ ...t, citations: obj.citations ?? [], done: true }));
+    if (event === 'tool')
+      updateTurn(idx, (t) => ({ ...t, tools: [...t.tools, { name: obj.name ?? '', args: obj.args ?? {} }] }));
+    else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
+    else if (event === 'done') updateTurn(idx, (t) => ({ ...t, done: true }));
     else if (event === 'error') updateTurn(idx, (t) => ({ ...t, error: obj.message ?? '出错了', done: true }));
   }
 
   async function run(query: string) {
     const idx = turns.length;
-    setTurns((t) => [...t, { q: query, answer: '', citations: [], done: false }]);
+    setTurns((t) => [...t, { q: query, tools: [], answer: '', done: false }]);
     setBusy(true);
     try {
-      const res = await fetch(`${API_BASE}/api/public/kb/ask`, {
+      const res = await fetch(`${API_BASE}/api/public/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ q: query }),
@@ -102,7 +105,7 @@ export default function Ask() {
           <span className="text-terminal-pink">$ </span>ask
         </h1>
         <p className="text-sm text-terminal-gray/70">
-          问点关于本站的问题，答案由 AI 依据知识库生成、附来源。
+          跟 agent 对话。它会自己决定要不要调用工具（比如查知识库）来回答。
         </p>
       </div>
 
@@ -134,35 +137,28 @@ export default function Ask() {
           )}
 
           {turns.map((t, i) => (
-            <div key={i} className="space-y-2">
+            <div key={i} className="space-y-1.5">
               <div className="text-terminal-gray">
                 <span className="text-terminal-pink">~$</span> {t.q}
               </div>
-              <div className="whitespace-pre-wrap text-terminal-gray/90 leading-relaxed">
-                {t.answer}
-                {!t.done && <span className="inline-block w-2 h-4 bg-terminal-green/80 align-text-bottom animate-blink" />}
-                {t.error && <span className="text-terminal-red">[错误] {t.error}</span>}
-              </div>
-              {t.citations.length > 0 && (
-                <div className="pt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-terminal-gray/60">
-                  <span className="text-terminal-green">$ ls sources/</span>
-                  {t.citations.map((c, ci) =>
-                    c.url ? (
-                      <a
-                        key={ci}
-                        href={abs(c.url)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-terminal-cyan hover:text-terminal-green hover:underline"
-                      >
-                        {c.title}
-                      </a>
-                    ) : (
-                      <span key={ci}>{c.title}</span>
-                    ),
-                  )}
+              {t.tools.map((tc, ti) => (
+                <div key={ti} className="text-xs text-terminal-green/80">
+                  <span className="text-terminal-gray/50">$</span> {tc.name}
+                  <span className="text-terminal-gray/60"> {fmtArgs(tc.args)}</span>
+                </div>
+              ))}
+              {!t.done && t.answer === '' && (
+                <div className="text-xs text-terminal-gray/40">
+                  {t.tools.length ? '读取资料、思考中…' : '思考中…'}
                 </div>
               )}
+              <div className="whitespace-pre-wrap text-terminal-gray/90 leading-relaxed">
+                {t.answer}
+                {!t.done && t.answer !== '' && (
+                  <span className="inline-block w-2 h-4 bg-terminal-green/80 align-text-bottom animate-blink" />
+                )}
+                {t.error && <span className="text-terminal-red">[错误] {t.error}</span>}
+              </div>
             </div>
           ))}
           <div ref={bottomRef} />
@@ -175,7 +171,7 @@ export default function Ask() {
             onChange={(e) => setQ(e.target.value)}
             disabled={busy}
             autoFocus
-            placeholder={busy ? '生成中…' : '问一个问题，回车发送'}
+            placeholder={busy ? '思考中…' : '问一个问题，回车发送'}
             className="flex-1 bg-transparent outline-none text-terminal-gray placeholder:text-terminal-gray/40 disabled:opacity-50"
           />
           <button
@@ -189,7 +185,7 @@ export default function Ask() {
       </div>
 
       <p className="text-xs text-terminal-gray/40">
-        当前直接问知识库；后续会升级成能自主调用多个 skill 的 agent。答案由 AI 生成，可能有误，点来源核对。
+        agent 用 DeepSeek + skills（当前有 kb_search）。答案由 AI 生成，可能有误。
       </p>
     </div>
   );
