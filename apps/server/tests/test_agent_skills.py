@@ -5,11 +5,121 @@ web_fetch 的拒绝分支在任何请求之前就返回。
 """
 
 import pytest
-from modules.agent.service import _est_tokens, _filter_leaked_stream, _strip_leak
+from modules.agent.service import _est_tokens, _strip_leak
+from modules.kb.provider import _merge_tool_call_deltas
 from modules.skills.ask_user import _handler as ask_handler
 from modules.skills.update_plan import _handler as plan_handler
 from modules.skills.web_fetch import _handler as fetch_handler
 from modules.skills.web_fetch import _host_is_public, _to_text
+
+# ---------- stream_step 的 tool_calls 分片累积 ----------
+
+
+def test_merge_tool_calls_fragmented_arguments():
+    acc: dict = {}
+    # 第一片带 id+name+参数开头，后续片只追加 arguments
+    _merge_tool_call_deltas(acc, [{"index": 0, "id": "c1", "function": {"name": "kb_search", "arguments": '{"q'}}])
+    _merge_tool_call_deltas(acc, [{"index": 0, "function": {"arguments": 'uery":"'}}])
+    _merge_tool_call_deltas(acc, [{"index": 0, "function": {"arguments": '梅兰芳"}'}}])
+    out = [acc[i] for i in sorted(acc)]
+    assert out == [
+        {"id": "c1", "type": "function", "function": {"name": "kb_search", "arguments": '{"query":"梅兰芳"}'}}
+    ]
+
+
+def test_merge_tool_calls_parallel_indexes_no_crosstalk():
+    acc: dict = {}
+    _merge_tool_call_deltas(acc, [{"index": 0, "id": "a", "function": {"name": "kb_search", "arguments": ""}}])
+    _merge_tool_call_deltas(acc, [{"index": 1, "id": "b", "function": {"name": "web_fetch", "arguments": ""}}])
+    _merge_tool_call_deltas(acc, [{"index": 1, "function": {"arguments": '{"url":"x"}'}}])
+    _merge_tool_call_deltas(acc, [{"index": 0, "function": {"arguments": '{"query":"y"}'}}])
+    out = [acc[i] for i in sorted(acc)]
+    assert out[0]["id"] == "a" and out[0]["function"] == {"name": "kb_search", "arguments": '{"query":"y"}'}
+    assert out[1]["id"] == "b" and out[1]["function"] == {"name": "web_fetch", "arguments": '{"url":"x"}'}
+
+
+def test_merge_tool_calls_empty_deltas_noop():
+    acc: dict = {}
+    _merge_tool_call_deltas(acc, [])
+    assert acc == {}
+
+
+# ---------- H1：skill 抛异常不得留下孤儿 tool_call（否则会话 resume 被 DeepSeek 400 毒化）----------
+
+
+class _FakeRepo:
+    def __init__(self, session, rows):
+        self._rows = rows
+
+    async def create_session(self, title):
+        return "s"
+
+    async def get_session(self, sid):
+        class _R:
+            id = "s"
+            summary = None
+            summarized_upto_seq = 0
+
+        return _R() if sid else None
+
+    async def load_window(self, sid):
+        from modules.agent.repository import AgentWindow
+
+        return AgentWindow(None, [], 1, 0)
+
+    async def append(self, sid, seq, role, content, *, tool_calls=None, tool_call_id=None):
+        self._rows.append((role, bool(tool_calls), content))
+
+    async def rows_after(self, sid, seq):
+        return []
+
+    async def save_summary(self, *a, **k):
+        pass
+
+
+async def test_skill_exception_keeps_toolcall_paired(monkeypatch):
+    import modules.agent.service as svc
+
+    rows: list = []
+    monkeypatch.setattr(svc, "AgentRepository", lambda session: _FakeRepo(session, rows))
+    monkeypatch.setattr(svc.skills_service, "tools", list)  # 空 tools
+
+    calls = {"n": 0}
+
+    async def fake_stream_step(_messages, **_kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            yield {"type": "content", "delta": "好的我来抓取"}
+            yield {
+                "type": "tool_calls",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "web_fetch", "arguments": '{"url":"http://x"}'},
+                    }
+                ],
+            }
+        else:
+            yield {"type": "content", "delta": "抓取失败了，建议直接看官方账号。"}
+
+    monkeypatch.setattr(svc.chat_llm, "stream_step", fake_stream_step)
+
+    async def boom(*_a):
+        raise RuntimeError("timeout")
+
+    monkeypatch.setattr(svc.skills_service, "invoke", boom)
+
+    events = [ev async for ev in svc.agent_service.answer_stream(None, "帮我抓 x")]
+
+    # 带 tool_calls 的 assistant 之后必须紧跟一条 tool 结果（配对，无孤儿）
+    idx = next(i for i, (role, tc, _) in enumerate(rows) if role == "assistant" and tc)
+    assert rows[idx + 1][0] == "tool"
+    assert "执行失败" in rows[idx + 1][2]
+    # 且仍产出了最终 assistant 答案 + token 流
+    assert any(role == "assistant" and not tc for role, tc, _ in rows)
+    assert any(e["type"] == "token" for e in events)
+
 
 # ---------- tool-call 泄漏过滤 ----------
 
@@ -26,38 +136,6 @@ def test_strip_leak_trims_dangling_lt():
 def test_strip_leak_passthrough_clean():
     clean = "普通答案，含 List<int> 和 a < b，无特殊 token。"
     assert _strip_leak(clean) == clean
-
-
-async def _drain(deltas: list[str]) -> str:
-    async def gen():
-        for d in deltas:
-            yield d
-
-    out = []
-    async for piece in _filter_leaked_stream(gen()):
-        out.append(piece)
-    return "".join(out)
-
-
-async def test_filter_stream_clean_passthrough():
-    assert await _drain(["你好", "，", "世界"]) == "你好，世界"
-
-
-async def test_filter_stream_leak_single_delta():
-    got = await _drain(["答案完整。", "<｜｜DSML｜｜tool_calls>脏"])
-    assert got == "答案完整。"
-
-
-async def test_filter_stream_leak_split_across_deltas():
-    # "<" 和 ｜ 分在不同 delta：LEAK_HOLD 必须保证 '<' 不被提前发出
-    got = await _drain(["答案OK", "结尾<", "｜｜DSML｜｜invoke>"])
-    assert got == "答案OK结尾"
-    assert "<" not in got and "｜" not in got
-
-
-async def test_filter_stream_leak_char_by_char():
-    got = await _drain(list("完整答案。<｜tool"))
-    assert got == "完整答案。"
 
 
 # ---------- ask_user ----------

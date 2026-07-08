@@ -40,7 +40,6 @@ PLAN_SKILL = "update_plan"
 ASK_SKILL = "ask_user"  # 抛选择题给用户，触发后结束本轮、等用户点选下一轮续上
 
 LEAK_TOKEN = "｜"  # ｜ DeepSeek tool-call 特殊 token 分隔符；正常文本/代码不会出现，用作泄漏起点
-LEAK_HOLD = 2  # 流式发送时保留的尾部字符数，防 "<｜" 跨 delta 被切开漏检
 
 
 def _est_tokens(text: str) -> int:
@@ -49,35 +48,14 @@ def _est_tokens(text: str) -> int:
 
 
 def _strip_leak(text: str) -> str:
-    """砍掉 DeepSeek 泄漏的 tool-call 文本：首个 ｜ 及之后全丢，并去掉悬空的 '<'。"""
+    """砍掉 DeepSeek 泄漏的 tool-call 文本：首个 ｜ 及之后全丢，并去掉悬空的 '<'。
+
+    统一流式循环里 tools 一直带着、走结构化 tool_calls，正常不会泄漏；此函数作为防御兜底。
+    """
     idx = text.find(LEAK_TOKEN)
     if idx == -1:
         return text
     return text[:idx].rstrip("<").rstrip()
-
-
-async def _filter_leaked_stream(raw: AsyncIterator[str]) -> AsyncIterator[str]:
-    """过滤 DeepSeek 把 tool-call 当文本吐出来的泄漏（<｜｜DSML｜｜tool_calls>...）。
-
-    ｜(U+FF5C) 是其特殊 token 分隔符，正常中英文/代码绝不出现——一见到就把它及之后全丢、停流。
-    发送时保留尾部 LEAK_HOLD 字符不发，防 "<｜" 跨 delta 被切开（先漏发 '<' 再才发现 ｜）。
-    逐段 yield 干净文本增量；累加即最终干净答案。
-    """
-    buf = ""
-    emitted = 0
-    async for delta in raw:
-        buf += delta
-        if LEAK_TOKEN in buf:
-            clean = _strip_leak(buf)
-            if len(clean) > emitted:
-                yield clean[emitted:]
-            return
-        safe = len(buf) - LEAK_HOLD
-        if safe > emitted:
-            yield buf[emitted:safe]
-            emitted = safe
-    if len(buf) > emitted:
-        yield buf[emitted:]
 
 
 class AgentService:
@@ -102,17 +80,40 @@ class AgentService:
         messages.extend(window.messages)
         messages.append({"role": "user", "content": q})
 
+        # 统一流式循环：每轮都带 tools 流式跑——正文实时显示、tool_calls 从结构化 delta 解析执行，
+        # 不再"非流式决策 + 二次生成"，从根上消除隐藏 preamble / 悬空引用 / tool-call 文本泄漏。
         tools = skills_service.tools()
-        asked = False  # 调了 ask_user：本轮以选择题收尾，不再流式作答
+        budget_warned = False  # 预算提示只发一次，别每轮重复 append
+        answered = False  # 本轮是否已产出最终答案（无 tool_calls）或以 ask_user 收尾
         for _ in range(MAX_STEPS):
-            msg = await chat_llm.complete(messages, tools=tools)
-            tool_calls = msg.get("tool_calls") or []
+            content, tool_calls = "", []
+            leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
+            async for ev in chat_llm.stream_step(messages, tools=tools):
+                if ev["type"] == "content":
+                    if leaked:
+                        continue
+                    piece = ev["delta"]
+                    if LEAK_TOKEN in piece:  # 单 codepoint、不跨 delta，扫本段即可
+                        piece = _strip_leak(piece)
+                        leaked = True
+                    if piece:
+                        content += piece
+                        yield {"type": "token", "delta": piece}
+                elif ev["type"] == "tool_calls":
+                    tool_calls = ev["tool_calls"]
+
             if not tool_calls:
+                # 无工具调用：本轮正文即最终答案（已流式发出），落库收尾
+                await repo.append(sid, seq, "assistant", content)
+                seq += 1
+                answered = True
                 break
-            content = msg.get("content") or ""
+
             messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
             await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
             seq += 1
+
+            asked = False
             for tc in tool_calls:
                 fn = tc.get("function", {})
                 name = fn.get("name", "")
@@ -124,31 +125,42 @@ class AgentService:
                     yield {"type": "plan", "plan": args.get("plan", [])}
                 elif name == ASK_SKILL:
                     yield {"type": "ask", "intro": content, "questions": args.get("questions", [])}
+                    asked = True
                 else:
                     yield {"type": "tool", "name": name, "args": args}
-                result = await skills_service.invoke(session, name, args)
+                # H1：每个 tool_call 必须有配对的 tool 结果落库，否则该会话 resume 时 DeepSeek 400。
+                # skill handler 抛异常也要兜住、补一条 error 结果，保住 assistant↔tool 配对。
+                try:
+                    result = await skills_service.invoke(session, name, args)
+                except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+                    logger.exception("skill %s failed", name)
+                    result = f"（skill {name} 执行失败：{e}）"
                 messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": result})
                 await repo.append(sid, seq, "tool", result, tool_call_id=tc.get("id"))
                 seq += 1
-                if name == ASK_SKILL:
-                    asked = True
-                    break  # 抛完选择题即停，等用户点选
-            if asked:
-                break
-            if sum(_est_tokens(m.get("content") or "") for m in messages) > STEP_TOKEN_BUDGET:
-                messages.append({"role": "system", "content": "预算已尽，请基于现有信息直接作答。"})
-                break
 
-        if asked:
-            yield {"type": "done"}
-            return
+            if asked:  # 抛完选择题即停，等用户点选（此前已把所有 tool_call 配上结果）
+                answered = True
+                break
+            if not budget_warned and sum(_est_tokens(m.get("content") or "") for m in messages) > STEP_TOKEN_BUDGET:
+                messages.append({"role": "system", "content": "预算已尽，请基于现有信息直接作答，不要再调用工具。"})
+                budget_warned = True
 
-        # max_tokens=4096：默认 1024 会截断长代码答案。过滤逻辑见 _filter_leaked_stream。
-        parts: list[str] = []
-        async for piece in _filter_leaked_stream(chat_llm.stream(messages, max_tokens=4096)):
-            parts.append(piece)
-            yield {"type": "token", "delta": piece}
-        await repo.append(sid, seq, "assistant", "".join(parts))
+        # M2：MAX_STEPS 耗尽仍在调工具、始终没产出最终答案 —— 强制一次不带 tools 的收尾作答
+        if not answered:
+            final, leaked = "", False
+            async for ev in chat_llm.stream_step(messages, tools=None):
+                if ev["type"] == "content" and not leaked:
+                    piece = ev["delta"]
+                    if LEAK_TOKEN in piece:
+                        piece = _strip_leak(piece)
+                        leaked = True
+                    if piece:
+                        final += piece
+                        yield {"type": "token", "delta": piece}
+            await repo.append(sid, seq, "assistant", final)
+            seq += 1
+
         yield {"type": "done"}
 
     async def _maybe_compact(self, repo: AgentRepository, sid: str) -> None:
