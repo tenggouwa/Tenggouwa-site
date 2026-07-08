@@ -1,6 +1,6 @@
 # apps/agent v2 设计:把内核对齐 Codex / Claude Code
 
-> 前置调研:[docs/agent-architecture-research.md](./agent-architecture-research.md)(两家逐层拆解 + 对比)。
+> 前置调研:[docs/agent/agent-architecture-research.md](./agent-architecture-research.md)(两家逐层拆解 + 对比)。
 > 本文档是那份调研的**落地版**——只挑对个人 KB agent 真正有用的 harness 模式,钉在本仓库真实代码上,给出表结构、消息装配、工具 schema、compaction 阈值与 PR 切分。
 >
 > 设计日期:2026-07-08。作者视角:apps/server 的 `agent`/`skills`/`kb` 三模块已上线(v1),前端 apps/agent 单轮问答已通。
@@ -252,4 +252,4 @@ for step in range(MAX_STEPS):
 
 ## 10. 一句话
 
-做完 P1–P3,agent 内核在长循环、多轮记忆、prompt 经济性、可规划性上与 Codex/Claude Code **同构**;不做的三样(五层 compaction、OS 沙箱、无状态 ZDR)是它们为**自己的问题**付的税,不是我们的。关联:[[project_agent_app]] · [[project_kb]] · [docs/agent-architecture-research.md](./agent-architecture-research.md)。
+做完 P1–P3,agent 内核在长循环、多轮记忆、prompt 经济性、可规划性上与 Codex/Claude Code **同构**;不做的三样(五层 compaction、OS 沙箱、无状态 ZDR)是它们为**自己的问题**付的税,不是我们的。关联:[[project_agent_app]] · [[project_kb]] · [docs/agent/agent-architecture-research.md](./agent-architecture-research.md)。

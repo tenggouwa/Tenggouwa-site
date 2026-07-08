@@ -5,7 +5,7 @@ env 配置，换供应商不改代码：
   KB_LLM_API_KEY   （放 .env，勿提交）
   KB_LLM_MODEL     默认 deepseek-chat（官方现已指向 deepseek-v4-flash）
 
-v0 只用生成；嵌入暂缺（需另配专用嵌入端点，见 docs/kb-design.md §3）。
+v0 只用生成；嵌入暂缺（需另配专用嵌入端点，见 docs/agent/kb-design.md §3）。
 """
 
 import json
@@ -33,7 +33,7 @@ def _merge_tool_call_deltas(acc: dict[int, dict], deltas: list[dict]) -> None:
 
 
 def _log_cache(where: str, usage: dict | None) -> None:
-    """打 DeepSeek 上下文缓存命中，验证 prefix 稳定性（见 docs/agent-v2-design.md §2）。
+    """打 DeepSeek 上下文缓存命中，验证 prefix 稳定性（见 docs/agent/agent-v2-design.md §2）。
 
     多轮对话里 hit 应随历史增长而上升；若长期为 0，说明消息前缀（system + tools）
     被变动内容污染，缓存全 miss。命中不影响功能，只影响成本，故只记日志。

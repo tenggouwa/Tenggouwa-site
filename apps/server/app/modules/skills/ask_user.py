@@ -2,7 +2,7 @@
 
 抄 Claude AskUserQuestion / Codex request_user_input。agent/service 特殊拦截这个 skill：
 发 event: ask 给前端渲染选项，并结束当前轮（不再流式作答）；用户点选后作为下一轮 user
-消息续上，多轮记忆接住上下文（见 docs/agent-v2-design.md §5）。
+消息续上，多轮记忆接住上下文（见 docs/agent/agent-v2-design.md §5）。
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession

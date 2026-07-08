@@ -1,6 +1,6 @@
 """agent 会话持久化：append-only 消息 + 极简 compaction 状态。
 
-见 docs/agent-v2-design.md §3/§4。消息只插不改，load 时按 (session_id, seq) 升序取
+见 docs/agent/agent-v2-design.md §3/§4。消息只插不改，load 时按 (session_id, seq) 升序取
 summarized_upto_seq 之后的窗口，配合 sessions.summary 重建 LLM messages。
 """
 

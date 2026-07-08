@@ -1,6 +1,6 @@
 """update_plan skill：把任务拆成有序步骤写进上下文，减少长链路目标漂移。
 
-抄 Codex update_plan / Claude TodoWrite（见 docs/agent-v2-design.md §5.2）。handler 不查外部、
+抄 Codex update_plan / Claude TodoWrite（见 docs/agent/agent-v2-design.md §5.2）。handler 不查外部、
 不落库——它的价值就是把计划写回上下文；agent/service 另外发 event: plan 给前端渲染 checklist。
 """
 

@@ -1,6 +1,6 @@
 """web_fetch skill：抓一个公网 URL 的正文，供 agent 补充知识库之外的信息。
 
-安全红线（见 docs/agent-v2-design.md §6，抄 Codex exec_command 的截断 + execpolicy 判定思路）：
+安全红线（见 docs/agent/agent-v2-design.md §6，抄 Codex exec_command 的截断 + execpolicy 判定思路）：
 - 只读、仅 http/https；
 - SSRF 防护：解析主机 IP，拒绝环回 / 私网 / 保留段（防打内网服务）；
 - 不跟随重定向（跟随会绕过上面的 IP 校验）；
