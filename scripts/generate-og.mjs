@@ -95,7 +95,7 @@ function svgTemplate({ title, slug, tags, isDefault = false }) {
 
   const titleText = isDefault ? 'tenggouwa · 极客小站' : clip(slug, 48);
   const subtitle = isDefault
-    ? '腾构娃的极客小站 · AI / 系统 / 工具的笔记、灵感与实验'
+    ? 'tenggouwa的极客小站 · AI / 系统 / 工具的笔记、灵感与实验'
     : clip(title, 38);
   const tagsLine = tags.length ? `# ${tags.slice(0, 4).join('  # ')}` : '';
 
