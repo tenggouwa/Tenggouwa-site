@@ -24,6 +24,35 @@ const fmtArgs = (a: Record<string, unknown>) =>
     .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
     .join(' ');
 
+// 轻量安全的行内 markdown：**粗体** / `代码`。其余（换行、列表序号）靠 whitespace-pre-wrap。
+// 用 React 节点拼装（不注入 HTML），无 XSS 风险；流式时未闭合的 ** 先按原文显示，闭合后变粗体。
+function renderInline(text: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    if (m[1] !== undefined) {
+      nodes.push(
+        <strong key={key++} className="text-terminal-green font-semibold">
+          {m[1]}
+        </strong>,
+      );
+    } else if (m[2] !== undefined) {
+      nodes.push(
+        <code key={key++} className="text-terminal-cyan bg-terminal-panel/60 px-1 rounded">
+          {m[2]}
+        </code>,
+      );
+    }
+    last = re.lastIndex;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
+}
+
 export default function Ask() {
   const [q, setQ] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -153,7 +182,7 @@ export default function Ask() {
                 </div>
               )}
               <div className="whitespace-pre-wrap text-terminal-gray/90 leading-relaxed">
-                {t.answer}
+                {renderInline(t.answer)}
                 {!t.done && t.answer !== '' && (
                   <span className="inline-block w-2 h-4 bg-terminal-green/80 align-text-bottom animate-blink" />
                 )}
