@@ -7,7 +7,7 @@ published_at: 2026-05-22
 ---
 
 > 这是 AI 系列的第 1 篇。系列目标：把 AI 学透。
-> 完整路线图见仓库 `docs/ai-series-plan.md`。
+> 完整路线图见仓库 `docs/content/ai-series-plan.md`。
 
 ## 0. 先做一件小事：把名词的雾散掉
 
@@ -207,7 +207,7 @@ AI 圈一直有三派人，互相看不顺眼：
               一路通到 RAG / Agent / 评估 / 多模态
 ```
 
-完整路线图：[docs/ai-series-plan.md](docs/ai-series-plan.md)。
+完整路线图：[docs/content/ai-series-plan.md](docs/content/ai-series-plan.md)。
 
 ---
 

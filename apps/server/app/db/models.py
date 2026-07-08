@@ -497,7 +497,7 @@ class KBChunkRow(Base):
 
 
 # ---------- agent：对话会话（多轮记忆 + 恢复）----------
-# 见 docs/agent-v2-design.md §3。append-only：消息只插不改，resume 时逐字节重建 messages
+# 见 docs/agent/agent-v2-design.md §3。append-only：消息只插不改，resume 时逐字节重建 messages
 # 以保住 DeepSeek 上下文缓存前缀。公开无鉴权，id 用不可猜的 uuid4，不做会话列表页。
 
 

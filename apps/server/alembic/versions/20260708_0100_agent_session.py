@@ -4,7 +4,7 @@ Revision ID: 20260708_0100
 Revises: 20260706_0100
 Create Date: 2026-07-08
 
-见 docs/agent-v2-design.md §3。agent_message append-only；(session_id, seq) 索引用于按序 load。
+见 docs/agent/agent-v2-design.md §3。agent_message append-only；(session_id, seq) 索引用于按序 load。
 """
 
 from collections.abc import Sequence

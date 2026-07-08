@@ -1,6 +1,6 @@
 """agent 编排：多轮 tool-calling 循环 + 会话记忆 + 极简 compaction。
 
-流程（见 docs/agent-v2-design.md）：
+流程（见 docs/agent/agent-v2-design.md）：
 - 载入会话历史（summary + 近若干轮）→ 拼成 messages；
 - LLM(带 tools) 决定是否调 skill → 执行、把结果回填 → 循环直到不再调工具；
 - 再流式生成最终答案；全程 append-only 落库，供多轮 resume。
