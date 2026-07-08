@@ -44,11 +44,17 @@ class ChatLLM:
         *,
         max_tokens: int = 1024,
         temperature: float = 0.3,
+        tools: list[dict] | None = None,
+        tool_choice: str | None = None,
     ) -> AsyncIterator[str]:
-        """流式生成，逐 token yield 文本增量。OpenAI 兼容 SSE。"""
+        """流式生成，逐 token yield 文本增量。OpenAI 兼容 SSE。
+
+        agent 最终作答传 tools + tool_choice="none"：显式禁止本轮调工具，否则 DeepSeek 会被
+        前文的工具调用带跑偏、把 tool-call 语法当普通文本吐出来（污染排版 + 吃光 token 致截断）。
+        """
         if not self.api_key:
             raise RuntimeError("KB_LLM_API_KEY 未配置")
-        payload = {
+        payload: dict = {
             "model": self.model,
             "messages": messages,
             "stream": True,
@@ -56,6 +62,9 @@ class ChatLLM:
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
+        if tools is not None and tool_choice is not None:
+            payload["tools"] = tools
+            payload["tool_choice"] = tool_choice
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         timeout = httpx.Timeout(120.0, connect=10.0)
         url = f"{self.base_url}/chat/completions"
