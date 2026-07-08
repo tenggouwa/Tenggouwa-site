@@ -4,13 +4,16 @@
 不要随机化 / 动态重排（见 docs/agent-v2-design.md §2，Codex 踩过 MCP list_changed 排序坑）。
 """
 
+from .ask_user import ASK_USER
 from .base import Skill
 from .kb_search import KB_SEARCH
 from .update_plan import UPDATE_PLAN
 from .web_fetch import WEB_FETCH
 
+# 顺序 = tools 顺序 = prompt cache 前缀，新 skill 一律追加到末尾（勿插中间/重排）。
 REGISTRY: dict[str, Skill] = {
     KB_SEARCH.name: KB_SEARCH,
     UPDATE_PLAN.name: UPDATE_PLAN,
     WEB_FETCH.name: WEB_FETCH,
+    ASK_USER.name: ASK_USER,
 }
