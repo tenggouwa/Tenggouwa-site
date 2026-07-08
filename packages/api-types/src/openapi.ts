@@ -540,6 +540,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Skills */
+        get: operations["list_skills_api_public_skills_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/vitals": {
         parameters: {
             query?: never;
@@ -2331,6 +2348,21 @@ export interface components {
             /** Data */
             data?: components["schemas"]["PostSummary"][] | null;
         };
+        /** ResponseModel[list[SkillInfo]] */
+        ResponseModel_list_SkillInfo__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["SkillInfo"][] | null;
+        };
         /** ResponseModel[list[TerminalSessionLog]] */
         ResponseModel_list_TerminalSessionLog__: {
             /**
@@ -2440,6 +2472,17 @@ export interface components {
             ctr: number;
             /** Position */
             position: number;
+        };
+        /** SkillInfo */
+        SkillInfo: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            };
         };
         /** StatsSummary */
         StatsSummary: {
@@ -3590,6 +3633,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_skills_api_public_skills_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_SkillInfo__"];
                 };
             };
         };

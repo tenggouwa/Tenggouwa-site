@@ -22,6 +22,7 @@ from .posts.router import public_router as post_public_router
 from .search.router import public_router as search_public_router
 from .seo.router import admin_router as seo_admin_router
 from .seo.router import public_router as seo_public_router
+from .skills.router import public_router as skills_public_router
 from .terminal.router import admin_router as terminal_admin_router
 from .terminal.router import agent_router as terminal_agent_router
 from .terminal.router import client_ws_router as terminal_client_ws_router
@@ -40,6 +41,7 @@ router.include_router(kb_public_router)
 router.include_router(analytics_public_router)
 router.include_router(pi_public_router)
 router.include_router(search_public_router)
+router.include_router(skills_public_router)
 router.include_router(seo_public_router)
 router.include_router(terminal_console_router)  # /api/console/*：自带 voice/TOTP 鉴权
 
