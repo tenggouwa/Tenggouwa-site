@@ -88,6 +88,71 @@ class ChatLLM:
                 if delta:
                     yield delta
 
+    async def stream_step(
+        self,
+        messages: list[dict],
+        *,
+        tools: list[dict] | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> AsyncIterator[dict]:
+        """流式跑一轮：实时 yield 正文增量，并把结构化 tool_calls 累积到最后一并 yield。
+
+        事件：{"type":"content","delta": str} / {"type":"tool_calls","tool_calls": [...]}。
+        tools 一直带着（tool_choice=auto）——模型走结构化 delta.tool_calls，不会把工具调用吐成文本。
+        """
+        if not self.api_key:
+            raise RuntimeError("KB_LLM_API_KEY 未配置")
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        timeout = httpx.Timeout(120.0, connect=10.0)
+        url = f"{self.base_url}/chat/completions"
+        acc: dict[int, dict] = {}  # index -> {id, type, function:{name, arguments}}
+        async with (
+            httpx.AsyncClient(timeout=timeout) as client,
+            client.stream("POST", url, headers=headers, json=payload) as resp,
+        ):
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[len("data:") :].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                _log_cache("stream_step", obj.get("usage"))
+                choice = (obj.get("choices") or [{}])[0]
+                delta = choice.get("delta") or {}
+                if delta.get("content"):
+                    yield {"type": "content", "delta": delta["content"]}
+                for tc in delta.get("tool_calls") or []:
+                    idx = tc.get("index", 0)
+                    slot = acc.setdefault(
+                        idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+                    )
+                    if tc.get("id"):
+                        slot["id"] = tc["id"]
+                    fn = tc.get("function") or {}
+                    if fn.get("name"):
+                        slot["function"]["name"] = fn["name"]
+                    if fn.get("arguments"):
+                        slot["function"]["arguments"] += fn["arguments"]
+        if acc:
+            yield {"type": "tool_calls", "tool_calls": [acc[i] for i in sorted(acc)]}
+
     async def complete(
         self,
         messages: list[dict],
