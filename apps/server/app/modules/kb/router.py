@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
 from .provider import chat_llm
-from .schema import AskRequest, ReindexResult
+from .schema import AskRequest, KBDocumentPage, KBSourceOverview, ReindexResult
 from .service import kb_service
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,21 @@ async def ask(
         yield _sse("done", {"citations": citations})
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@public_router.get("/overview", response_model=ResponseModel[list[KBSourceOverview]])
+async def overview(session: AsyncSession = Depends(get_session)) -> ResponseModel[list[KBSourceOverview]]:
+    return ResponseModel(data=await kb_service.overview(session))
+
+
+@public_router.get("/documents", response_model=ResponseModel[KBDocumentPage])
+async def documents(
+    source: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[KBDocumentPage]:
+    return ResponseModel(data=await kb_service.list_documents(session, source, limit=limit, offset=offset))
 
 
 admin_router = APIRouter(
