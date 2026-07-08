@@ -234,7 +234,8 @@ const NAV_ITEMS = [
   { to: '/posts/', label: 'posts', match: (cp) => cp.startsWith('/posts') || cp.startsWith('/tags') },
   { to: '/inspirations', label: 'inspirations', match: (cp) => cp.startsWith('/inspirations') },
   { to: '/lab', label: 'lab', match: (cp) => cp.startsWith('/lab') },
-  { to: '/ask', label: 'ask', match: (cp) => cp.startsWith('/ask') },
+  // ask = 独立 agent 平台（/agent/），整页跳转；同 casino
+  { to: '/agent/', label: 'ask', match: (cp) => cp.startsWith('/agent') },
   { to: '/about', label: 'about', match: (cp) => cp.startsWith('/about') },
   // casino 是独立 SPA（不同 basename），整页链接；与 Layout.tsx 的 nav 保持一致
   { to: '/casino/', label: 'casino', match: (cp) => cp.startsWith('/casino') },

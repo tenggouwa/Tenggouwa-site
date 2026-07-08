@@ -11,7 +11,6 @@ const NAV = [
   { to: '/posts', label: 'posts' },
   { to: '/inspirations', label: 'inspirations' },
   { to: '/lab', label: 'lab' },
-  { to: '/ask', label: 'ask' },
   { to: '/pi', label: 'pi' },
   { to: '/about', label: 'about' },
 ];
@@ -69,8 +68,15 @@ export default function Layout() {
                 {item.label}
               </NavLink>
             ))}
-            {/* casino 是独立 SPA（不同 basename），用整页跳转而非 router Link。
-                ${BASE_URL}casino/ 在子路径(/Tenggouwa-site/casino/)与根域(/casino/)都成立。 */}
+            {/* ask / casino 是独立 SPA（不同 basename），用整页跳转而非 router Link。
+                ${BASE_URL}<app>/ 在子路径(/Tenggouwa-site/<app>/)与根域(/<app>/)都成立。 */}
+            <a
+              href={`${import.meta.env.BASE_URL}agent/`}
+              className="transition-colors text-terminal-cyan hover:text-terminal-green"
+              title="AI agent：跟知识库对话"
+            >
+              ask
+            </a>
             <a
               href={`${import.meta.env.BASE_URL}casino/`}
               className="transition-colors text-terminal-pink hover:text-terminal-green"
