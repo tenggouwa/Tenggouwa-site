@@ -14,16 +14,25 @@ interface PlanStep {
   status: 'pending' | 'in_progress' | 'completed';
 }
 
+interface AskQuestion {
+  header?: string;
+  question: string;
+  options: string[];
+  multi?: boolean;
+}
+
 interface Turn {
   q: string;
   tools: ToolCall[];
   plan: PlanStep[];
   answer: string;
+  ask?: AskQuestion[]; // agent 抛的选择题（ask_user skill）
+  askIntro?: string;
   error?: string;
   done: boolean;
 }
 
-const SUGGESTIONS = ['这个站点的作者是谁？', '大模型推理怎么省显存？', '轮盘为什么长期必输？'];
+const SUGGESTIONS = ['这个站点的作者是谁？', '大模型推理怎么省显存？', '帮我搭一个每天抓取并推送的自动化'];
 
 const fmtArgs = (a: Record<string, unknown>) =>
   Object.entries(a)
@@ -61,6 +70,89 @@ function renderInline(text: string): React.ReactNode[] {
 
 const PLAN_MARK: Record<PlanStep['status'], string> = { completed: '✓', in_progress: '·', pending: ' ' };
 
+// agent 抛的选择题：每题一组可点选项，选完组成一条回答作为下一轮发送。
+// locked = 后面已有新回合，锁死本面板；submitted = 本面板已提交过。
+function AskPanel({
+  intro,
+  questions,
+  locked,
+  onSubmit,
+}: {
+  intro?: string;
+  questions: AskQuestion[];
+  locked: boolean;
+  onSubmit: (text: string) => void;
+}) {
+  const [sel, setSel] = useState<Record<number, string[]>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const done = locked || submitted;
+
+  function toggle(qi: number, opt: string, multi?: boolean) {
+    if (done) return;
+    setSel((s) => {
+      const cur = s[qi] ?? [];
+      if (multi) return { ...s, [qi]: cur.includes(opt) ? cur.filter((o) => o !== opt) : [...cur, opt] };
+      return { ...s, [qi]: cur.includes(opt) ? [] : [opt] };
+    });
+  }
+
+  const allAnswered = questions.every((_, qi) => (sel[qi]?.length ?? 0) > 0);
+
+  function send() {
+    if (done || !allAnswered) return;
+    const text = questions.map((qq, qi) => `${qq.header || qq.question}：${(sel[qi] ?? []).join('、')}`).join('\n');
+    setSubmitted(true);
+    onSubmit(text);
+  }
+
+  return (
+    <div className="my-1 rounded border border-terminal-cyan/30 bg-terminal-panel/30 p-3 space-y-3">
+      {intro && <div className="text-sm text-terminal-gray/80 whitespace-pre-wrap">{renderInline(intro)}</div>}
+      {questions.map((qq, qi) => (
+        <div key={qi} className="space-y-1.5">
+          <div className="text-sm text-terminal-gray">
+            {qq.header && <span className="text-terminal-cyan mr-1.5">[{qq.header}]</span>}
+            {qq.question}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {qq.options.map((opt) => {
+              const active = (sel[qi] ?? []).includes(opt);
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  disabled={done}
+                  onClick={() => toggle(qi, opt, qq.multi)}
+                  className={
+                    'px-2.5 py-1 rounded border text-xs transition-colors disabled:opacity-70 ' +
+                    (active
+                      ? 'border-terminal-green/70 bg-terminal-green/15 text-terminal-green'
+                      : 'border-terminal-line/70 text-terminal-gray hover:border-terminal-green/50 hover:text-terminal-green')
+                  }
+                >
+                  {active ? '✓ ' : ''}
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {!done && (
+        <button
+          type="button"
+          disabled={!allAnswered}
+          onClick={send}
+          className="text-xs text-terminal-green border border-terminal-green/40 rounded px-3 py-1 hover:bg-terminal-green/10 disabled:opacity-40 transition-colors"
+        >
+          ↵ 发送选择
+        </button>
+      )}
+      {submitted && <div className="text-xs text-terminal-gray/40">已提交</div>}
+    </div>
+  );
+}
+
 export default function Ask() {
   const [q, setQ] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -91,6 +183,8 @@ export default function Ask() {
       message?: string;
       session_id?: string;
       plan?: PlanStep[];
+      intro?: string;
+      questions?: AskQuestion[];
     };
     try {
       obj = JSON.parse(data);
@@ -99,6 +193,8 @@ export default function Ask() {
     }
     if (event === 'session') sessionId.current = obj.session_id ?? sessionId.current;
     else if (event === 'plan') updateTurn(idx, (t) => ({ ...t, plan: obj.plan ?? [] }));
+    else if (event === 'ask')
+      updateTurn(idx, (t) => ({ ...t, ask: obj.questions ?? [], askIntro: obj.intro || '' }));
     else if (event === 'tool')
       updateTurn(idx, (t) => ({ ...t, tools: [...t.tools, { name: obj.name ?? '', args: obj.args ?? {} }] }));
     else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
@@ -227,7 +323,15 @@ export default function Ask() {
                   <span className="text-terminal-gray/60"> {fmtArgs(tc.args)}</span>
                 </div>
               ))}
-              {!t.done && t.answer === '' && (
+              {t.ask && t.ask.length > 0 && (
+                <AskPanel
+                  intro={t.askIntro}
+                  questions={t.ask}
+                  locked={i < turns.length - 1 || busy}
+                  onSubmit={(text) => void run(text)}
+                />
+              )}
+              {!t.done && t.answer === '' && !t.ask && (
                 <div className="text-xs text-terminal-gray/40">
                   {t.tools.length ? '读取资料、思考中…' : '思考中…'}
                 </div>
@@ -265,7 +369,7 @@ export default function Ask() {
       </div>
 
       <p className="text-xs text-terminal-gray/40">
-        agent 用 DeepSeek + skills（kb_search / update_plan / web_fetch），会记住本轮对话上下文。答案由 AI 生成，可能有误。
+        agent 用 DeepSeek + skills（kb_search / update_plan / web_fetch / ask_user），会记住本轮对话上下文。答案由 AI 生成，可能有误。
       </p>
     </div>
   );

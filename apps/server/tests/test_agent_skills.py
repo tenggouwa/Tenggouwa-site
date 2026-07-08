@@ -6,9 +6,31 @@ web_fetch 的拒绝分支在任何请求之前就返回。
 
 import pytest
 from modules.agent.service import _est_tokens
+from modules.skills.ask_user import _handler as ask_handler
 from modules.skills.update_plan import _handler as plan_handler
 from modules.skills.web_fetch import _handler as fetch_handler
 from modules.skills.web_fetch import _host_is_public, _to_text
+
+# ---------- ask_user ----------
+
+
+async def test_ask_empty():
+    assert await ask_handler(None, {"questions": []}) == "（未提供问题）"
+    assert await ask_handler(None, {}) == "（未提供问题）"
+
+
+async def test_ask_counts_questions():
+    out = await ask_handler(
+        None,
+        {
+            "questions": [
+                {"question": "会写 Python 吗？", "options": ["会", "不会"]},
+                {"question": "有服务器吗？", "options": ["有", "没有"]},
+            ]
+        },
+    )
+    assert "2" in out
+
 
 # ---------- update_plan ----------
 
