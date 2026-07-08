@@ -10,10 +10,12 @@
   "scripts": {
     "dev:web": "pnpm --filter @tenggouwa/web dev",
     "dev:admin": "pnpm --filter @tenggouwa/admin dev",
+    "dev:agent": "pnpm --filter @tenggouwa/agent dev",
     "dev:server": "bash scripts/run-server-dev.sh",
     "build": "pnpm -r --filter \"./apps/**\" build",
     "build:web": "pnpm --filter @tenggouwa/web build",
     "build:admin": "pnpm --filter @tenggouwa/admin build",
+    "build:agent": "pnpm --filter @tenggouwa/agent build",
     "build:pages": "bash scripts/build-pages.sh",
     "build:cf": "PAGES_TARGET=root bash scripts/build-pages.sh",
     "deploy:server": "bash scripts/deploy-server.sh",

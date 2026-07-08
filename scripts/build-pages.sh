@@ -29,6 +29,7 @@ case "$TARGET" in
     WEB_BASE="/${REPO_NAME}/"
     ADMIN_BASE="/${REPO_NAME}/admin/"
     CASINO_BASE="/${REPO_NAME}/casino/"
+    AGENT_BASE="/${REPO_NAME}/agent/"
     DIST="pages-dist"
     # 子路径产物不让搜索引擎收录，免得跟主域名互打权重
     PRERENDER_NOINDEX="--noindex"
@@ -37,6 +38,7 @@ case "$TARGET" in
     WEB_BASE="/"
     ADMIN_BASE="/admin/"
     CASINO_BASE="/casino/"
+    AGENT_BASE="/agent/"
     DIST="cf-dist"
     PRERENDER_NOINDEX=""
     ;;
@@ -81,6 +83,11 @@ if 'name=\"robots\"' not in s:
 "
 fi
 
+echo "==> 构建 apps/agent (base=$AGENT_BASE, api=${VITE_API_BASE:-<empty>})"
+VITE_BASE="$AGENT_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/agent build
+mkdir -p "$DIST/agent"
+cp -R apps/agent/dist/. "$DIST/agent/"
+
 echo "==> 预渲染博客静态页 + sitemap / robots / feed (origin=$SITE_ORIGIN)"
 # prerender 从 API 拉数据（DB 是唯一真相），未显式传则回落到 https://api.tenggouwa.com
 PRERENDER_API="${VITE_API_BASE:-https://api.tenggouwa.com}"
@@ -110,7 +117,7 @@ node scripts/generate-og.mjs --dist="$DIST"
 # sessionStorage 再 redirect 到对应 SPA 根，该 SPA 的 main.tsx 再 history.replaceState 还原。
 cp "$DIST/index.html" "$DIST/404.html"
 SUBAPP_REDIRECT_SCRIPT=$(cat <<EOF
-<script>(function(){var bs=["${ADMIN_BASE}","${CASINO_BASE}"];for(var i=0;i<bs.length;i++){var b=bs[i];if(location.pathname.indexOf(b)===0&&location.pathname!==b){try{sessionStorage.setItem('tg_spa_redirect',location.pathname+location.search+location.hash);}catch(e){}location.replace(b);return;}}})();</script>
+<script>(function(){var bs=["${ADMIN_BASE}","${CASINO_BASE}","${AGENT_BASE}"];for(var i=0;i<bs.length;i++){var b=bs[i];if(location.pathname.indexOf(b)===0&&location.pathname!==b){try{sessionStorage.setItem('tg_spa_redirect',location.pathname+location.search+location.hash);}catch(e){}location.replace(b);return;}}})();</script>
 EOF
 )
 # 在 <head> 后立刻插入 redirect script
