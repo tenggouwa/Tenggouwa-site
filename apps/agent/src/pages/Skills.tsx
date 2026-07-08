@@ -1,18 +1,22 @@
-// M1 占位壳。M3 会做 skill 抽象 + 后端注册表接口，这里动态列出 agent 可调用的 skill。
+import { useEffect, useState } from 'react';
+import { apiGet } from '../lib/api';
 
-interface SkillCard {
+interface SkillInfo {
   name: string;
-  desc: string;
-  status: 'ready' | 'planned';
+  description: string;
+  parameters: Record<string, unknown>;
 }
 
-const SKILLS: SkillCard[] = [
-  { name: 'kb.search', desc: '检索知识库（向量 + trigram 混合），返回相关片段与来源', status: 'ready' },
-  { name: 'kb.reindex', desc: '重建知识库索引（把新内容灌进去）', status: 'planned' },
-  { name: 'web.fetch', desc: '抓取一个 URL 的正文', status: 'planned' },
-];
-
 export default function Skills() {
+  const [skills, setSkills] = useState<SkillInfo[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<SkillInfo[]>('/api/public/skills')
+      .then(setSkills)
+      .catch((e) => setError(e instanceof Error ? e.message : '加载失败'));
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -20,37 +24,46 @@ export default function Skills() {
           <span className="text-terminal-pink">$ </span>skills
         </h1>
         <p className="text-sm text-terminal-gray/70">
-          agent 能调用的工具。「查知识库」就是其中一个 skill；未来 agent 会自己决定调哪个。
+          agent 能调用的工具。「查知识库」就是其中一个 skill；未来 agent 会自己决定调哪个（tool-calling）。
         </p>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        {SKILLS.map((s) => (
-          <div
-            key={s.name}
-            className="rounded-lg border border-terminal-line/70 bg-terminal-panel/40 p-4 space-y-2"
-          >
-            <div className="flex items-center justify-between">
-              <code className="text-terminal-cyan">{s.name}</code>
-              <span
-                className={
-                  'text-[10px] px-1.5 py-0.5 rounded border ' +
-                  (s.status === 'ready'
-                    ? 'border-terminal-green/50 text-terminal-green'
-                    : 'border-terminal-line/70 text-terminal-gray/50')
-                }
-              >
-                {s.status === 'ready' ? 'ready' : 'planned'}
-              </span>
-            </div>
-            <p className="text-xs text-terminal-gray/75 leading-relaxed">{s.desc}</p>
-          </div>
-        ))}
-      </div>
+      {error && <div className="text-sm text-terminal-red">加载失败：{error}</div>}
+      {!skills && !error && <div className="text-sm text-terminal-gray/50">加载中…</div>}
 
-      <div className="rounded-lg border border-terminal-line/60 bg-terminal-bg/40 p-8 text-center text-sm text-terminal-gray/50">
-        <span className="text-terminal-green">// TODO(M3)</span> 后端 skill 注册表 + tool schema，agent 通过 function-calling 调用；这里动态渲染。
-      </div>
+      {skills && (
+        <div className="grid sm:grid-cols-2 gap-4">
+          {skills.map((s) => {
+            const props = (s.parameters?.properties ?? {}) as Record<string, { description?: string }>;
+            const params = Object.keys(props);
+            return (
+              <div key={s.name} className="rounded-lg border border-terminal-line/70 bg-terminal-panel/40 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <code className="text-terminal-cyan">{s.name}</code>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded border border-terminal-green/50 text-terminal-green">
+                    ready
+                  </span>
+                </div>
+                <p className="text-xs text-terminal-gray/75 leading-relaxed">{s.description}</p>
+                {params.length > 0 && (
+                  <div className="text-[11px] text-terminal-gray/55">
+                    参数：
+                    {params.map((p) => (
+                      <code key={p} className="text-terminal-yellow ml-1">
+                        {p}
+                      </code>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-xs text-terminal-gray/40">
+        更多 skill 计划中（kb_reindex / web_fetch …）。M4 会让 ask 页的 agent 自主调用这些工具。
+      </p>
     </div>
   );
 }
