@@ -41,6 +41,9 @@ jobs:
       - name: Build casino (tsc --noEmit && vite build)
         run: pnpm --filter @tenggouwa/casino build
 
+      - name: Build agent (tsc --noEmit && vite build)
+        run: pnpm --filter @tenggouwa/agent build
+
   backend:
     name: Backend (ruff + pytest)
     runs-on: ubuntu-latest
