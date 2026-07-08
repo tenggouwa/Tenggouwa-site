@@ -23,11 +23,12 @@ from .repository import AgentRepository
 logger = logging.getLogger(__name__)
 
 SYSTEM = (
-    "你是 tenggouwa 个人站点的 AI 助手。你可以调用工具（如 kb_search 检索站点知识库）来获取信息。"
-    "回答本站相关问题前先用 kb_search 查资料，只依据资料作答；答不出就直说不知道，不编造。"
-    "遇到需要多步的任务，先用 update_plan 列出步骤再逐步执行。"
-    "当你需要用户在若干明确选项中做选择、或需澄清关键信息才能继续时，调用 ask_user 抛带选项的问题让其点选，"
-    "不要用一长串文字罗列问题。用简体中文、简洁作答。"
+    "你是 tenggouwa 个人站点的 AI 助手，同时也是一个通用智能助手。\n"
+    "- 涉及本站内容、作者本人、站内文章或项目时，先用 kb_search 查知识库，依据检索结果作答，可点明来源。\n"
+    "- 知识库没有相关内容时，不要拒答——改用你自己的通用知识正常回答（必要时说明这不是来自本站资料）。\n"
+    "- 需要外部实时信息用 web_fetch；需要用户在若干选项间做选择或澄清关键信息时用 ask_user 抛带选项的问题让其点选"
+    "（别用一长串文字罗列问题）；确实需要多步的任务先用 update_plan 列步骤。\n"
+    "- 确实不知道再说不知道，不编造。用简体中文、简洁作答。"
 )
 
 MAX_STEPS = 16  # 兜底防死循环，非常规上限（对齐 Codex/Claude「没有小硬上限」）
@@ -38,10 +39,45 @@ KEEP_TURNS = 3  # compaction 至少保留最近 N 个 user 轮原文（在其之
 PLAN_SKILL = "update_plan"
 ASK_SKILL = "ask_user"  # 抛选择题给用户，触发后结束本轮、等用户点选下一轮续上
 
+LEAK_TOKEN = "｜"  # ｜ DeepSeek tool-call 特殊 token 分隔符；正常文本/代码不会出现，用作泄漏起点
+LEAK_HOLD = 2  # 流式发送时保留的尾部字符数，防 "<｜" 跨 delta 被切开漏检
+
 
 def _est_tokens(text: str) -> int:
     """粗估 token：中英文混排按 ~2 char/token（够 compaction 触发判断用，不求精确）。"""
     return len(text) // 2
+
+
+def _strip_leak(text: str) -> str:
+    """砍掉 DeepSeek 泄漏的 tool-call 文本：首个 ｜ 及之后全丢，并去掉悬空的 '<'。"""
+    idx = text.find(LEAK_TOKEN)
+    if idx == -1:
+        return text
+    return text[:idx].rstrip("<").rstrip()
+
+
+async def _filter_leaked_stream(raw: AsyncIterator[str]) -> AsyncIterator[str]:
+    """过滤 DeepSeek 把 tool-call 当文本吐出来的泄漏（<｜｜DSML｜｜tool_calls>...）。
+
+    ｜(U+FF5C) 是其特殊 token 分隔符，正常中英文/代码绝不出现——一见到就把它及之后全丢、停流。
+    发送时保留尾部 LEAK_HOLD 字符不发，防 "<｜" 跨 delta 被切开（先漏发 '<' 再才发现 ｜）。
+    逐段 yield 干净文本增量；累加即最终干净答案。
+    """
+    buf = ""
+    emitted = 0
+    async for delta in raw:
+        buf += delta
+        if LEAK_TOKEN in buf:
+            clean = _strip_leak(buf)
+            if len(clean) > emitted:
+                yield clean[emitted:]
+            return
+        safe = len(buf) - LEAK_HOLD
+        if safe > emitted:
+            yield buf[emitted:safe]
+            emitted = safe
+    if len(buf) > emitted:
+        yield buf[emitted:]
 
 
 class AgentService:
@@ -107,12 +143,11 @@ class AgentService:
             yield {"type": "done"}
             return
 
+        # max_tokens=4096：默认 1024 会截断长代码答案。过滤逻辑见 _filter_leaked_stream。
         parts: list[str] = []
-        # max_tokens=4096：默认 1024 会截断长代码答案。
-        # tool_choice="none"：禁止本轮再调工具，否则模型把 update_plan 等 tool-call 当文本吐出来。
-        async for delta in chat_llm.stream(messages, max_tokens=4096, tools=tools, tool_choice="none"):
-            parts.append(delta)
-            yield {"type": "token", "delta": delta}
+        async for piece in _filter_leaked_stream(chat_llm.stream(messages, max_tokens=4096)):
+            parts.append(piece)
+            yield {"type": "token", "delta": piece}
         await repo.append(sid, seq, "assistant", "".join(parts))
         yield {"type": "done"}
 
