@@ -9,9 +9,15 @@ interface ToolCall {
   args: Record<string, unknown>;
 }
 
+interface PlanStep {
+  step: string;
+  status: 'pending' | 'in_progress' | 'completed';
+}
+
 interface Turn {
   q: string;
   tools: ToolCall[];
+  plan: PlanStep[];
   answer: string;
   error?: string;
   done: boolean;
@@ -53,10 +59,13 @@ function renderInline(text: string): React.ReactNode[] {
   return nodes;
 }
 
+const PLAN_MARK: Record<PlanStep['status'], string> = { completed: '✓', in_progress: '·', pending: ' ' };
+
 export default function Ask() {
   const [q, setQ] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
+  const sessionId = useRef<string | null>(null); // 多轮：服务端首个 event 回传，后续请求带上
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -75,13 +84,22 @@ export default function Ask() {
       else if (line.startsWith('data:')) data += line.slice(5).trim();
     }
     if (!data) return;
-    let obj: { delta?: string; name?: string; args?: Record<string, unknown>; message?: string };
+    let obj: {
+      delta?: string;
+      name?: string;
+      args?: Record<string, unknown>;
+      message?: string;
+      session_id?: string;
+      plan?: PlanStep[];
+    };
     try {
       obj = JSON.parse(data);
     } catch {
       return;
     }
-    if (event === 'tool')
+    if (event === 'session') sessionId.current = obj.session_id ?? sessionId.current;
+    else if (event === 'plan') updateTurn(idx, (t) => ({ ...t, plan: obj.plan ?? [] }));
+    else if (event === 'tool')
       updateTurn(idx, (t) => ({ ...t, tools: [...t.tools, { name: obj.name ?? '', args: obj.args ?? {} }] }));
     else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
     else if (event === 'done') updateTurn(idx, (t) => ({ ...t, done: true }));
@@ -90,13 +108,13 @@ export default function Ask() {
 
   async function run(query: string) {
     const idx = turns.length;
-    setTurns((t) => [...t, { q: query, tools: [], answer: '', done: false }]);
+    setTurns((t) => [...t, { q: query, tools: [], plan: [], answer: '', done: false }]);
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/api/public/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: query }),
+        body: JSON.stringify({ q: query, session_id: sessionId.current }),
         credentials: 'include',
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -144,6 +162,21 @@ export default function Ask() {
           <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
           <span className="w-3 h-3 rounded-full bg-[#28c840]" />
           <span className="text-[11px] text-terminal-gray/60 ml-2">~/ask</span>
+          {turns.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (busy) return;
+                sessionId.current = null;
+                setTurns([]);
+              }}
+              className="ml-auto text-[11px] text-terminal-gray/60 hover:text-terminal-green transition-colors disabled:opacity-40"
+              disabled={busy}
+              title="清空上下文，开一段新对话"
+            >
+              + 新对话
+            </button>
+          )}
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto px-4 py-3 space-y-5 text-sm">
@@ -170,6 +203,24 @@ export default function Ask() {
               <div className="text-terminal-gray">
                 <span className="text-terminal-pink">~$</span> {t.q}
               </div>
+              {t.plan.length > 0 && (
+                <div className="my-1 pl-2 border-l border-terminal-line/60 text-xs font-mono">
+                  {t.plan.map((s, si) => (
+                    <div
+                      key={si}
+                      className={
+                        s.status === 'completed'
+                          ? 'text-terminal-green/70'
+                          : s.status === 'in_progress'
+                            ? 'text-terminal-yellow'
+                            : 'text-terminal-gray/50'
+                      }
+                    >
+                      [{PLAN_MARK[s.status]}] {s.step}
+                    </div>
+                  ))}
+                </div>
+              )}
               {t.tools.map((tc, ti) => (
                 <div key={ti} className="text-xs text-terminal-green/80">
                   <span className="text-terminal-gray/50">$</span> {tc.name}
@@ -214,7 +265,7 @@ export default function Ask() {
       </div>
 
       <p className="text-xs text-terminal-gray/40">
-        agent 用 DeepSeek + skills（当前有 kb_search）。答案由 AI 生成，可能有误。
+        agent 用 DeepSeek + skills（kb_search / update_plan / web_fetch），会记住本轮对话上下文。答案由 AI 生成，可能有误。
       </p>
     </div>
   );

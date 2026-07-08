@@ -494,3 +494,42 @@ class KBChunkRow(Base):
     meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     __table_args__ = (Index("uq_kb_chunk_doc_ord", "document_id", "ord", unique=True),)
+
+
+# ---------- agent：对话会话（多轮记忆 + 恢复）----------
+# 见 docs/agent-v2-design.md §3。append-only：消息只插不改，resume 时逐字节重建 messages
+# 以保住 DeepSeek 上下文缓存前缀。公开无鉴权，id 用不可猜的 uuid4，不做会话列表页。
+
+
+class AgentSessionRow(Base):
+    """一次 agent 对话。id 由服务端生成（uuid4 hex）并回传前端持有。"""
+
+    __tablename__ = "agent_session"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)  # uuid4().hex
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 首个问题截断
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # compaction 产物（§4）
+    summarized_upto_seq: Mapped[int] = mapped_column(nullable=False, default=0)  # 已被 summary 覆盖到的 seq
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AgentMessageRow(Base):
+    """会话内一条消息，append-only。role ∈ user | assistant | tool。"""
+
+    __tablename__ = "agent_message"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("agent_session.id", ondelete="CASCADE"), nullable=False
+    )
+    seq: Mapped[int] = mapped_column(nullable=False)  # 会话内自增序，排序用
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    tool_calls: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # assistant 轮的 tool_calls 原样存
+    tool_call_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # tool 轮回填对应 call id
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (Index("ix_agent_message_session_seq", "session_id", "seq"),)
