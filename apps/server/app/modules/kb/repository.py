@@ -142,3 +142,50 @@ class KBRepository:
         params = {**base, "qvec": vec_literal, "pool": 40, "k": 60}
         rows = (await self.session.execute(sql, params)).all()
         return self._rows_to_hits(rows)
+
+    async def overview(self) -> list[dict]:
+        """每个源的文档数 / 块数 / 已嵌入块数 / 最近同步时间。"""
+        sql = text("""
+            SELECT s.kind, s.name, s.last_synced_at,
+                   count(DISTINCT d.id) AS documents,
+                   count(c.id) AS chunks,
+                   count(c.embedding) AS embedded
+            FROM kb_source s
+            LEFT JOIN kb_document d ON d.source_id = s.id
+            LEFT JOIN kb_chunk c ON c.document_id = d.id
+            GROUP BY s.id, s.kind, s.name, s.last_synced_at
+            ORDER BY s.kind
+        """)
+        rows = (await self.session.execute(sql)).all()
+        return [
+            {
+                "kind": r.kind,
+                "name": r.name,
+                "last_synced_at": r.last_synced_at,
+                "documents": r.documents,
+                "chunks": r.chunks,
+                "embedded": r.embedded,
+            }
+            for r in rows
+        ]
+
+    async def list_documents(self, source_kind: str | None, *, limit: int, offset: int) -> tuple[list[dict], int]:
+        where = "WHERE s.kind = :kind" if source_kind else ""
+        cparams = {"kind": source_kind} if source_kind else {}
+        sql = text(f"""
+            SELECT d.id, d.title, d.url, d.updated_at, count(c.id) AS chunks
+            FROM kb_document d
+            JOIN kb_source s ON s.id = d.source_id
+            LEFT JOIN kb_chunk c ON c.document_id = d.id
+            {where}
+            GROUP BY d.id, d.title, d.url, d.updated_at
+            ORDER BY d.updated_at DESC
+            LIMIT :limit OFFSET :offset
+        """)
+        count_sql = text(f"SELECT count(*) FROM kb_document d JOIN kb_source s ON s.id = d.source_id {where}")
+        rows = (await self.session.execute(sql, {**cparams, "limit": limit, "offset": offset})).all()
+        total = (await self.session.execute(count_sql, cparams)).scalar_one()
+        items = [
+            {"id": r.id, "title": r.title, "url": r.url, "updated_at": r.updated_at, "chunks": r.chunks} for r in rows
+        ]
+        return items, total

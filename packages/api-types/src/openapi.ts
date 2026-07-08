@@ -358,6 +358,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/kb/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask */
+        post: operations["ask_api_public_kb_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/kb/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview */
+        get: operations["overview_api_public_kb_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/kb/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Documents */
+        get: operations["documents_api_public_kb_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/track": {
         parameters: {
             query?: never;
@@ -802,6 +853,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/kb/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reindex */
+        post: operations["reindex_api_admin_kb_reindex_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/analytics/overview": {
         parameters: {
             query?: never;
@@ -1108,6 +1176,13 @@ export interface components {
             /** Online */
             online: boolean;
         };
+        /** AskRequest */
+        AskRequest: {
+            /** Q */
+            q: string;
+            /** Sources */
+            sources?: string[] | null;
+        };
         /** BlackjackActionRequest */
         BlackjackActionRequest: {
             /** Device Id */
@@ -1304,6 +1379,50 @@ export interface components {
             offset: number;
             /** Has More */
             has_more: boolean;
+        };
+        /** KBDocumentItem */
+        KBDocumentItem: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Chunks */
+            chunks: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** KBDocumentPage */
+        KBDocumentPage: {
+            /** Items */
+            items: components["schemas"]["KBDocumentItem"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Has More */
+            has_more: boolean;
+        };
+        /** KBSourceOverview */
+        KBSourceOverview: {
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Documents */
+            documents: number;
+            /** Chunks */
+            chunks: number;
+            /** Embedded */
+            embedded: number;
+            /** Last Synced At */
+            last_synced_at?: string | null;
         };
         /** KeywordStat */
         KeywordStat: {
@@ -1672,6 +1791,17 @@ export interface components {
             /** Published At */
             published_at?: string | null;
         };
+        /** ReindexResult */
+        ReindexResult: {
+            /** Source */
+            source: string;
+            /** Documents Total */
+            documents_total: number;
+            /** Documents Changed */
+            documents_changed: number;
+            /** Chunks */
+            chunks: number;
+        };
         /** ResponseModel[AgentIssueResponse] */
         ResponseModel_AgentIssueResponse_: {
             /**
@@ -1769,6 +1899,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["Inspiration"] | null;
+        };
+        /** ResponseModel[KBDocumentPage] */
+        ResponseModel_KBDocumentPage_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["KBDocumentPage"] | null;
         };
         /** ResponseModel[LoginResponse] */
         ResponseModel_LoginResponse_: {
@@ -1881,6 +2025,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["Post"] | null;
+        };
+        /** ResponseModel[ReindexResult] */
+        ResponseModel_ReindexResult_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["ReindexResult"] | null;
         };
         /** ResponseModel[SearchChannelOverview] */
         ResponseModel_SearchChannelOverview_: {
@@ -2097,6 +2255,21 @@ export interface components {
             message: string;
             /** Data */
             data?: components["schemas"]["IndexingStatus"][] | null;
+        };
+        /** ResponseModel[list[KBSourceOverview]] */
+        ResponseModel_list_KBSourceOverview__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["KBSourceOverview"][] | null;
         };
         /** ResponseModel[list[KeywordStat]] */
         ResponseModel_list_KeywordStat__: {
@@ -3147,6 +3320,92 @@ export interface operations {
             };
         };
     };
+    ask_api_public_kb_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_public_kb_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_KBSourceOverview__"];
+                };
+            };
+        };
+    };
+    documents_api_public_kb_documents_get: {
+        parameters: {
+            query?: {
+                source?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_KBDocumentPage_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     track_api_public_track_post: {
         parameters: {
             query?: never;
@@ -3972,6 +4231,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reindex_api_admin_kb_reindex_post: {
+        parameters: {
+            query?: {
+                source?: string;
+                force?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_ReindexResult_"];
                 };
             };
             /** @description Validation Error */

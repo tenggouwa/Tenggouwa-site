@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .ingest import INGESTERS, chunk_markdown, content_hash
 from .provider import embedder
 from .repository import KBRepository
-from .schema import Citation, ReindexResult
+from .schema import Citation, KBDocumentItem, KBDocumentPage, KBSourceOverview, ReindexResult
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,22 @@ class KBService:
             seen.add(key)
             out.append(Citation(title=h["title"], url=h["url"]))
         return out
+
+    async def overview(self, session: AsyncSession) -> list[KBSourceOverview]:
+        rows = await KBRepository(session).overview()
+        return [KBSourceOverview(**r) for r in rows]
+
+    async def list_documents(
+        self, session: AsyncSession, source: str | None, *, limit: int, offset: int
+    ) -> KBDocumentPage:
+        items, total = await KBRepository(session).list_documents(source, limit=limit, offset=offset)
+        return KBDocumentPage(
+            items=[KBDocumentItem(**i) for i in items],
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_more=offset + len(items) < total,
+        )
 
 
 kb_service = KBService()
