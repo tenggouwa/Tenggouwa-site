@@ -18,6 +18,20 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+def _log_cache(where: str, usage: dict | None) -> None:
+    """打 DeepSeek 上下文缓存命中，验证 prefix 稳定性（见 docs/agent-v2-design.md §2）。
+
+    多轮对话里 hit 应随历史增长而上升；若长期为 0，说明消息前缀（system + tools）
+    被变动内容污染，缓存全 miss。命中不影响功能，只影响成本，故只记日志。
+    """
+    if not usage:
+        return
+    hit = usage.get("prompt_cache_hit_tokens")
+    miss = usage.get("prompt_cache_miss_tokens")
+    if hit is not None or miss is not None:
+        logger.info("llm cache %s: hit=%s miss=%s", where, hit, miss)
+
+
 class ChatLLM:
     def __init__(self) -> None:
         self.base_url = (os.environ.get("KB_LLM_BASE_URL") or "https://api.deepseek.com").rstrip("/")
@@ -38,6 +52,7 @@ class ChatLLM:
             "model": self.model,
             "messages": messages,
             "stream": True,
+            "stream_options": {"include_usage": True},  # 末尾 chunk 带 usage，用于打缓存命中
             "max_tokens": max_tokens,
             "temperature": temperature,
         }
@@ -59,6 +74,7 @@ class ChatLLM:
                     obj = json.loads(data)
                 except json.JSONDecodeError:
                     continue
+                _log_cache("stream", obj.get("usage"))  # include_usage：usage 在无 choices 的末尾 chunk
                 delta = (obj.get("choices") or [{}])[0].get("delta", {}).get("content")
                 if delta:
                     yield delta
@@ -88,7 +104,9 @@ class ChatLLM:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
             resp = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
             resp.raise_for_status()
-            return (resp.json().get("choices") or [{}])[0].get("message", {})
+            body = resp.json()
+            _log_cache("complete", body.get("usage"))
+            return (body.get("choices") or [{}])[0].get("message", {})
 
 
 chat_llm = ChatLLM()
