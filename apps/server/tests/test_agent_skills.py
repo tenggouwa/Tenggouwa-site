@@ -5,11 +5,60 @@ web_fetch 的拒绝分支在任何请求之前就返回。
 """
 
 import pytest
-from modules.agent.service import _est_tokens
+from modules.agent.service import _est_tokens, _filter_leaked_stream, _strip_leak
 from modules.skills.ask_user import _handler as ask_handler
 from modules.skills.update_plan import _handler as plan_handler
 from modules.skills.web_fetch import _handler as fetch_handler
 from modules.skills.web_fetch import _host_is_public, _to_text
+
+# ---------- tool-call 泄漏过滤 ----------
+
+
+def test_strip_leak_removes_deepseek_toolcall():
+    ans = '方案已给出，见上文代码。<｜｜DSML｜｜tool_calls>\n<｜｜DSML｜｜invoke name="update_plan">'
+    assert _strip_leak(ans) == "方案已给出，见上文代码。"
+
+
+def test_strip_leak_trims_dangling_lt():
+    assert _strip_leak("答案完整。\n\n<｜tool") == "答案完整。"
+
+
+def test_strip_leak_passthrough_clean():
+    clean = "普通答案，含 List<int> 和 a < b，无特殊 token。"
+    assert _strip_leak(clean) == clean
+
+
+async def _drain(deltas: list[str]) -> str:
+    async def gen():
+        for d in deltas:
+            yield d
+
+    out = []
+    async for piece in _filter_leaked_stream(gen()):
+        out.append(piece)
+    return "".join(out)
+
+
+async def test_filter_stream_clean_passthrough():
+    assert await _drain(["你好", "，", "世界"]) == "你好，世界"
+
+
+async def test_filter_stream_leak_single_delta():
+    got = await _drain(["答案完整。", "<｜｜DSML｜｜tool_calls>脏"])
+    assert got == "答案完整。"
+
+
+async def test_filter_stream_leak_split_across_deltas():
+    # "<" 和 ｜ 分在不同 delta：LEAK_HOLD 必须保证 '<' 不被提前发出
+    got = await _drain(["答案OK", "结尾<", "｜｜DSML｜｜invoke>"])
+    assert got == "答案OK结尾"
+    assert "<" not in got and "｜" not in got
+
+
+async def test_filter_stream_leak_char_by_char():
+    got = await _drain(list("完整答案。<｜tool"))
+    assert got == "完整答案。"
+
 
 # ---------- ask_user ----------
 
