@@ -43,7 +43,7 @@ const NOINDEX = Boolean(args.noindex);
 const API_BASE = (args.api ?? process.env.VITE_API_BASE ?? '').replace(/\/$/, '');
 
 const SITE_TITLE = 'tenggouwa · 极客小站';
-const SITE_DESC = '腾构娃的极客小站：AI / 系统 / 工具的笔记、灵感与实验。';
+const SITE_DESC = 'tenggouwa的极客小站：AI / 系统 / 工具的笔记、灵感与实验。';
 const AUTHOR = 'tenggouwa';
 const PUBLISHER_URL = ORIGIN;
 
@@ -665,7 +665,7 @@ ${cards || '<li class="py-4 text-terminal-gray/60">空空如也。</li>'}
 
 // ---------- 站点 FAQ ----------
 const SITE_FAQ = [
-  ['这个站点是什么？', '腾构娃的极客小站，覆盖 AI 大模型 / Linux 系统 / 前端与工具的笔记、灵感与实验；另有前端实验室（跑在浏览器里的生成式小玩具）和反赌教育模拟器（用假积分跑真实赌场赔率，用数据讲清「长期必输」的数学）。'],
+  ['这个站点是什么？', 'tenggouwa的极客小站，覆盖 AI 大模型 / Linux 系统 / 前端与工具的笔记、灵感与实验；另有前端实验室（跑在浏览器里的生成式小玩具）和反赌教育模拟器（用假积分跑真实赌场赔率，用数据讲清「长期必输」的数学）。'],
   ['作者是谁？', 'tenggouwa，一名软件工程师，写前端 / 后端 / 脚本 / 诗。联系邮箱 tenggouwa@gmail.com。'],
   ['技术栈 / 是否开源？', '整站是一个 monorepo：前端 Vite + React + TypeScript，挂 Cloudflare Pages / GitHub Pages；后端 FastAPI + PostgreSQL 自部署在云服务器。'],
   ['怎么订阅更新？', '订阅 RSS：/feed.xml。面向 LLM 的站点索引见 /llms.txt，全文合集见 /llms-full.txt。'],
@@ -743,7 +743,7 @@ function homeBody(posts) {
     <div class="space-y-10">
       <pre class="text-terminal-green text-[10px] md:text-xs leading-tight overflow-x-auto shadow-glow">${escapeHtml(HOME_ASCII)}</pre>
       <p class="text-terminal-gray/85 leading-relaxed max-w-2xl">
-        <span class="text-terminal-pink">~$</span> 腾构娃的极客小站 —— 一个写前端、写后端、写脚本、写诗的工程师。
+        <span class="text-terminal-pink">~$</span> tenggouwa的极客小站 —— 一个写前端、写后端、写脚本、写诗的工程师。
         这里有 AI 大模型 / Linux 系统 / 前端与工具的笔记、灵感与实验。
       </p>
       <section class="grid md:grid-cols-2 gap-4">
@@ -1083,7 +1083,7 @@ async function main() {
       'about/index.html',
       shell({
         title: meta.title ?? 'About',
-        description: meta.summary ?? '关于腾构娃。',
+        description: meta.summary ?? '关于tenggouwa。',
         currentPath: '/about',
         jsonLd: [
           personLd(),
