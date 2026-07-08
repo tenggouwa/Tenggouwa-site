@@ -108,7 +108,8 @@ class AgentService:
             return
 
         parts: list[str] = []
-        async for delta in chat_llm.stream(messages):
+        # 4096：默认 1024 会把长代码答案截断（露出半截 ``` / import 断在中途）
+        async for delta in chat_llm.stream(messages, max_tokens=4096):
             parts.append(delta)
             yield {"type": "token", "delta": delta}
         await repo.append(sid, seq, "assistant", "".join(parts))

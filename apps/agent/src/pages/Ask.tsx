@@ -68,6 +68,69 @@ function renderInline(text: string): React.ReactNode[] {
   return nodes;
 }
 
+// 代码块：```lang\n...``` → 带语言标签 + 右上角复制按钮的等宽块。
+// 最大高度 max-h-80，超出纵向滚动，不无限拉长；横向也可滚。
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard?.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <div className="my-2 rounded border border-terminal-line/60 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1 text-[11px] border-b border-terminal-line/40 bg-terminal-panel/40">
+        <span className="text-terminal-gray/50">{lang || 'code'}</span>
+        <button
+          type="button"
+          onClick={copy}
+          className="text-terminal-gray/60 hover:text-terminal-green transition-colors"
+        >
+          {copied ? '✓ 已复制' : '复制'}
+        </button>
+      </div>
+      <pre className="px-3 py-2 max-h-80 overflow-auto text-xs leading-relaxed text-terminal-cyan bg-terminal-bg/60">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+// 文本段（非代码块）：逐行渲染，# / ## / ### 标题特殊样式，空行成间距，其余走行内 markdown。
+function renderTextBlock(seg: string): React.ReactElement[] {
+  return seg.split('\n').map((line, i) => {
+    if (line.trim() === '') return <div key={i} className="h-2" />;
+    const h = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (h) {
+      const big = h[1].length <= 2;
+      return (
+        <div key={i} className={big ? 'text-terminal-green font-semibold mt-2 mb-0.5' : 'text-terminal-cyan font-semibold mt-1.5'}>
+          {renderInline(h[2])}
+        </div>
+      );
+    }
+    return (
+      <div key={i} className="leading-relaxed">
+        {renderInline(line)}
+      </div>
+    );
+  });
+}
+
+// 块级 markdown：按 ``` 切成 文本/代码 交替段（奇数段=代码块）。天然兜住流式未闭合的代码块。
+function renderMarkdown(text: string): React.ReactElement[] {
+  return text.split('```').flatMap((seg, i): React.ReactElement[] => {
+    if (i % 2 === 1) {
+      const nl = seg.indexOf('\n');
+      const lang = nl < 0 ? seg.trim() : seg.slice(0, nl).trim();
+      const code = nl < 0 ? '' : seg.slice(nl + 1).replace(/\n$/, '');
+      return [<CodeBlock key={`c${i}`} lang={lang} code={code} />];
+    }
+    return seg ? renderTextBlock(seg) : [];
+  });
+}
+
 const PLAN_MARK: Record<PlanStep['status'], string> = { completed: '✓', in_progress: '·', pending: ' ' };
 
 // agent 抛的选择题：每题一组可点选项，选完组成一条回答作为下一轮发送。
@@ -336,8 +399,8 @@ export default function Ask() {
                   {t.tools.length ? '读取资料、思考中…' : '思考中…'}
                 </div>
               )}
-              <div className="whitespace-pre-wrap text-terminal-gray/90 leading-relaxed">
-                {renderInline(t.answer)}
+              <div className="text-sm text-terminal-gray/90">
+                {renderMarkdown(t.answer)}
                 {!t.done && t.answer !== '' && (
                   <span className="inline-block w-2 h-4 bg-terminal-green/80 align-text-bottom animate-blink" />
                 )}
