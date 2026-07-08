@@ -18,6 +18,20 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+def _merge_tool_call_deltas(acc: dict[int, dict], deltas: list[dict]) -> None:
+    """把流式 delta.tool_calls 分片按 index 累积进 acc：id/name 覆盖赋值、arguments 追加拼接。"""
+    for tc in deltas:
+        idx = tc.get("index", 0)
+        slot = acc.setdefault(idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+        if tc.get("id"):
+            slot["id"] = tc["id"]
+        fn = tc.get("function") or {}
+        if fn.get("name"):
+            slot["function"]["name"] = fn["name"]
+        if fn.get("arguments"):
+            slot["function"]["arguments"] += fn["arguments"]
+
+
 def _log_cache(where: str, usage: dict | None) -> None:
     """打 DeepSeek 上下文缓存命中，验证 prefix 稳定性（见 docs/agent-v2-design.md §2）。
 
@@ -138,18 +152,7 @@ class ChatLLM:
                 delta = choice.get("delta") or {}
                 if delta.get("content"):
                     yield {"type": "content", "delta": delta["content"]}
-                for tc in delta.get("tool_calls") or []:
-                    idx = tc.get("index", 0)
-                    slot = acc.setdefault(
-                        idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
-                    )
-                    if tc.get("id"):
-                        slot["id"] = tc["id"]
-                    fn = tc.get("function") or {}
-                    if fn.get("name"):
-                        slot["function"]["name"] = fn["name"]
-                    if fn.get("arguments"):
-                        slot["function"]["arguments"] += fn["arguments"]
+                _merge_tool_call_deltas(acc, delta.get("tool_calls") or [])
         if acc:
             yield {"type": "tool_calls", "tool_calls": [acc[i] for i in sorted(acc)]}
 
