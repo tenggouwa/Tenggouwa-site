@@ -175,6 +175,7 @@ class ChatLLM:
         timeout = httpx.Timeout(120.0, connect=10.0)
         url = f"{self.base_url}/chat/completions"
         acc: dict[int, dict] = {}  # index -> {id, type, function:{name, arguments}}
+        usage: dict | None = None
         async with (
             httpx.AsyncClient(timeout=timeout) as client,
             client.stream("POST", url, headers=headers, json=payload) as resp,
@@ -190,7 +191,9 @@ class ChatLLM:
                     obj = json.loads(data)
                 except json.JSONDecodeError:
                     continue
-                _log_cache("stream_step", obj.get("usage"))
+                if obj.get("usage"):
+                    usage = obj["usage"]  # include_usage：usage 在无 choices 的末尾 chunk
+                    _log_cache("stream_step", usage)
                 choice = (obj.get("choices") or [{}])[0]
                 delta = choice.get("delta") or {}
                 if delta.get("content"):
@@ -198,6 +201,8 @@ class ChatLLM:
                 _merge_tool_call_deltas(acc, delta.get("tool_calls") or [])
         if acc:
             yield {"type": "tool_calls", "tool_calls": [acc[i] for i in sorted(acc)]}
+        if usage:
+            yield {"type": "usage", "usage": usage}
 
     async def complete(
         self,

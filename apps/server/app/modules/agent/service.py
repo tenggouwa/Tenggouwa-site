@@ -55,6 +55,22 @@ def _truncate_tool_result(text: str) -> str:
     return text[:MAX_TOOL_RESULT_CHARS] + f"\n…[输出过长，已截断，共 {len(text)} 字]"
 
 
+_USAGE_KEYS = (
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "prompt_cache_hit_tokens",
+    "prompt_cache_miss_tokens",
+)
+
+
+def _accumulate_usage(total: dict, u: dict) -> None:
+    """把一次 stream_step 的 usage 累加进 total（一轮可能多次 LLM 调用）。"""
+    for k in _USAGE_KEYS:
+        if u.get(k) is not None:
+            total[k] = total.get(k, 0) + u[k]
+
+
 def _strip_leak(text: str) -> str:
     """砍掉 DeepSeek 泄漏的 tool-call 文本：首个 ｜ 及之后全丢，并去掉悬空的 '<'。
 
@@ -93,6 +109,7 @@ class AgentService:
         tools = skills_service.tools()
         budget_warned = False  # 预算提示只发一次，别每轮重复 append
         answered = False  # 本轮是否已产出最终答案（无 tool_calls）或以 ask_user 收尾
+        usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
         for _ in range(MAX_STEPS):
             content, tool_calls = "", []
             leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
@@ -109,6 +126,8 @@ class AgentService:
                         yield {"type": "token", "delta": piece}
                 elif ev["type"] == "tool_calls":
                     tool_calls = ev["tool_calls"]
+                elif ev["type"] == "usage":
+                    _accumulate_usage(usage_total, ev["usage"])
 
             if not tool_calls:
                 # 无工具调用：本轮正文即最终答案（已流式发出），落库收尾
@@ -167,9 +186,13 @@ class AgentService:
                     if piece:
                         final += piece
                         yield {"type": "token", "delta": piece}
+                elif ev["type"] == "usage":
+                    _accumulate_usage(usage_total, ev["usage"])
             await repo.append(sid, seq, "assistant", final)
             seq += 1
 
+        if usage_total:
+            yield {"type": "usage", **usage_total}
         yield {"type": "done"}
 
     async def _maybe_compact(self, repo: AgentRepository, sid: str) -> None:

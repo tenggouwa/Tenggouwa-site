@@ -91,7 +91,21 @@ async def test_stream_toolcalls_fragmented(monkeypatch):
             "tool_calls": [
                 {"id": "c1", "type": "function", "function": {"name": "kb_search", "arguments": '{"query":"梅兰芳"}'}}
             ],
-        }
+        },
+        {"type": "usage", "usage": {"prompt_tokens": 10, "prompt_cache_hit_tokens": 8}},
+    ]
+
+
+async def test_stream_yields_usage_event(monkeypatch):
+    # include_usage：末尾 usage-only chunk（无 choices）→ 末尾 yield 一个 usage 事件
+    lines = [
+        _sse({"choices": [{"delta": {"content": "hi"}}]}),
+        _sse({"choices": [], "usage": {"prompt_tokens": 5, "completion_tokens": 3}}),
+    ]
+    events = await _collect(monkeypatch, lines)
+    assert events == [
+        {"type": "content", "delta": "hi"},
+        {"type": "usage", "usage": {"prompt_tokens": 5, "completion_tokens": 3}},
     ]
 
 
