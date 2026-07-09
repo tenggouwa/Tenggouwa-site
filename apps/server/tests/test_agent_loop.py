@@ -173,6 +173,14 @@ async def test_tool_output_truncated(monkeypatch):
     assert "已截断" in tool_row.content
 
 
+async def test_privileged_flag_passthrough(monkeypatch):
+    """Phase C-auth：privileged 透传到 tools()——公开通道 False、私有通道 True。"""
+    _, pub = await run_agent(monkeypatch, [[{"type": "content", "delta": "答"}]])
+    assert pub.tools_privileged is False  # 默认公开
+    _, priv = await run_agent(monkeypatch, [[{"type": "content", "delta": "答"}]], privileged=True)
+    assert priv.tools_privileged is True
+
+
 async def test_approval_pause_saves_pending_no_assistant(monkeypatch):
     """C2：这批含需批准工具 → 发 approval 事件、存 pending、不落 assistant（免孤儿 tool_call）、收尾。"""
     import modules.agent.service as svc
@@ -188,7 +196,7 @@ async def test_approval_pause_saves_pending_no_assistant(monkeypatch):
             {"type": "tool_calls", "tool_calls": [tool_call("danger", '{"path":"/x"}')]},
         ],
     ]
-    events, repo = await run_agent(monkeypatch, rounds, invoke=should_not_run)
+    events, repo = await run_agent(monkeypatch, rounds, invoke=should_not_run, privileged=True)
     apps = of_type(events, "approval")
     assert len(apps) == 1
     req = apps[0]["requests"][0]
@@ -199,6 +207,21 @@ async def test_approval_pause_saves_pending_no_assistant(monkeypatch):
     pending = repo._session.pending
     assert pending is not None and pending["content"] == "我准备删这个文件"
     assert pending["tool_calls"][0]["function"]["name"] == "danger"
+
+
+async def test_public_channel_never_pauses_for_approval(monkeypatch):
+    """C2 是私有通道概念：公开通道即便模型幻觉出需批准工具，也不发 approval（invoke 那层再拒）。"""
+    import modules.agent.service as svc
+
+    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    rounds = [
+        [{"type": "tool_calls", "tool_calls": [tool_call("danger", "{}")]}],
+        [{"type": "content", "delta": "继续"}],
+    ]
+    events, repo = await run_agent(monkeypatch, rounds)  # privileged=False（默认公开）
+    assert of_type(events, "approval") == []  # 公开通道不暂停
+    assert repo._session.pending is None  # 没存 pending
+    assert of_type(events, "tool")  # 直接执行（invoke 层做真过滤，见 test_skills_channel）
 
 
 async def test_approval_resume_approve_executes(monkeypatch):
@@ -226,6 +249,7 @@ async def test_approval_resume_approve_executes(monkeypatch):
         q="",
         approvals={"c1": True},
         invoke=inv,
+        privileged=True,
     )
     assert invoked == ["danger"]  # 批准 → 真执行
     assert "已经删好了" in tokens(events)
@@ -288,6 +312,7 @@ async def test_approval_resume_reject_skips_execution(monkeypatch):
         q="",
         approvals={"c1": False},
         invoke=inv,
+        privileged=True,
     )
     tool_row = next(r for r in repo.rows if r.role == "tool")
     assert "拒绝" in tool_row.content
