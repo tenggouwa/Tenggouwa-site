@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../lib/api';
+import { renderMarkdown } from '../lib/markdown';
+import { parseSSEFrame } from '../lib/sse';
+import AskPanel, { type AskQuestion } from '../components/AskPanel';
 
-// agent 对话：POST /api/public/agent/chat，SSE 事件 tool / token / done。
+// agent 对话：POST /api/public/agent/chat，SSE 事件 tool / token / plan / ask / done。
 // 模型自主决定是否调用 skill（如 kb_search 查知识库），再流式作答。
 
 interface ToolCall {
@@ -12,13 +15,6 @@ interface ToolCall {
 interface PlanStep {
   step: string;
   status: 'pending' | 'in_progress' | 'completed';
-}
-
-interface AskQuestion {
-  header?: string;
-  question: string;
-  options: string[];
-  multi?: boolean;
 }
 
 interface Turn {
@@ -39,287 +35,7 @@ const fmtArgs = (a: Record<string, unknown>) =>
     .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
     .join(' ');
 
-// 轻量安全的行内 markdown：**粗体** / `代码` / [文字](链接)。用 React 节点拼装（不注入 HTML），
-// 无 XSS 风险；流式时未闭合的 ** 先按原文显示，闭合后变粗体。链接只放行 http(s)。
-function renderInline(text: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g;
-  let last = 0;
-  let key = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) nodes.push(text.slice(last, m.index));
-    if (m[1] !== undefined) {
-      nodes.push(
-        <strong key={key++} className="text-terminal-green font-semibold">
-          {m[1]}
-        </strong>,
-      );
-    } else if (m[2] !== undefined) {
-      nodes.push(
-        <code key={key++} className="text-terminal-cyan bg-terminal-panel/60 px-1 rounded">
-          {m[2]}
-        </code>,
-      );
-    } else if (m[3] !== undefined) {
-      nodes.push(
-        <a
-          key={key++}
-          href={m[4]}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="text-terminal-cyan underline decoration-dotted hover:text-terminal-green"
-        >
-          {m[3]}
-        </a>,
-      );
-    }
-    last = re.lastIndex;
-  }
-  if (last < text.length) nodes.push(text.slice(last));
-  return nodes;
-}
-
-// 代码块：```lang\n...``` → 带语言标签 + 右上角复制按钮的等宽块。
-// 最大高度 max-h-80，超出纵向滚动，不无限拉长；横向也可滚。
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
-  const [copied, setCopied] = useState(false);
-  function copy() {
-    navigator.clipboard?.writeText(code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }
-  return (
-    <div className="my-2 rounded border border-terminal-line/60 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1 text-[11px] border-b border-terminal-line/40 bg-terminal-panel/40">
-        <span className="text-terminal-gray/50">{lang || 'code'}</span>
-        <button
-          type="button"
-          onClick={copy}
-          className="text-terminal-gray/60 hover:text-terminal-green transition-colors"
-        >
-          {copied ? '✓ 已复制' : '复制'}
-        </button>
-      </div>
-      <pre className="px-3 py-2 max-h-80 overflow-auto text-xs leading-relaxed text-terminal-cyan bg-terminal-bg/60">
-        <code>{code}</code>
-      </pre>
-    </div>
-  );
-}
-
-// 拆一行为单元格，去掉首尾空段（| a | b | → [a, b]）
-function splitRow(line: string): string[] {
-  const cells = line.split('|').map((c) => c.trim());
-  if (cells.length && cells[0] === '') cells.shift();
-  if (cells.length && cells[cells.length - 1] === '') cells.pop();
-  return cells;
-}
-
-// markdown 表格分隔行：|---|:--:|---|。每格都是 (可选:) 一串横线 (可选:)，兼容 ASCII - 与全角 —。
-function isTableSep(line: string): boolean {
-  if (!line.includes('|')) return false;
-  const cells = splitRow(line);
-  return cells.length > 0 && cells.every((c) => /^:?[-—]+:?$/.test(c));
-}
-
-function Table({ header, rows, k }: { header: string[]; rows: string[][]; k: number }) {
-  return (
-    <div key={`tb${k}`} className="my-2 overflow-x-auto">
-      <table className="text-xs border-collapse border border-terminal-line/60">
-        <thead>
-          <tr>
-            {header.map((h, j) => (
-              <th key={j} className="border border-terminal-line/50 px-2 py-1 text-left text-terminal-green font-semibold whitespace-nowrap">
-                {renderInline(h)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, ri) => (
-            <tr key={ri}>
-              {r.map((c, ci) => (
-                <td key={ci} className="border border-terminal-line/40 px-2 py-1 align-top text-terminal-gray/90">
-                  {renderInline(c)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// 文本段（非代码块）：逐行渲染，识别表格 / # 标题 / --- 分隔 / 空行，其余走行内 markdown。
-function renderTextBlock(seg: string): React.ReactElement[] {
-  const lines = seg.split('\n');
-  const out: React.ReactElement[] = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    // 表格：当前行含 |，下一行是分隔行
-    if (line.includes('|') && i + 1 < lines.length && isTableSep(lines[i + 1])) {
-      const header = splitRow(line);
-      const rows: string[][] = [];
-      i += 2;
-      while (i < lines.length && lines[i].includes('|') && lines[i].trim() !== '') {
-        rows.push(splitRow(lines[i]));
-        i += 1;
-      }
-      out.push(<Table key={`tb${i}`} k={i} header={header} rows={rows} />);
-      continue;
-    }
-    if (line.trim() === '') {
-      out.push(<div key={i} className="h-2" />);
-    } else if (/^\s*(-{3,}|—{3,})\s*$/.test(line)) {
-      out.push(<hr key={i} className="my-2 border-terminal-line/40" />);
-    } else {
-      const h = /^(#{1,4})\s+(.*)$/.exec(line);
-      if (h) {
-        const big = h[1].length <= 2;
-        out.push(
-          <div key={i} className={big ? 'text-terminal-green font-semibold mt-2 mb-0.5' : 'text-terminal-cyan font-semibold mt-1.5'}>
-            {renderInline(h[2])}
-          </div>,
-        );
-      } else {
-        out.push(
-          <div key={i} className="leading-relaxed">
-            {renderInline(line)}
-          </div>,
-        );
-      }
-    }
-    i += 1;
-  }
-  return out;
-}
-
-// 块级 markdown：按 ``` 切成 文本/代码 交替段（奇数段=代码块）。天然兜住流式未闭合的代码块。
-function renderMarkdown(text: string): React.ReactElement[] {
-  return text.split('```').flatMap((seg, i): React.ReactElement[] => {
-    if (i % 2 === 1) {
-      const nl = seg.indexOf('\n');
-      const lang = nl < 0 ? seg.trim() : seg.slice(0, nl).trim();
-      const code = nl < 0 ? '' : seg.slice(nl + 1).replace(/\n$/, '');
-      return [<CodeBlock key={`c${i}`} lang={lang} code={code} />];
-    }
-    return seg ? renderTextBlock(seg) : [];
-  });
-}
-
 const PLAN_MARK: Record<PlanStep['status'], string> = { completed: '✓', in_progress: '·', pending: ' ' };
-const OTHER = '__other__'; // 「其他…」选项的哨兵值，选中后展开输入框填自定义答案
-
-// agent 抛的选择题：每题一组可点选项，选完组成一条回答作为下一轮发送。
-// locked = 后面已有新回合，锁死本面板；submitted = 本面板已提交过。
-function AskPanel({
-  intro,
-  questions,
-  locked,
-  onSubmit,
-}: {
-  intro?: string;
-  questions: AskQuestion[];
-  locked: boolean;
-  onSubmit: (text: string) => void;
-}) {
-  const [sel, setSel] = useState<Record<number, string[]>>({});
-  const [custom, setCustom] = useState<Record<number, string>>({}); // 「其他」自定义答案文本
-  const [submitted, setSubmitted] = useState(false);
-  const done = locked || submitted;
-
-  function toggle(qi: number, opt: string, multi?: boolean) {
-    if (done) return;
-    setSel((s) => {
-      const cur = s[qi] ?? [];
-      if (multi) return { ...s, [qi]: cur.includes(opt) ? cur.filter((o) => o !== opt) : [...cur, opt] };
-      return { ...s, [qi]: cur.includes(opt) ? [] : [opt] };
-    });
-  }
-
-  // 每题都答了；选了「其他」还需填了文本才算数
-  const allAnswered = questions.every((_, qi) => {
-    const s = sel[qi] ?? [];
-    if (s.length === 0) return false;
-    if (s.includes(OTHER) && !(custom[qi] ?? '').trim()) return false;
-    return true;
-  });
-
-  function send() {
-    if (done || !allAnswered) return;
-    const text = questions
-      .map((qq, qi) => {
-        const chosen = (sel[qi] ?? []).map((o) => (o === OTHER ? (custom[qi] ?? '').trim() : o)).filter(Boolean);
-        return `${qq.header || qq.question}：${chosen.join('、')}`;
-      })
-      .join('\n');
-    setSubmitted(true);
-    onSubmit(text);
-  }
-
-  return (
-    <div className="my-1 rounded border border-terminal-cyan/30 bg-terminal-panel/30 p-3 space-y-3">
-      {intro && <div className="text-sm text-terminal-gray/80 whitespace-pre-wrap">{renderInline(intro)}</div>}
-      {questions.map((qq, qi) => {
-        const otherOn = (sel[qi] ?? []).includes(OTHER);
-        return (
-          <div key={qi} className="space-y-1.5">
-            <div className="text-sm text-terminal-gray">
-              {qq.header && <span className="text-terminal-cyan mr-1.5">[{qq.header}]</span>}
-              {qq.question}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {[...qq.options, OTHER].map((opt) => {
-                const active = (sel[qi] ?? []).includes(opt);
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    disabled={done}
-                    onClick={() => toggle(qi, opt, qq.multi)}
-                    className={
-                      'px-2.5 py-1 rounded border text-xs transition-colors disabled:opacity-70 ' +
-                      (active
-                        ? 'border-terminal-green/70 bg-terminal-green/15 text-terminal-green'
-                        : 'border-terminal-line/70 text-terminal-gray hover:border-terminal-green/50 hover:text-terminal-green')
-                    }
-                  >
-                    {active ? '✓ ' : ''}
-                    {opt === OTHER ? '其他…' : opt}
-                  </button>
-                );
-              })}
-            </div>
-            {otherOn && (
-              <input
-                value={custom[qi] ?? ''}
-                disabled={done}
-                onChange={(e) => setCustom((c) => ({ ...c, [qi]: e.target.value }))}
-                placeholder="输入你的答案…"
-                className="w-full bg-terminal-bg/60 border border-terminal-line/70 rounded px-2 py-1 text-xs text-terminal-gray outline-none focus:border-terminal-green/60 placeholder:text-terminal-gray/40 disabled:opacity-70"
-              />
-            )}
-          </div>
-        );
-      })}
-      {!done && (
-        <button
-          type="button"
-          disabled={!allAnswered}
-          onClick={send}
-          className="text-xs text-terminal-green border border-terminal-green/40 rounded px-3 py-1 hover:bg-terminal-green/10 disabled:opacity-40 transition-colors"
-        >
-          ↵ 发送选择
-        </button>
-      )}
-      {submitted && <div className="text-xs text-terminal-gray/40">已提交</div>}
-    </div>
-  );
-}
 
 export default function Ask() {
   const [q, setQ] = useState('');
@@ -337,12 +53,7 @@ export default function Ask() {
   }
 
   function handleEvent(raw: string, idx: number) {
-    let event = 'message';
-    let data = '';
-    for (const line of raw.split('\n')) {
-      if (line.startsWith('event:')) event = line.slice(6).trim();
-      else if (line.startsWith('data:')) data += line.slice(5).trim();
-    }
+    const { event, data } = parseSSEFrame(raw);
     if (!data) return;
     let obj: {
       delta?: string;
