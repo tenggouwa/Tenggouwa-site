@@ -3,8 +3,9 @@ import { API_BASE } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
 import { parseSSEFrame } from '../lib/sse';
 import AskPanel, { type AskQuestion } from '../components/AskPanel';
+import ApprovalCard, { type ApprovalRequest } from '../components/ApprovalCard';
 
-// agent 对话：POST /api/public/agent/chat，SSE 事件 tool / token / plan / ask / done。
+// agent 对话：POST /api/public/agent/chat，SSE 事件 tool / token / plan / ask / approval / done。
 // 模型自主决定是否调用 skill（如 kb_search 查知识库），再流式作答。
 
 interface ToolCall {
@@ -31,6 +32,7 @@ interface Turn {
   answer: string;
   ask?: AskQuestion[]; // agent 抛的选择题（ask_user skill）
   askIntro?: string;
+  approval?: ApprovalRequest[]; // agent 想执行需授权的工具，等用户批/拒（C2）
   usage?: Usage;
   error?: string;
   done: boolean;
@@ -83,6 +85,7 @@ export default function Ask() {
       plan?: PlanStep[];
       intro?: string;
       questions?: AskQuestion[];
+      requests?: ApprovalRequest[];
     } & Usage;
     try {
       obj = JSON.parse(data);
@@ -92,6 +95,7 @@ export default function Ask() {
     if (event === 'session') sessionId.current = obj.session_id ?? sessionId.current;
     else if (event === 'usage') updateTurn(idx, (t) => ({ ...t, usage: obj }));
     else if (event === 'plan') updateTurn(idx, (t) => ({ ...t, plan: obj.plan ?? [] }));
+    else if (event === 'approval') updateTurn(idx, (t) => ({ ...t, approval: obj.requests ?? [] }));
     else if (event === 'ask')
       updateTurn(idx, (t) => ({ ...t, ask: obj.questions ?? [], askIntro: obj.intro || '' }));
     else if (event === 'tool')
@@ -101,15 +105,14 @@ export default function Ask() {
     else if (event === 'error') updateTurn(idx, (t) => ({ ...t, error: obj.message ?? '出错了', done: true }));
   }
 
-  async function run(query: string) {
-    const idx = turns.length;
-    setTurns((t) => [...t, { q: query, tools: [], plan: [], answer: '', done: false }]);
+  // 把一次 SSE 流回填到第 idx 轮：既用于新提问，也用于审批续跑（body 换成 { approvals }）。
+  async function stream(idx: number, body: Record<string, unknown>) {
     setBusy(true);
     try {
       const res = await fetch(`${API_BASE}/api/public/agent/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: query, session_id: sessionId.current }),
+        body: JSON.stringify({ ...body, session_id: sessionId.current }),
         credentials: 'include',
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -130,6 +133,18 @@ export default function Ask() {
       setBusy(false);
       updateTurn(idx, (t) => ({ ...t, done: true }));
     }
+  }
+
+  async function run(query: string) {
+    const idx = turns.length;
+    setTurns((t) => [...t, { q: query, tools: [], plan: [], answer: '', done: false }]);
+    await stream(idx, { q: query });
+  }
+
+  // 审批决策回后端续跑：清掉本轮审批卡、置回"进行中"，续跑事件（工具执行 + 后续作答）回填同一轮。
+  function resume(idx: number, approvals: Record<string, boolean>) {
+    updateTurn(idx, (t) => ({ ...t, approval: undefined, done: false }));
+    void stream(idx, { approvals });
   }
 
   function submit(e: React.FormEvent) {
@@ -230,7 +245,15 @@ export default function Ask() {
                   onSubmit={(text) => void run(text)}
                 />
               )}
-              {!t.done && t.answer === '' && !t.ask && (
+              {t.approval && t.approval.length > 0 && (
+                <ApprovalCard
+                  key={t.approval.map((r) => r.id).join(',')}
+                  requests={t.approval}
+                  locked={i < turns.length - 1 || busy}
+                  onDecide={(approvals) => resume(i, approvals)}
+                />
+              )}
+              {!t.done && t.answer === '' && !t.ask && !t.approval && (
                 <div className="text-xs text-terminal-gray/40">
                   {t.tools.length ? '读取资料、思考中…' : '思考中…'}
                 </div>
