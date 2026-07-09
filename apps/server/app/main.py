@@ -49,11 +49,17 @@ def create_app() -> FastAPI:
         from modules.kb.scheduler import start_kb_scheduler, stop_kb_scheduler
 
         start_kb_scheduler()
+        # MCP 客户端：连 MCP_SERVERS 白名单里的 server（未配置则 inert）。必须在 lifespan 同一 task
+        # 里 start/stop（mcp SDK 基于 anyio task group）。
+        from modules.mcp.manager import mcp_manager
+
+        await mcp_manager.start()
         logger.info("tenggouwa-server started.")
         yield
         logger.info("Stopping tenggouwa-server...")
         stop_seo_scheduler()
         stop_kb_scheduler()
+        await mcp_manager.stop()
         logger.info("tenggouwa-server stopped.")
 
     app = FastAPI(
