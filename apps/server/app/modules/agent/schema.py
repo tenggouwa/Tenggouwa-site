@@ -6,3 +6,13 @@ class AgentChatRequest(BaseModel):
     q: str = Field(default="", max_length=2000)
     session_id: str | None = Field(default=None, max_length=32)  # 多轮：前端持有并回传
     approvals: dict[str, bool] | None = Field(default=None)  # C2：审批决策，非空则走 resume
+
+
+class AgentUnlockRequest(BaseModel):
+    # 私有通道 TOTP 解锁：6 位数字码 → 换长 TTL 的 agent_token。
+    totp: str = Field(..., min_length=6, max_length=6)
+
+
+class AgentUnlockResponse(BaseModel):
+    token: str
+    ttl_seconds: int

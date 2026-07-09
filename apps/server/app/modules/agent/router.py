@@ -2,23 +2,36 @@ import json
 import logging
 
 from db import get_session
-from dependencies.jwt_auth import current_admin
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .schema import AgentChatRequest
+from ..common_schema import ResponseModel
+from ..terminal.service import terminal_service
+from .auth import current_agent_owner, make_agent_token
+from .schema import AgentChatRequest, AgentUnlockRequest, AgentUnlockResponse
 from .service import agent_service
 
 logger = logging.getLogger(__name__)
 
-# 公开通道（免鉴权）：只暴露 readonly skill；私有通道（JWT）：额外给 write / MCP 高危工具。
+# 公开通道（免鉴权）：只暴露 readonly skill；私有通道（TOTP → agent_token）：额外给 write / MCP 高危工具。
 public_router = APIRouter(prefix="/public/agent", tags=["public.agent"])
-private_router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[Depends(current_admin)])
+private_router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[Depends(current_agent_owner)])
 
 
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@public_router.post("/unlock", response_model=ResponseModel[AgentUnlockResponse])
+async def unlock(
+    payload: AgentUnlockRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[AgentUnlockResponse]:
+    """TOTP 解锁私有通道：6 位码校验（复用 console 那套 TOTP）→ 返回长 TTL 的 agent_token。"""
+    owner = await terminal_service.unlock_with_totp(session, payload.totp)
+    token, ttl = make_agent_token(owner)
+    return ResponseModel(data=AgentUnlockResponse(token=token, ttl_seconds=ttl))
 
 
 def _chat_stream(session: AsyncSession, payload: AgentChatRequest, *, privileged: bool) -> StreamingResponse:
