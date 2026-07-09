@@ -8,6 +8,7 @@ env 配置，换供应商不改代码：
 v0 只用生成；嵌入暂缺（需另配专用嵌入端点，见 docs/agent/kb-design.md §3）。
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -16,6 +17,27 @@ from collections.abc import AsyncIterator
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# 瞬时错误重试（对齐 Codex responses_retry）：连接抖动 / 超时 / 5xx / 429 退避重试。
+# 流式的坑：只在「首个事件到达前」失败可安全重试；已开始流式再断则不重发（避免重复输出）。
+_RETRY_MAX = 3
+_RETRY_TRANSPORT = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.ReadError,  # 硬 reset 常落这
+    httpx.WriteError,
+    httpx.RemoteProtocolError,
+    httpx.PoolTimeout,
+)
+
+
+def _retriable_status(status: int) -> bool:
+    return status == 429 or status >= 500
+
+
+async def _backoff(attempt: int) -> None:
+    await asyncio.sleep(0.5 * (2**attempt))  # 0.5s / 1s（最后一次 attempt 不 backoff、直接 raise）
 
 
 def _merge_tool_call_deltas(acc: dict[int, dict], deltas: list[dict]) -> None:
@@ -114,6 +136,7 @@ class ChatLLM:
 
         事件：{"type":"content","delta": str} / {"type":"tool_calls","tool_calls": [...]}。
         tools 一直带着（tool_choice=auto）——模型走结构化 delta.tool_calls，不会把工具调用吐成文本。
+        瞬时错误只在「首个事件到达前」重试；已开始流式再断则透传（避免重复输出）。
         """
         if not self.api_key:
             raise RuntimeError("KB_LLM_API_KEY 未配置")
@@ -128,6 +151,26 @@ class ChatLLM:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+        for attempt in range(_RETRY_MAX):
+            yielded = False
+            try:
+                async for ev in self._stream_step_once(payload):
+                    yielded = True
+                    yield ev
+                return
+            except _RETRY_TRANSPORT as e:
+                if yielded or attempt == _RETRY_MAX - 1:
+                    raise
+                logger.warning("stream_step 连接失败重试 %d/%d: %s", attempt + 1, _RETRY_MAX, e)
+                await _backoff(attempt)
+            except httpx.HTTPStatusError as e:
+                if yielded or attempt == _RETRY_MAX - 1 or not _retriable_status(e.response.status_code):
+                    raise
+                logger.warning("stream_step %d 重试 %d/%d", e.response.status_code, attempt + 1, _RETRY_MAX)
+                await _backoff(attempt)
+
+    async def _stream_step_once(self, payload: dict) -> AsyncIterator[dict]:
+        """单次流式请求（不含重试）。stream_step 的重试包装调用它。"""
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         timeout = httpx.Timeout(120.0, connect=10.0)
         url = f"{self.base_url}/chat/completions"
@@ -178,12 +221,26 @@ class ChatLLM:
             payload["tools"] = tools
             payload["tool_choice"] = tool_choice
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
-            resp = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
-            resp.raise_for_status()
-            body = resp.json()
-            _log_cache("complete", body.get("usage"))
-            return (body.get("choices") or [{}])[0].get("message", {})
+        url = f"{self.base_url}/chat/completions"
+        for attempt in range(_RETRY_MAX):
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                    resp.raise_for_status()
+                    body = resp.json()
+                    _log_cache("complete", body.get("usage"))
+                    return (body.get("choices") or [{}])[0].get("message", {})
+            except _RETRY_TRANSPORT as e:
+                if attempt == _RETRY_MAX - 1:
+                    raise
+                logger.warning("complete 连接失败重试 %d/%d: %s", attempt + 1, _RETRY_MAX, e)
+                await _backoff(attempt)
+            except httpx.HTTPStatusError as e:
+                if attempt == _RETRY_MAX - 1 or not _retriable_status(e.response.status_code):
+                    raise
+                logger.warning("complete %d 重试 %d/%d", e.response.status_code, attempt + 1, _RETRY_MAX)
+                await _backoff(attempt)
+        raise RuntimeError("complete 重试耗尽")  # 不可达（最后一次要么 return 要么 raise）
 
 
 chat_llm = ChatLLM()

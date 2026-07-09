@@ -103,6 +103,22 @@ async def test_leak_across_deltas_stops_emitting(monkeypatch):
     assert "junk" not in tokens(events)
 
 
+async def test_tool_output_truncated(monkeypatch):
+    """A2：超大 tool 结果被截断，防单个工具输出撑爆上下文。"""
+
+    async def big(_s, _name, _a):
+        return "y" * 20000
+
+    rounds = [
+        [{"type": "tool_calls", "tool_calls": [tool_call("kb_search", "{}")]}],
+        [{"type": "content", "delta": "答"}],
+    ]
+    _, repo = await run_agent(monkeypatch, rounds, invoke=big)
+    tool_row = next(r for r in repo.rows if r.role == "tool")
+    assert len(tool_row.content) < 20000
+    assert "已截断" in tool_row.content
+
+
 async def test_skill_exception_keeps_paired(monkeypatch):
     """H1：skill handler 抛异常也补 error tool 结果，保住配对，仍出最终答案。"""
 

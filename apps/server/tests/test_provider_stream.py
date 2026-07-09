@@ -6,6 +6,9 @@ mock httpx 喂录制的 SSE 行给 stream_step，断言解析出的 content / to
 
 import json
 
+import httpx
+import pytest
+
 
 class _FakeResp:
     def __init__(self, lines):
@@ -164,3 +167,159 @@ async def test_stream_ignores_malformed_lines(monkeypatch):
     ]
     events = await _collect(monkeypatch, lines)
     assert events == [{"type": "content", "delta": "ok"}]
+
+
+# ---------- A1 瞬时错误重试 ----------
+
+
+async def _anoop(_attempt):  # 免真 sleep
+    pass
+
+
+def _req():
+    return httpx.Request("POST", "http://x/chat/completions")
+
+
+class _StreamAttempt:
+    """一次流式尝试：connect_fail→__aenter__ 抛 ConnectError；status→raise_for_status 抛；
+    否则吐 lines；mid_fail→吐一行后在 aiter_lines 抛（模拟流式中途断）。"""
+
+    def __init__(self, *, connect_fail=False, status=None, lines=None, mid_fail=False):
+        self._connect_fail = connect_fail
+        self._status = status
+        self._lines = lines or []
+        self._mid_fail = mid_fail
+
+    def raise_for_status(self):
+        if self._status is not None:
+            raise httpx.HTTPStatusError("e", request=_req(), response=httpx.Response(self._status, request=_req()))
+
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
+        if self._mid_fail:
+            raise httpx.RemoteProtocolError("dropped mid-stream", request=_req())
+
+    async def __aenter__(self):
+        if self._connect_fail:
+            raise httpx.ConnectError("boom")
+        return self
+
+    async def __aexit__(self, *_a):
+        pass
+
+
+class _SeqStreamClient:
+    def __init__(self, counter, attempts):
+        self._c = counter
+        self._attempts = attempts
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_a):
+        pass
+
+    def stream(self, *_a, **_kw):
+        i = self._c[0]
+        self._c[0] += 1
+        return self._attempts[min(i, len(self._attempts) - 1)]
+
+
+def _install_stream(monkeypatch, attempts):
+    from modules.kb import provider
+
+    monkeypatch.setattr(provider.chat_llm, "api_key", "k")
+    monkeypatch.setattr(provider, "_backoff", _anoop)
+    counter = [0]
+    monkeypatch.setattr(provider.httpx, "AsyncClient", lambda **_kw: _SeqStreamClient(counter, attempts))
+    return provider, counter
+
+
+async def _run_stream(provider):
+    return [ev async for ev in provider.chat_llm.stream_step([{"role": "user", "content": "x"}], tools=[])]
+
+
+_OK = [_sse({"choices": [{"delta": {"content": "ok"}}]})]
+
+
+async def test_stream_retries_connect_then_succeeds(monkeypatch):
+    provider, c = _install_stream(monkeypatch, [_StreamAttempt(connect_fail=True), _StreamAttempt(lines=_OK)])
+    assert await _run_stream(provider) == [{"type": "content", "delta": "ok"}]
+    assert c[0] == 2  # 首次失败、重试第二次成功
+
+
+async def test_stream_retries_5xx_then_succeeds(monkeypatch):
+    provider, c = _install_stream(monkeypatch, [_StreamAttempt(status=503), _StreamAttempt(lines=_OK)])
+    assert await _run_stream(provider) == [{"type": "content", "delta": "ok"}]
+    assert c[0] == 2
+
+
+async def test_stream_no_retry_on_4xx(monkeypatch):
+    provider, c = _install_stream(monkeypatch, [_StreamAttempt(status=400)])
+    with pytest.raises(httpx.HTTPStatusError):
+        await _run_stream(provider)
+    assert c[0] == 1  # 4xx 不重试
+
+
+async def test_stream_midstream_error_propagates_no_retry(monkeypatch):
+    # 已开始流式再断 → 透传、不重发（防重复输出）
+    provider, c = _install_stream(monkeypatch, [_StreamAttempt(lines=_OK, mid_fail=True)])
+    with pytest.raises(httpx.RemoteProtocolError):
+        await _run_stream(provider)
+    assert c[0] == 1
+
+
+async def test_stream_retry_exhausted_raises(monkeypatch):
+    provider, _ = _install_stream(monkeypatch, [_StreamAttempt(connect_fail=True)])  # 每次都失败
+    with pytest.raises(httpx.ConnectError):
+        await _run_stream(provider)
+
+
+# ---------- A1 complete 重试 ----------
+
+
+class _SeqPostClient:
+    def __init__(self, counter, attempts):
+        self._c = counter
+        self._attempts = attempts
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_a):
+        pass
+
+    async def post(self, *_a, **_kw):
+        i = self._c[0]
+        self._c[0] += 1
+        a = self._attempts[min(i, len(self._attempts) - 1)]
+        if a == "connect":
+            raise httpx.ConnectError("boom")
+        status = a if isinstance(a, int) else 200
+        body = {"choices": [{"message": {"content": "ok"}}]}
+        return httpx.Response(status, json=body, request=_req())
+
+
+def _install_post(monkeypatch, attempts):
+    from modules.kb import provider
+
+    monkeypatch.setattr(provider.chat_llm, "api_key", "k")
+    monkeypatch.setattr(provider, "_backoff", _anoop)
+    counter = [0]
+    monkeypatch.setattr(provider.httpx, "AsyncClient", lambda **_kw: _SeqPostClient(counter, attempts))
+    return provider, counter
+
+
+async def test_complete_retries_then_succeeds(monkeypatch):
+    provider, c = _install_post(monkeypatch, ["connect", 429, "ok"])
+    msg = await provider.chat_llm.complete([{"role": "user", "content": "x"}])
+    assert msg == {"content": "ok"}
+    assert c[0] == 3  # connect 失败 + 429 + 成功
+
+
+async def test_complete_no_retry_on_4xx(monkeypatch):
+    provider, c = _install_post(monkeypatch, [400])
+    with pytest.raises(httpx.HTTPStatusError):
+        await provider.chat_llm.complete([{"role": "user", "content": "x"}])
+    assert c[0] == 1
