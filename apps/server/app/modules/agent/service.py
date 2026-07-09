@@ -72,6 +72,17 @@ def _accumulate_usage(total: dict, u: dict) -> None:
             total[k] = total.get(k, 0) + u[k]
 
 
+def _tc_name(tc: dict) -> str:
+    return tc.get("function", {}).get("name", "")
+
+
+def _tc_args(tc: dict) -> dict:
+    try:
+        return json.loads(tc.get("function", {}).get("arguments") or "{}")
+    except json.JSONDecodeError:
+        return {}
+
+
 def _strip_leak(text: str) -> str:
     """砍掉 DeepSeek 泄漏的 tool-call 文本：首个 ｜ 及之后全丢，并去掉悬空的 '<'。
 
@@ -85,33 +96,56 @@ def _strip_leak(text: str) -> str:
 
 class AgentService:
     async def answer_stream(
-        self, session: AsyncSession, q: str, *, session_id: str | None = None
+        self, session: AsyncSession, q: str, *, session_id: str | None = None, approvals: dict | None = None
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
         existing = await repo.get_session(session_id) if session_id else None
-        sid = existing.id if existing else await repo.create_session(q)
+        sid = existing.id if existing else await repo.create_session(q or "（审批）")
         yield {"type": "session", "session_id": sid}
 
-        await self._maybe_compact(repo, sid)
+        usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
 
-        window = await repo.load_window(sid)
-        seq = window.next_seq
-        await repo.append(sid, seq, "user", q)
-        seq += 1
+        # 组装初始 messages + seq：C2 审批续跑（消费 pending、按 approvals 执行）vs 正常提问
+        resume_asked = False  # 续跑批里若含 ask_user，执行完也要停（等用户点选），别继续生成
+        if approvals is not None:
+            if existing is None or not existing.pending:
+                # 审批续跑但 pending 已消费/过期（重复提交、会话丢失）→ 不伪造空 user 轮，直接收尾
+                yield {"type": "done"}
+                return
+            window = await repo.load_window(sid)
+            seq = window.next_seq
+            messages = self._seed(window)  # system + summary + 历史
+            pending = existing.pending
+            content, tool_calls = pending.get("content", ""), pending.get("tool_calls", [])
+            messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
+            await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
+            seq += 1
+            async for ev in self._execute_batch(session, repo, sid, seq, content, tool_calls, messages, approvals):
+                yield ev
+            seq += len(tool_calls)
+            await repo.set_pending(sid, None)  # 消费完清 pending
+            resume_asked = any(_tc_name(tc) == ASK_SKILL for tc in tool_calls)
+        else:
+            if not q.strip():
+                yield {"type": "done"}  # 正常请求但 q 空 → 无可答，直接收尾（不落空 user 轮）
+                return
+            if existing is not None and existing.pending:
+                await repo.set_pending(sid, None)  # 用户改问了别的 → 放弃上次待批
+            await self._maybe_compact(repo, sid)
+            window = await repo.load_window(sid)
+            seq = window.next_seq
+            await repo.append(sid, seq, "user", q)
+            seq += 1
+            messages = self._seed(window)
+            messages.append({"role": "user", "content": q})
 
-        messages: list[dict] = [{"role": "system", "content": SYSTEM}]
-        if window.summary:
-            messages.append({"role": "system", "content": f"[早前对话摘要]\n{window.summary}"})
-        messages.extend(window.messages)
-        messages.append({"role": "user", "content": q})
-
-        # 统一流式循环：每轮都带 tools 流式跑——正文实时显示、tool_calls 从结构化 delta 解析执行，
-        # 不再"非流式决策 + 二次生成"，从根上消除隐藏 preamble / 悬空引用 / tool-call 文本泄漏。
+        # 统一流式循环：每轮都带 tools 流式跑——正文实时显示、tool_calls 从结构化 delta 解析执行。
         tools = skills_service.tools()
         budget_warned = False  # 预算提示只发一次，别每轮重复 append
-        answered = False  # 本轮是否已产出最终答案（无 tool_calls）或以 ask_user 收尾
-        usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
+        answered = resume_asked  # 本轮是否已产出最终答案（无 tool_calls）/ 以 ask_user 收尾 / 以审批收尾
         for _ in range(MAX_STEPS):
+            if answered:  # resume 批已以 ask_user 收尾 → 跳过主循环，也别触发 M2 强制作答
+                break
             content, tool_calls = "", []
             leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
             async for ev in chat_llm.stream_step(messages, tools=tools):
@@ -137,40 +171,26 @@ class AgentService:
                 answered = True
                 break
 
+            # C2 权限闸：这批含需批准的工具（write 原生 / 非 auto MCP）→ 暂停，存 pending（不落 assistant
+            # 以免孤儿 tool_call），发 approval 事件收尾，等用户批/拒后带 approvals 续跑。
+            need = [tc for tc in tool_calls if requires_approval(_tc_name(tc))]
+            if need:
+                await repo.set_pending(sid, {"content": content, "tool_calls": tool_calls})
+                yield {
+                    "type": "approval",
+                    "requests": [{"id": tc.get("id"), "name": _tc_name(tc), "args": _tc_args(tc)} for tc in need],
+                }
+                answered = True
+                break
+
+            # 全部无需批准 → 落 assistant + 执行这批
             messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
             await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
             seq += 1
-
-            asked = False
-            for tc in tool_calls:
-                fn = tc.get("function", {})
-                name = fn.get("name", "")
-                try:
-                    args = json.loads(fn.get("arguments") or "{}")
-                except json.JSONDecodeError:
-                    args = {}
-                if name == PLAN_SKILL:
-                    yield {"type": "plan", "plan": args.get("plan", [])}
-                elif name == ASK_SKILL:
-                    yield {"type": "ask", "intro": content, "questions": args.get("questions", [])}
-                    asked = True
-                else:
-                    yield {"type": "tool", "name": name, "args": args}
-                # C1 权限闸：需批准的工具（write 原生 / 非 auto MCP）先拦住不执行（C2 再做交互审批）。
-                # H1：每个 tool_call 必须有配对的 tool 结果落库，否则该会话 resume 时 DeepSeek 400。
-                # skill handler 抛异常也要兜住、补一条 error 结果，保住 assistant↔tool 配对。
-                if requires_approval(name):
-                    result = f"（工具 {name} 需人工批准，暂未开放交互审批、已跳过。如信任来源可在配置中授权。）"
-                else:
-                    try:
-                        result = await skills_service.invoke(session, name, args)
-                    except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
-                        logger.exception("skill %s failed", name)
-                        result = f"（skill {name} 执行失败：{e}）"
-                result = _truncate_tool_result(result)
-                messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": result})
-                await repo.append(sid, seq, "tool", result, tool_call_id=tc.get("id"))
-                seq += 1
+            asked = any(_tc_name(tc) == ASK_SKILL for tc in tool_calls)
+            async for ev in self._execute_batch(session, repo, sid, seq, content, tool_calls, messages, None):
+                yield ev
+            seq += len(tool_calls)
 
             if asked:  # 抛完选择题即停，等用户点选（此前已把所有 tool_call 配上结果）
                 answered = True
@@ -199,6 +219,43 @@ class AgentService:
         if usage_total:
             yield {"type": "usage", **usage_total}
         yield {"type": "done"}
+
+    @staticmethod
+    def _seed(window) -> list[dict]:
+        """初始 messages：system + 早前摘要 + 历史窗口。"""
+        messages: list[dict] = [{"role": "system", "content": SYSTEM}]
+        if window.summary:
+            messages.append({"role": "system", "content": f"[早前对话摘要]\n{window.summary}"})
+        messages.extend(window.messages)
+        return messages
+
+    async def _execute_batch(self, session, repo, sid, start_seq, content, tool_calls, messages, approvals):
+        """执行一批 tool_calls：发 plan/ask/tool 事件、按 approvals 决定执行/拒绝、落库、回填 messages。
+
+        approvals=None：这批全部无需审批（pause 已在上游拦过），全执行。
+        approvals=dict：resume 路径，被拒的需批准工具回"用户拒绝"，其余执行。
+        每个 tool_call → 恰好一条 tool 结果（保 H1 配对）；seq 由上层按 len(tool_calls) 推进。
+        """
+        for i, tc in enumerate(tool_calls):
+            seq = start_seq + i
+            name, args, tid = _tc_name(tc), _tc_args(tc), tc.get("id")
+            if name == PLAN_SKILL:
+                yield {"type": "plan", "plan": args.get("plan", [])}
+            elif name == ASK_SKILL:
+                yield {"type": "ask", "intro": content, "questions": args.get("questions", [])}
+            else:
+                yield {"type": "tool", "name": name, "args": args}
+            if approvals is not None and requires_approval(name) and not approvals.get(tid, False):
+                result = "（用户拒绝执行此操作。）"
+            else:
+                try:
+                    result = await skills_service.invoke(session, name, args)
+                except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+                    logger.exception("skill %s failed", name)
+                    result = f"（skill {name} 执行失败：{e}）"
+            result = _truncate_tool_result(result)
+            messages.append({"role": "tool", "tool_call_id": tid, "content": result})
+            await repo.append(sid, seq, "tool", result, tool_call_id=tid)
 
     async def _maybe_compact(self, repo: AgentRepository, sid: str) -> None:
         """历史超阈值时，把最近 KEEP_TURNS 个 user 轮之前的消息摘要成一条 note（§4）。
