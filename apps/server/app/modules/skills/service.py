@@ -16,17 +16,30 @@ class SkillsService:
     def list_skills(self) -> list[SkillInfo]:
         return [SkillInfo(name=s.name, description=s.description, parameters=s.parameters) for s in REGISTRY.values()]
 
-    def tools(self) -> list[dict]:
-        """function-calling 的 tools 列表（agent 传给 LLM）：原生 skill + MCP 工具。"""
-        return [tool_schema(s) for s in REGISTRY.values()] + mcp_manager.tools()
+    def tools(self, *, privileged: bool = False) -> list[dict]:
+        """function-calling 的 tools 列表（agent 传给 LLM）。
 
-    async def invoke(self, session: AsyncSession, name: str, args: dict) -> str:
-        """执行一个 skill / MCP 工具；未知返回错误字符串（不抛，交给 agent 续答）。"""
+        公开通道（privileged=False）只暴露 readonly 原生 skill；私有（鉴权）通道额外给
+        write 原生 skill + MCP 工具。这是唯一的能力暴露点——LLM 只能调用列表里的工具，
+        所以公开端点天然拿不到高危工具（invoke 再做一层纵深兜底）。
+        """
+        native = [tool_schema(s) for s in REGISTRY.values() if privileged or s.risk == "readonly"]
+        return native + (mcp_manager.tools() if privileged else [])
+
+    async def invoke(self, session: AsyncSession, name: str, args: dict, *, privileged: bool = False) -> str:
+        """执行一个 skill / MCP 工具；未知 / 越权返回错误字符串（不抛，交给 agent 续答）。
+
+        纵深防御：即便模型幻觉出一个公开通道不该有的高危工具名，这里也拒绝执行。
+        """
         if mcp_manager.has(name):
+            if not privileged:
+                return f"（{name} 是外部 MCP 工具，仅在鉴权的私有通道可用，公开通道不执行。）"
             return await mcp_manager.invoke(name, args)
         skill = REGISTRY.get(name)
         if skill is None:
             return f"（未知 skill: {name}）"
+        if skill.risk == "write" and not privileged:
+            return f"（{name} 是有副作用的操作，仅在鉴权的私有通道可用，公开通道不执行。）"
         return await skill.handler(session, args)
 
 

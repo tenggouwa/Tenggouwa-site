@@ -82,21 +82,40 @@ async def run_agent(
     q="问题",
     session_id=None,
     approvals=None,
+    privileged=False,
 ):
     """跑一次 answer_stream，返回 (events, repo)。mock 掉 LLM / skills / repo，全程不联网。
 
     传 session_id 走 resume 分支（service.py 会先 get_session 取已存在会话、load 注入的 window）。
     传 approvals（非 None）走 C2 审批续跑分支（消费 session.pending）。
+    传 privileged 透传给 tools()/invoke()（真通道过滤在 test_skills_channel.py 单测）。
     """
     import modules.agent.service as svc
 
     repo = FakeRepo(window=window, rows_after=rows_after, session=session)
+    seen: dict = {}  # 记录 tools() 收到的 privileged，供断言通道透传
+
+    def _tools(*, privileged=False):
+        seen["privileged"] = privileged
+        return tools or []
+
+    _invoke = invoke or _default_invoke
+
+    async def _invoke_adapter(session, name, args, **_kw):  # 吞掉 privileged=；真过滤在 test_skills_channel
+        return await _invoke(session, name, args)
+
     monkeypatch.setattr(svc, "chat_llm", ScriptedLLM(rounds))
     monkeypatch.setattr(svc, "AgentRepository", lambda _session: repo)
-    monkeypatch.setattr(svc.skills_service, "tools", lambda: tools or [])
-    monkeypatch.setattr(svc.skills_service, "invoke", invoke or _default_invoke)
+    monkeypatch.setattr(svc.skills_service, "tools", _tools)
+    monkeypatch.setattr(svc.skills_service, "invoke", _invoke_adapter)
 
-    events = [ev async for ev in svc.agent_service.answer_stream(None, q, session_id=session_id, approvals=approvals)]
+    events = [
+        ev
+        async for ev in svc.agent_service.answer_stream(
+            None, q, session_id=session_id, approvals=approvals, privileged=privileged
+        )
+    ]
+    repo.tools_privileged = seen.get("privileged")  # type: ignore[attr-defined]
     return events, repo
 
 

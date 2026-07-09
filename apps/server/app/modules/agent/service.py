@@ -96,7 +96,13 @@ def _strip_leak(text: str) -> str:
 
 class AgentService:
     async def answer_stream(
-        self, session: AsyncSession, q: str, *, session_id: str | None = None, approvals: dict | None = None
+        self,
+        session: AsyncSession,
+        q: str,
+        *,
+        session_id: str | None = None,
+        approvals: dict | None = None,
+        privileged: bool = False,
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
         existing = await repo.get_session(session_id) if session_id else None
@@ -120,7 +126,9 @@ class AgentService:
             messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
             await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
             seq += 1
-            async for ev in self._execute_batch(session, repo, sid, seq, content, tool_calls, messages, approvals):
+            async for ev in self._execute_batch(
+                session, repo, sid, seq, content, tool_calls, messages, approvals, privileged
+            ):
                 yield ev
             seq += len(tool_calls)
             await repo.set_pending(sid, None)  # 消费完清 pending
@@ -140,7 +148,7 @@ class AgentService:
             messages.append({"role": "user", "content": q})
 
         # 统一流式循环：每轮都带 tools 流式跑——正文实时显示、tool_calls 从结构化 delta 解析执行。
-        tools = skills_service.tools()
+        tools = skills_service.tools(privileged=privileged)
         budget_warned = False  # 预算提示只发一次，别每轮重复 append
         answered = resume_asked  # 本轮是否已产出最终答案（无 tool_calls）/ 以 ask_user 收尾 / 以审批收尾
         for _ in range(MAX_STEPS):
@@ -171,9 +179,10 @@ class AgentService:
                 answered = True
                 break
 
-            # C2 权限闸：这批含需批准的工具（write 原生 / 非 auto MCP）→ 暂停，存 pending（不落 assistant
-            # 以免孤儿 tool_call），发 approval 事件收尾，等用户批/拒后带 approvals 续跑。
-            need = [tc for tc in tool_calls if requires_approval(_tc_name(tc))]
+            # C2 权限闸（仅私有通道）：这批含需批准的工具（write 原生 / 非 auto MCP）→ 暂停，存 pending
+            # （不落 assistant 以免孤儿 tool_call），发 approval 事件收尾，等用户批/拒后带 approvals 续跑。
+            # 公开通道压根不暴露高危工具，审批是私有通道概念；即便模型幻觉出高危名，invoke 也会拒执行。
+            need = [tc for tc in tool_calls if requires_approval(_tc_name(tc))] if privileged else []
             if need:
                 await repo.set_pending(sid, {"content": content, "tool_calls": tool_calls})
                 yield {
@@ -188,7 +197,9 @@ class AgentService:
             await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
             seq += 1
             asked = any(_tc_name(tc) == ASK_SKILL for tc in tool_calls)
-            async for ev in self._execute_batch(session, repo, sid, seq, content, tool_calls, messages, None):
+            async for ev in self._execute_batch(
+                session, repo, sid, seq, content, tool_calls, messages, None, privileged
+            ):
                 yield ev
             seq += len(tool_calls)
 
@@ -229,11 +240,12 @@ class AgentService:
         messages.extend(window.messages)
         return messages
 
-    async def _execute_batch(self, session, repo, sid, start_seq, content, tool_calls, messages, approvals):
+    async def _execute_batch(self, session, repo, sid, start_seq, content, tool_calls, messages, approvals, privileged):
         """执行一批 tool_calls：发 plan/ask/tool 事件、按 approvals 决定执行/拒绝、落库、回填 messages。
 
         approvals=None：这批全部无需审批（pause 已在上游拦过），全执行。
         approvals=dict：resume 路径，被拒的需批准工具回"用户拒绝"，其余执行。
+        privileged：透传给 skills_service.invoke，公开通道拒执行 write/MCP 工具（纵深兜底）。
         每个 tool_call → 恰好一条 tool 结果（保 H1 配对）；seq 由上层按 len(tool_calls) 推进。
         """
         for i, tc in enumerate(tool_calls):
@@ -249,7 +261,7 @@ class AgentService:
                 result = "（用户拒绝执行此操作。）"
             else:
                 try:
-                    result = await skills_service.invoke(session, name, args)
+                    result = await skills_service.invoke(session, name, args, privileged=privileged)
                 except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
                     logger.exception("skill %s failed", name)
                     result = f"（skill {name} 执行失败：{e}）"

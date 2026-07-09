@@ -126,10 +126,12 @@ async def test_skills_service_merges_mcp_tools(monkeypatch):
     await m.refresh_tools()
     monkeypatch.setattr("modules.skills.service.mcp_manager", m)
 
-    names = [t["function"]["name"] for t in skills_service.tools()]
+    # MCP 是私有（鉴权）通道能力：privileged=True 才追加；公开通道拿不到
+    assert "fs__read" not in [t["function"]["name"] for t in skills_service.tools(privileged=False)]
+    names = [t["function"]["name"] for t in skills_service.tools(privileged=True)]
     assert names[:4] == ["kb_search", "update_plan", "web_fetch", "ask_user"]  # 原生在前、顺序固定
     assert "fs__read" in names  # MCP 追加在后
-    # invoke 路由到 MCP
+    # invoke 路由到 MCP（私有通道）
     m._sessions["fs"] = _FakeSession(
         [_tool("read")],
         result=SimpleNamespace(
@@ -137,7 +139,7 @@ async def test_skills_service_merges_mcp_tools(monkeypatch):
         ),
     )
     await m.refresh_tools()
-    assert await skills_service.invoke(None, "fs__read", {}) == "ok"
+    assert await skills_service.invoke(None, "fs__read", {}, privileged=True) == "ok"
 
 
 async def test_inert_when_no_servers():
