@@ -40,7 +40,7 @@ class FakeRepo:
         self.saved = None  # save_summary 的产物
         self._window = window or AgentWindow(None, [], 1, 0)
         self._rows_after = rows_after or []
-        self._session = session or SimpleNamespace(id="s", summary=None, summarized_upto_seq=0)
+        self._session = session or SimpleNamespace(id="s", summary=None, summarized_upto_seq=0, pending=None)
 
     async def create_session(self, title):
         return "s"
@@ -62,6 +62,9 @@ class FakeRepo:
     async def save_summary(self, sid, summary, upto):
         self.saved = (summary, upto)
 
+    async def set_pending(self, sid, pending):
+        self._session.pending = pending
+
 
 async def _default_invoke(_session, name, _args):
     return f"[{name} 结果]"
@@ -78,10 +81,12 @@ async def run_agent(
     session=None,
     q="问题",
     session_id=None,
+    approvals=None,
 ):
     """跑一次 answer_stream，返回 (events, repo)。mock 掉 LLM / skills / repo，全程不联网。
 
     传 session_id 走 resume 分支（service.py 会先 get_session 取已存在会话、load 注入的 window）。
+    传 approvals（非 None）走 C2 审批续跑分支（消费 session.pending）。
     """
     import modules.agent.service as svc
 
@@ -91,7 +96,7 @@ async def run_agent(
     monkeypatch.setattr(svc.skills_service, "tools", lambda: tools or [])
     monkeypatch.setattr(svc.skills_service, "invoke", invoke or _default_invoke)
 
-    events = [ev async for ev in svc.agent_service.answer_stream(None, q, session_id=session_id)]
+    events = [ev async for ev in svc.agent_service.answer_stream(None, q, session_id=session_id, approvals=approvals)]
     return events, repo
 
 

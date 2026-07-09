@@ -25,7 +25,9 @@ async def chat(
 ) -> StreamingResponse:
     async def gen():
         try:
-            async for ev in agent_service.answer_stream(session, payload.q, session_id=payload.session_id):
+            async for ev in agent_service.answer_stream(
+                session, payload.q, session_id=payload.session_id, approvals=payload.approvals
+            ):
                 yield _sse(ev["type"], ev)
         except Exception as e:  # noqa: BLE001 —— 流内异常转 SSE error 事件回前端
             logger.exception("agent chat failed")

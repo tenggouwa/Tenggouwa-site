@@ -173,23 +173,126 @@ async def test_tool_output_truncated(monkeypatch):
     assert "已截断" in tool_row.content
 
 
-async def test_requires_approval_tool_blocked(monkeypatch):
-    """C1：需批准的工具不执行，回一条"需批准"结果（仍配对，H1 保持）。"""
+async def test_approval_pause_saves_pending_no_assistant(monkeypatch):
+    """C2：这批含需批准工具 → 发 approval 事件、存 pending、不落 assistant（免孤儿 tool_call）、收尾。"""
     import modules.agent.service as svc
 
     monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
 
     async def should_not_run(_s, _n, _a):
-        raise AssertionError("被拦的工具不该执行")
+        raise AssertionError("暂停时不该执行任何工具")
 
     rounds = [
-        [{"type": "tool_calls", "tool_calls": [tool_call("danger", "{}")]}],
-        [{"type": "content", "delta": "改用别的办法"}],
+        [
+            {"type": "content", "delta": "我准备删这个文件"},
+            {"type": "tool_calls", "tool_calls": [tool_call("danger", '{"path":"/x"}')]},
+        ],
     ]
     events, repo = await run_agent(monkeypatch, rounds, invoke=should_not_run)
+    apps = of_type(events, "approval")
+    assert len(apps) == 1
+    req = apps[0]["requests"][0]
+    assert req["name"] == "danger" and req["args"] == {"path": "/x"} and req["id"] == "c1"
+    assert events[-1]["type"] == "done"
+    # 只落了 user，没落 assistant(tool_calls)——孤儿 tool_call 会毒化会话（H1）
+    assert [r.role for r in repo.rows] == ["user"]
+    pending = repo._session.pending
+    assert pending is not None and pending["content"] == "我准备删这个文件"
+    assert pending["tool_calls"][0]["function"]["name"] == "danger"
+
+
+async def test_approval_resume_approve_executes(monkeypatch):
+    """C2：带 approvals={id:True} 续跑 → 消费 pending、真执行工具、清 pending、继续作答、全程配对。"""
+    import modules.agent.service as svc
+    from modules.agent.repository import AgentWindow
+
+    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+
+    invoked = []
+
+    async def inv(_s, name, _a):
+        invoked.append(name)
+        return "已删除 /x"
+
+    pending = {"content": "我准备删这个文件", "tool_calls": [tool_call("danger", '{"path":"/x"}')]}
+    window = AgentWindow(None, [{"role": "user", "content": "删掉 /x"}], next_seq=2, summarized_upto_seq=0)
+    session = SimpleNamespace(id="s", summary=None, summarized_upto_seq=0, pending=pending)
+    events, repo = await run_agent(
+        monkeypatch,
+        [[{"type": "content", "delta": "已经删好了。"}]],
+        window=window,
+        session=session,
+        session_id="s",
+        q="",
+        approvals={"c1": True},
+        invoke=inv,
+    )
+    assert invoked == ["danger"]  # 批准 → 真执行
+    assert "已经删好了" in tokens(events)
+    assert [r.role for r in repo.rows] == ["assistant", "tool", "assistant"]
     tool_row = next(r for r in repo.rows if r.role == "tool")
-    assert "需人工批准" in tool_row.content
-    assert "改用别的办法" in tokens(events)
+    assert "已删除" in tool_row.content
+    assert repo._session.pending is None  # 消费后清空
+    assert_paired(repo.rows)
+
+
+async def test_approval_resume_without_pending_is_noop(monkeypatch):
+    """C2：带 approvals 续跑但 pending 已消费/过期（重复提交）→ 直接 done，不伪造空 user 轮。"""
+
+    async def should_not_run(_s, _n, _a):
+        raise AssertionError("无 pending 不该执行任何工具")
+
+    session = SimpleNamespace(id="s", summary=None, summarized_upto_seq=0, pending=None)
+    events, repo = await run_agent(
+        monkeypatch,
+        [[{"type": "content", "delta": "不该被调用"}]],
+        session=session,
+        session_id="s",
+        q="",
+        approvals={"c1": True},
+        invoke=should_not_run,
+    )
+    assert [e["type"] for e in events] == ["session", "done"]
+    assert repo.rows == []  # 什么都没落
+    assert "不该被调用" not in tokens(events)
+
+
+async def test_empty_q_without_approvals_is_noop(monkeypatch):
+    """空 q 且非续跑 → 直接 done，不落空 user 轮、不空跑一次 LLM。"""
+    events, repo = await run_agent(monkeypatch, [[{"type": "content", "delta": "不该被调用"}]], q="   ")
+    assert [e["type"] for e in events] == ["session", "done"]
+    assert repo.rows == []
+
+
+async def test_approval_resume_reject_skips_execution(monkeypatch):
+    """C2：带 approvals={id:False} 续跑 → 工具不执行、回"用户拒绝"结果、仍配对、继续作答。"""
+    import modules.agent.service as svc
+    from modules.agent.repository import AgentWindow
+
+    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+
+    async def inv(_s, name, _a):
+        if name == "danger":
+            raise AssertionError("被拒的工具不该执行")
+        return "x"
+
+    pending = {"content": "我准备删这个文件", "tool_calls": [tool_call("danger", '{"path":"/x"}')]}
+    window = AgentWindow(None, [{"role": "user", "content": "删掉 /x"}], next_seq=2, summarized_upto_seq=0)
+    session = SimpleNamespace(id="s", summary=None, summarized_upto_seq=0, pending=pending)
+    events, repo = await run_agent(
+        monkeypatch,
+        [[{"type": "content", "delta": "好的，已取消。"}]],
+        window=window,
+        session=session,
+        session_id="s",
+        q="",
+        approvals={"c1": False},
+        invoke=inv,
+    )
+    tool_row = next(r for r in repo.rows if r.role == "tool")
+    assert "拒绝" in tool_row.content
+    assert "已取消" in tokens(events)
+    assert repo._session.pending is None
     assert_paired(repo.rows)
 
 
@@ -286,7 +389,7 @@ async def test_resume_reuses_session_and_continues_seq(monkeypatch):
         monkeypatch,
         [[{"type": "content", "delta": "续答"}]],
         window=window,
-        session=SimpleNamespace(id="s", summary="摘要", summarized_upto_seq=0),
+        session=SimpleNamespace(id="s", summary="摘要", summarized_upto_seq=0, pending=None),
         session_id="s",
         q="继续",
     )

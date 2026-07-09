@@ -109,3 +109,10 @@ class AgentRepository:
             row.summary = summary
             row.summarized_upto_seq = summarized_upto_seq
             await self.session.flush()
+
+    async def set_pending(self, sid: str, pending: dict | None) -> None:
+        """存/清 C2 待批工具（{content, tool_calls}）。None 表示清空。"""
+        row = await self.session.get(AgentSessionRow, sid)
+        if row is not None:
+            row.pending = pending
+            await self.session.flush()

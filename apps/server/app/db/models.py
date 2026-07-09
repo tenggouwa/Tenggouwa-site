@@ -510,6 +510,9 @@ class AgentSessionRow(Base):
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 首个问题截断
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # compaction 产物（§4）
     summarized_upto_seq: Mapped[int] = mapped_column(nullable=False, default=0)  # 已被 summary 覆盖到的 seq
+    # C2 交互审批：待批准的 assistant(tool_calls) 暂存于此（{content, tool_calls}），不落 message 表以免孤儿
+    # tool_call（H1）；用户批/拒后消费并清空。
+    pending: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
