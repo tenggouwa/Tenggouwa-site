@@ -17,6 +17,7 @@ from db.models import AgentMessageRow
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..kb.provider import chat_llm
+from ..skills.permissions import requires_approval
 from ..skills.service import skills_service
 from .repository import AgentRepository
 
@@ -155,13 +156,17 @@ class AgentService:
                     asked = True
                 else:
                     yield {"type": "tool", "name": name, "args": args}
+                # C1 权限闸：需批准的工具（write 原生 / 非 auto MCP）先拦住不执行（C2 再做交互审批）。
                 # H1：每个 tool_call 必须有配对的 tool 结果落库，否则该会话 resume 时 DeepSeek 400。
                 # skill handler 抛异常也要兜住、补一条 error 结果，保住 assistant↔tool 配对。
-                try:
-                    result = await skills_service.invoke(session, name, args)
-                except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
-                    logger.exception("skill %s failed", name)
-                    result = f"（skill {name} 执行失败：{e}）"
+                if requires_approval(name):
+                    result = f"（工具 {name} 需人工批准，暂未开放交互审批、已跳过。如信任来源可在配置中授权。）"
+                else:
+                    try:
+                        result = await skills_service.invoke(session, name, args)
+                    except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+                        logger.exception("skill %s failed", name)
+                        result = f"（skill {name} 执行失败：{e}）"
                 result = _truncate_tool_result(result)
                 messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": result})
                 await repo.append(sid, seq, "tool", result, tool_call_id=tc.get("id"))

@@ -173,6 +173,26 @@ async def test_tool_output_truncated(monkeypatch):
     assert "已截断" in tool_row.content
 
 
+async def test_requires_approval_tool_blocked(monkeypatch):
+    """C1：需批准的工具不执行，回一条"需批准"结果（仍配对，H1 保持）。"""
+    import modules.agent.service as svc
+
+    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+
+    async def should_not_run(_s, _n, _a):
+        raise AssertionError("被拦的工具不该执行")
+
+    rounds = [
+        [{"type": "tool_calls", "tool_calls": [tool_call("danger", "{}")]}],
+        [{"type": "content", "delta": "改用别的办法"}],
+    ]
+    events, repo = await run_agent(monkeypatch, rounds, invoke=should_not_run)
+    tool_row = next(r for r in repo.rows if r.role == "tool")
+    assert "需人工批准" in tool_row.content
+    assert "改用别的办法" in tokens(events)
+    assert_paired(repo.rows)
+
+
 async def test_skill_exception_keeps_paired(monkeypatch):
     """H1：skill handler 抛异常也补 error tool 结果，保住配对，仍出最终答案。"""
 
