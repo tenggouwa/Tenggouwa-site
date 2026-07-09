@@ -7,6 +7,7 @@
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,9 @@ class Skill:
     description: str
     parameters: dict  # JSON schema
     handler: SkillHandler
+    # readonly（只读、自动放行）| write（有副作用、需批准）。新增有副作用 skill 务必显式标 write，
+    # 否则默认 readonly 会绕过权限闸自动执行（见 permissions.py）。
+    risk: Literal["readonly", "write"] = "readonly"
 
 
 def tool_schema(skill: Skill) -> dict:

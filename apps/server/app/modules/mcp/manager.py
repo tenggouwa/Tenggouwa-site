@@ -40,8 +40,10 @@ class MCPManager:
     def __init__(self) -> None:
         self._stack = AsyncExitStack()
         self._sessions: dict[str, ClientSession] = {}
+        self._server_auto: dict[str, bool] = {}  # server -> 是否 auto 信任（其工具免审批）
         self._tools: list[dict] = []  # 已确定性排序的 OpenAI tools
         self._route: dict[str, tuple[str, str]] = {}  # openai_name -> (server, mcp_tool_name)
+        self._auto: set[str] = set()  # 免审批的工具名（来自 auto 信任的 server）
 
     async def start(self) -> None:
         configs = load_configs()
@@ -64,6 +66,7 @@ class MCPManager:
         session = await self._stack.enter_async_context(ClientSession(read, write))
         await session.initialize()
         self._sessions[name] = session
+        self._server_auto[name] = bool(cfg.get("auto", False))  # 未标 auto 的 server 其工具需审批
 
     async def refresh_tools(self) -> None:
         """重列所有 server 的工具，按 (server, tool) 确定性排序后合并——稳住 prompt cache 前缀。"""
@@ -77,19 +80,25 @@ class MCPManager:
             for t in resp.tools:
                 pairs.append((openai_tool_name(name, t.name), name, t))
         pairs.sort(key=lambda p: p[0])
-        self._tools, self._route = [], {}
+        self._tools, self._route, self._auto = [], {}, set()
         for oai, srv, t in pairs:
             if oai in self._route:  # sanitize/截断可能撞名 → 跳过后者，防路由覆盖 + LLM 收到重名 function
                 logger.warning("MCP 工具名冲突，跳过重复: %s", oai)
                 continue
             self._tools.append(mcp_tool_to_openai(srv, t.name, t.description, t.inputSchema))
             self._route[oai] = (srv, t.name)
+            if self._server_auto.get(srv):
+                self._auto.add(oai)
 
     def tools(self) -> list[dict]:
         return list(self._tools)
 
     def has(self, name: str) -> bool:
         return name in self._route
+
+    def is_auto(self, name: str) -> bool:
+        """该 MCP 工具是否来自 auto 信任的 server（免审批）。"""
+        return name in self._auto
 
     async def invoke(self, name: str, args: dict) -> str:
         srv, tool = self._route[name]
@@ -103,8 +112,10 @@ class MCPManager:
     async def stop(self) -> None:
         await self._stack.aclose()
         self._sessions.clear()
+        self._server_auto.clear()
         self._tools = []
         self._route = {}
+        self._auto = set()
 
 
 mcp_manager = MCPManager()
