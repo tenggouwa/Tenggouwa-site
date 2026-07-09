@@ -23,6 +23,9 @@ class Skill:
     # readonly（只读、自动放行）| write（有副作用、需批准）。新增有副作用 skill 务必显式标 write，
     # 否则默认 readonly 会绕过权限闸自动执行（见 permissions.py）。
     risk: Literal["readonly", "write"] = "readonly"
+    # private=True 的 skill 只在鉴权的私有通道暴露（即便 readonly 也不进公开端点）。
+    # 与 risk 正交：risk 管「要不要审批」，private 管「哪条通道能看到」。文件工具即便只读也须私有。
+    private: bool = False
 
 
 def tool_schema(skill: Skill) -> dict:

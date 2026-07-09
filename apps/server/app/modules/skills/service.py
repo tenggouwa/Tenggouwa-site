@@ -14,16 +14,21 @@ from .schema import SkillInfo
 
 class SkillsService:
     def list_skills(self) -> list[SkillInfo]:
-        return [SkillInfo(name=s.name, description=s.description, parameters=s.parameters) for s in REGISTRY.values()]
+        """公开列出可用 skill：只列非 private 的（private 工具仅私有通道可见，别在公开页泄漏）。"""
+        return [
+            SkillInfo(name=s.name, description=s.description, parameters=s.parameters)
+            for s in REGISTRY.values()
+            if not s.private
+        ]
 
     def tools(self, *, privileged: bool = False) -> list[dict]:
         """function-calling 的 tools 列表（agent 传给 LLM）。
 
-        公开通道（privileged=False）只暴露 readonly 原生 skill；私有（鉴权）通道额外给
-        write 原生 skill + MCP 工具。这是唯一的能力暴露点——LLM 只能调用列表里的工具，
-        所以公开端点天然拿不到高危工具（invoke 再做一层纵深兜底）。
+        公开通道（privileged=False）只暴露既 readonly 又非 private 的原生 skill；私有（鉴权）
+        通道额外给 write / private 原生 skill + MCP 工具。这是唯一的能力暴露点——LLM 只能调用
+        列表里的工具，所以公开端点天然拿不到高危 / 私有工具（invoke 再做一层纵深兜底）。
         """
-        native = [tool_schema(s) for s in REGISTRY.values() if privileged or s.risk == "readonly"]
+        native = [tool_schema(s) for s in REGISTRY.values() if privileged or (s.risk == "readonly" and not s.private)]
         return native + (mcp_manager.tools() if privileged else [])
 
     async def invoke(self, session: AsyncSession, name: str, args: dict, *, privileged: bool = False) -> str:
@@ -38,8 +43,8 @@ class SkillsService:
         skill = REGISTRY.get(name)
         if skill is None:
             return f"（未知 skill: {name}）"
-        if skill.risk == "write" and not privileged:
-            return f"（{name} 是有副作用的操作，仅在鉴权的私有通道可用，公开通道不执行。）"
+        if not privileged and (skill.risk == "write" or skill.private):
+            return f"（{name} 仅在鉴权的私有通道可用，公开通道不执行。）"
         return await skill.handler(session, args)
 
 
