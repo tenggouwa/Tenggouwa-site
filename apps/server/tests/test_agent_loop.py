@@ -103,6 +103,60 @@ async def test_leak_across_deltas_stops_emitting(monkeypatch):
     assert "junk" not in tokens(events)
 
 
+async def test_usage_emitted(monkeypatch):
+    """A4：stream_step 的 usage 累计后，收尾发一个扁平的 event: usage。"""
+    rounds = [
+        [
+            {"type": "content", "delta": "答"},
+            {"type": "usage", "usage": {"prompt_tokens": 10, "completion_tokens": 5}},
+        ],
+    ]
+    events, _ = await run_agent(monkeypatch, rounds)
+    u = of_type(events, "usage")
+    assert len(u) == 1 and u[0]["prompt_tokens"] == 10 and u[0]["completion_tokens"] == 5
+
+
+async def test_usage_summed_across_steps(monkeypatch):
+    """A4：一轮多次 LLM 调用（工具往返）→ usage 各字段累加。"""
+    rounds = [
+        [
+            {"type": "tool_calls", "tool_calls": [tool_call("kb_search", "{}")]},
+            {"type": "usage", "usage": {"prompt_tokens": 10}},
+        ],
+        [
+            {"type": "content", "delta": "答"},
+            {"type": "usage", "usage": {"prompt_tokens": 20, "completion_tokens": 8}},
+        ],
+    ]
+    events, _ = await run_agent(monkeypatch, rounds)
+    u = of_type(events, "usage")[0]
+    assert u["prompt_tokens"] == 30 and u["completion_tokens"] == 8
+
+
+async def test_no_usage_event_when_absent(monkeypatch):
+    """无 usage → 不发 usage 事件（不硬塞空对象）。"""
+    events, _ = await run_agent(monkeypatch, [[{"type": "content", "delta": "答"}]])
+    assert of_type(events, "usage") == []
+
+
+async def test_usage_includes_m2_fallback(monkeypatch):
+    """A4：MAX_STEPS 耗尽走 M2 收尾时，M2 那次调用的 usage 也计入（覆盖 M2 累加分支）。"""
+    from modules.agent.service import MAX_STEPS
+
+    tool_round = [
+        {"type": "tool_calls", "tool_calls": [tool_call("kb_search", "{}")]},
+        {"type": "usage", "usage": {"prompt_tokens": 1}},
+    ]
+    m2_round = [
+        {"type": "content", "delta": "收尾"},
+        {"type": "usage", "usage": {"prompt_tokens": 100, "completion_tokens": 5}},
+    ]
+    rounds = [tool_round] * MAX_STEPS + [m2_round]
+    events, _ = await run_agent(monkeypatch, rounds)
+    u = of_type(events, "usage")[0]
+    assert u["prompt_tokens"] == MAX_STEPS * 1 + 100 and u["completion_tokens"] == 5
+
+
 async def test_tool_output_truncated(monkeypatch):
     """A2：超大 tool 结果被截断，防单个工具输出撑爆上下文。"""
 

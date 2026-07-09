@@ -49,6 +49,8 @@ def _base_invariants(events, repo):
     assert_no_leak(ans)  # 绝不能有 ｜ 泄漏
     assert_paired(repo.rows)  # 会话消息配对（可 resume，不会 400）
     assert events[-1]["type"] == "done"
+    usage = [e for e in events if e["type"] == "usage"]
+    assert usage and usage[0].get("prompt_tokens", 0) > 0  # A4：有真实用量
     return ans
 
 

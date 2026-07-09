@@ -17,6 +17,13 @@ interface PlanStep {
   status: 'pending' | 'in_progress' | 'completed';
 }
 
+interface Usage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
+}
+
 interface Turn {
   q: string;
   tools: ToolCall[];
@@ -24,8 +31,20 @@ interface Turn {
   answer: string;
   ask?: AskQuestion[]; // agent 抛的选择题（ask_user skill）
   askIntro?: string;
+  usage?: Usage;
   error?: string;
   done: boolean;
+}
+
+// 用量小字：输入/输出 token + 缓存命中率（DeepSeek 上下文缓存）。
+function fmtUsage(u: Usage): string {
+  const inTok = u.prompt_tokens ?? 0;
+  const out = u.completion_tokens ?? 0;
+  const hit = u.prompt_cache_hit_tokens ?? 0;
+  const miss = u.prompt_cache_miss_tokens ?? 0;
+  const parts = [`输入 ${inTok}`, `输出 ${out} tok`];
+  if (hit + miss > 0) parts.push(`缓存命中 ${Math.round((hit / (hit + miss)) * 100)}%`);
+  return parts.join(' · ');
 }
 
 const SUGGESTIONS = ['这个站点的作者是谁？', '大模型推理怎么省显存？', '帮我搭一个每天抓取并推送的自动化'];
@@ -64,13 +83,14 @@ export default function Ask() {
       plan?: PlanStep[];
       intro?: string;
       questions?: AskQuestion[];
-    };
+    } & Usage;
     try {
       obj = JSON.parse(data);
     } catch {
       return;
     }
     if (event === 'session') sessionId.current = obj.session_id ?? sessionId.current;
+    else if (event === 'usage') updateTurn(idx, (t) => ({ ...t, usage: obj }));
     else if (event === 'plan') updateTurn(idx, (t) => ({ ...t, plan: obj.plan ?? [] }));
     else if (event === 'ask')
       updateTurn(idx, (t) => ({ ...t, ask: obj.questions ?? [], askIntro: obj.intro || '' }));
@@ -222,6 +242,7 @@ export default function Ask() {
                 )}
                 {t.error && <span className="text-terminal-red">[错误] {t.error}</span>}
               </div>
+              {t.usage && <div className="text-[11px] text-terminal-gray/40">≈ {fmtUsage(t.usage)}</div>}
             </div>
           ))}
           <div ref={bottomRef} />
