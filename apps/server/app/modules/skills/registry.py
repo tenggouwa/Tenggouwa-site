@@ -6,6 +6,7 @@
 
 from .ask_user import ASK_USER
 from .base import Skill
+from .file_ops import FILE_LIST, FILE_READ, FILE_WRITE
 from .kb_search import KB_SEARCH
 from .update_plan import UPDATE_PLAN
 from .web_fetch import WEB_FETCH
@@ -16,4 +17,8 @@ REGISTRY: dict[str, Skill] = {
     UPDATE_PLAN.name: UPDATE_PLAN,
     WEB_FETCH.name: WEB_FETCH,
     ASK_USER.name: ASK_USER,
+    # D1 文件工具（private=True，只在私有通道；file_write 另 risk=write 走 C2 审批）
+    FILE_LIST.name: FILE_LIST,
+    FILE_READ.name: FILE_READ,
+    FILE_WRITE.name: FILE_WRITE,
 }
