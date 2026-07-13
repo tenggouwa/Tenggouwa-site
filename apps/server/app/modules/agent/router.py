@@ -1,8 +1,9 @@
 import json
 import logging
 
+from common.rate_limit import client_ip, unlock_limiter
 from db import get_session
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,9 +27,11 @@ def _sse(event: str, data: dict) -> str:
 @public_router.post("/unlock", response_model=ResponseModel[AgentUnlockResponse])
 async def unlock(
     payload: AgentUnlockRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> ResponseModel[AgentUnlockResponse]:
     """TOTP 解锁私有通道：6 位码校验（复用 console 那套 TOTP）→ 返回长 TTL 的 agent_token。"""
+    unlock_limiter.hit(client_ip(request))  # 挡 TOTP 暴破
     owner = await terminal_service.unlock_with_totp(session, payload.totp)
     token, ttl = make_agent_token(owner)
     return ResponseModel(data=AgentUnlockResponse(token=token, ttl_seconds=ttl))

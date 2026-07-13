@@ -53,6 +53,23 @@ def test_public_channel_not_auth_gated():
     assert r.status_code != 401
 
 
+def test_unlock_rate_limited(monkeypatch):
+    # 解锁端点限流：mock 掉 TOTP 校验（免 DB），换一把小闸，超限返回 429
+    import modules.agent.router as arouter
+    from common.rate_limit import AttemptLimiter
+
+    async def fake_unlock(_session, _code):
+        return "owner"
+
+    monkeypatch.setattr(arouter.terminal_service, "unlock_with_totp", fake_unlock)
+    monkeypatch.setattr(arouter, "unlock_limiter", AttemptLimiter(per_ip=2, ip_window=60, total=100, total_window=60))
+    c = _client()
+    body = {"totp": "123456"}
+    assert c.post("/api/public/agent/unlock", json=body).status_code == 200
+    assert c.post("/api/public/agent/unlock", json=body).status_code == 200
+    assert c.post("/api/public/agent/unlock", json=body).status_code == 429  # 第 3 次被限
+
+
 def test_agent_token_roundtrip():
     from modules.agent.auth import _decode, make_agent_token
 
