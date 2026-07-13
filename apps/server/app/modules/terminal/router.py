@@ -20,9 +20,10 @@ import logging
 
 import jwt
 from common import config
+from common.rate_limit import client_ip, unlock_limiter
 from db import get_session
 from dependencies import DetailedHTTPException, current_admin
-from fastapi import APIRouter, Cookie, Depends, Header, Query, Response, WebSocket
+from fastapi import APIRouter, Cookie, Depends, Header, Query, Request, Response, WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
@@ -370,10 +371,12 @@ async def console_phrase() -> ResponseModel[dict]:
 @console_router.post("/unlock", response_model=ResponseModel[ConsoleUnlockResponse])
 async def console_unlock(
     payload: ConsoleUnlockRequest,
+    request: Request,
     response: Response,
     tg_trust: str | None = Cookie(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> ResponseModel[ConsoleUnlockResponse]:
+    unlock_limiter.hit(client_ip(request))  # 挡 TOTP/口令 暴破（与 agent unlock 共用一把闸）
     if payload.method == "voice":
         owner = await terminal_service.unlock_with_voice(
             session,
