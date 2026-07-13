@@ -31,6 +31,16 @@ export async function unlockAgent(totp: string): Promise<UnlockResult> {
   return data;
 }
 
+// 注销该账号所有 agent 会话（吊销纪元 +1，含当前 token）。需带当前 agent_token。
+export async function revokeAgent(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/agent/revoke`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`注销失败 (HTTP ${res.status})`);
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
