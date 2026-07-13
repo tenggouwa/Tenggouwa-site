@@ -77,6 +77,11 @@ services:
       - .env
     environment:
       ENV: prod
+      # agent 文件工具（file_list/read/write）的 jailed 根目录，挂到下面的 agent_ws 卷持久化。
+      # 未设则文件工具整组拒用；设了才在私有通道点亮。TTL 想改用 AGENT_TOKEN_TTL_MIN（默认 240 分钟）。
+      AGENT_WORKSPACE: /srv/agent-workspace
+    volumes:
+      - agent_ws:/srv/agent-workspace
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,3 +129,4 @@ services:
 
 volumes:
   pg_data:
+  agent_ws: # agent 文件工具 jailed workspace，持久化不随容器重建丢
