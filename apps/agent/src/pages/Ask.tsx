@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { API_BASE, unlockAgent } from '../lib/api';
+import { API_BASE, revokeAgent, unlockAgent } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
 import { parseSSEFrame } from '../lib/sse';
 import AskPanel, { type AskQuestion } from '../components/AskPanel';
@@ -143,6 +143,19 @@ export default function Ask() {
     }
   }
 
+  // 注销全部会话：服务端吊销该账号所有 agent_token，本地随即锁回公开（best-effort，失败也锁本地）。
+  async function revokeAll() {
+    const tok = agentToken;
+    if (!tok || busy) return;
+    try {
+      await revokeAgent(tok);
+    } catch {
+      /* 服务端注销失败也把本地锁掉：本机不再持有可用 token */
+    } finally {
+      lock({ reset: true });
+    }
+  }
+
   function updateTurn(idx: number, fn: (t: Turn) => Turn) {
     setTurns((ts) => ts.map((t, i) => (i === idx ? fn(t) : t)));
   }
@@ -271,9 +284,18 @@ export default function Ask() {
                   onClick={() => !busy && lock({ reset: true })}
                   disabled={busy}
                   className="text-[11px] text-terminal-gray/60 hover:text-terminal-yellow transition-colors disabled:opacity-40"
-                  title="退出私有模式"
+                  title="仅本机退出私有模式（token 仍有效，可在别处继续用）"
                 >
                   锁定
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void revokeAll()}
+                  disabled={busy}
+                  className="text-[11px] text-terminal-gray/60 hover:text-terminal-red transition-colors disabled:opacity-40"
+                  title="服务端吊销该账号所有 agent 会话（含本机），需重新 TOTP 解锁"
+                >
+                  注销全部
                 </button>
               </>
             ) : (

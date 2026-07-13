@@ -69,6 +69,37 @@ describe('Ask private mode', () => {
     expect(calls.some((c) => c.url.endsWith('/api/public/agent/chat'))).toBe(false);
   });
 
+  it('注销全部 → 打 /api/agent/revoke 带 Bearer，然后锁回公开', async () => {
+    const calls: Array<{ url: string; opts: { headers?: Record<string, string> } }> = [];
+    const fetchMock = vi.fn((url: string, opts: { headers?: Record<string, string> }) => {
+      calls.push({ url, opts });
+      if (url.endsWith('/api/public/agent/unlock')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ code: 0, message: '', data: { token: 'T1', ttl_seconds: 3600 } }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200 }); // /revoke
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    render(<Ask />);
+    fireEvent.click(screen.getByTitle(/TOTP 解锁私有模式/));
+    fireEvent.change(screen.getByPlaceholderText('6 位 TOTP 码'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByText('↵ 解锁'));
+    await waitFor(() => expect(screen.getByText('注销全部')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('注销全部'));
+
+    // 锁回公开：私有指示消失、「私有」解锁按钮回来
+    await waitFor(() => expect(screen.getByTitle(/TOTP 解锁私有模式/)).toBeTruthy());
+    const revokeCall = calls.find((c) => c.url.endsWith('/api/agent/revoke'));
+    expect(revokeCall).toBeTruthy();
+    expect(revokeCall!.opts.headers?.Authorization).toBe('Bearer T1');
+    expect(screen.queryByText(/私有 · 剩/)).toBeNull();
+  });
+
   it('公开模式（未解锁）chat 走公开端点、无 Authorization', async () => {
     const calls: Array<{ url: string; opts: { headers?: Record<string, string> } }> = [];
     const fetchMock = vi.fn((url: string, opts: { headers?: Record<string, string> }) => {
