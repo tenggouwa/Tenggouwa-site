@@ -69,6 +69,8 @@ class AdminTotpRow(Base):
         nullable=True,
     )
     disabled: Mapped[bool] = mapped_column(nullable=False, default=False)
+    # agent_token 吊销纪元：签发时写进 token，bump 后旧 token（ep < 当前）全部失效（"注销所有会话"）。
+    agent_epoch: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
 
 
 class AgentRow(Base):

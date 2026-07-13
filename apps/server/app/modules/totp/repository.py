@@ -48,6 +48,20 @@ class AdminTotpRepository:
         row.last_verified_at = datetime.now(UTC)
         await self.session.flush()
 
+    async def agent_epoch(self, username: str) -> int:
+        """当前 agent_token 吊销纪元；无此 admin 记录按 0 处理。"""
+        row = await self.get(username)
+        return row.agent_epoch if row else 0
+
+    async def bump_agent_epoch(self, username: str) -> int:
+        """纪元 +1（"注销所有 agent 会话"），返回新纪元；无记录则不动返回 0。"""
+        row = await self.get(username)
+        if row is None:
+            return 0
+        row.agent_epoch += 1
+        await self.session.flush()
+        return row.agent_epoch
+
     async def delete(self, username: str) -> bool:
         row = await self.get(username)
         if row is None:

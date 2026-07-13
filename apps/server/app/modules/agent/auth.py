@@ -13,7 +13,11 @@ import time
 
 import jwt
 from common import config
-from fastapi import Header, HTTPException
+from db import get_session
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..totp.repository import AdminTotpRepository
 
 _DEFAULT_TTL_MIN = 240  # 4h（比 console 5min term_token 长得多、够一次会话）；env AGENT_TOKEN_TTL_MIN 可调
 
@@ -39,19 +43,20 @@ def _secret() -> str:
     return hashlib.sha256(f"{base}:agent-token-v1".encode()).hexdigest()
 
 
-def make_agent_token(owner: str) -> tuple[str, int]:
-    """签发 agent_token，返回 (token, ttl_seconds)。"""
+def make_agent_token(owner: str, epoch: int) -> tuple[str, int]:
+    """签发 agent_token，返回 (token, ttl_seconds)。epoch 写进 token，吊销时对不上即失效。"""
     ttl = _ttl_seconds()
     now = int(time.time())
     token = jwt.encode(
-        {"sub": owner, "type": "agent", "iat": now, "exp": now + ttl, "jti": secrets.token_hex(8)},
+        {"sub": owner, "type": "agent", "ep": epoch, "iat": now, "exp": now + ttl, "jti": secrets.token_hex(8)},
         _secret(),
         algorithm="HS256",
     )
     return token, ttl
 
 
-def _decode(token: str) -> str | None:
+def _decode(token: str) -> tuple[str, int] | None:
+    """校验签名 + type=agent，返回 (owner, epoch)；不合法返回 None。"""
     try:
         payload = jwt.decode(token, _secret(), algorithms=["HS256"])
     except jwt.InvalidTokenError:
@@ -59,14 +64,23 @@ def _decode(token: str) -> str | None:
     if payload.get("type") != "agent":  # 别把 admin / term / trust token 当 agent 用
         return None
     sub = payload.get("sub")
-    return sub if isinstance(sub, str) and sub else None
+    if not isinstance(sub, str) or not sub:
+        return None
+    ep = payload.get("ep")
+    return sub, ep if isinstance(ep, int) else 0
 
 
-async def current_agent_owner(authorization: str | None = Header(None)) -> str:
-    """私有 agent 通道依赖：校验 `Authorization: Bearer <agent_token>`，返回 owner。"""
+async def current_agent_owner(
+    authorization: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
+) -> str:
+    """私有 agent 通道依赖：校验 `Authorization: Bearer <agent_token>` + 吊销纪元，返回 owner。"""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
-    owner = _decode(authorization.split(" ", 1)[1].strip())
-    if owner is None:
+    decoded = _decode(authorization.split(" ", 1)[1].strip())
+    if decoded is None:
         raise HTTPException(status_code=401, detail="invalid or expired agent token")
+    owner, token_epoch = decoded
+    if token_epoch < await AdminTotpRepository(session).agent_epoch(owner):
+        raise HTTPException(status_code=401, detail="agent token revoked")  # 已被"注销所有会话"作废
     return owner

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
 from ..terminal.service import terminal_service
+from ..totp.repository import AdminTotpRepository
 from .auth import current_agent_owner, make_agent_token
 from .schema import AgentChatRequest, AgentUnlockRequest, AgentUnlockResponse
 from .service import agent_service
@@ -33,8 +34,19 @@ async def unlock(
     """TOTP 解锁私有通道：6 位码校验（复用 console 那套 TOTP）→ 返回长 TTL 的 agent_token。"""
     unlock_limiter.hit(client_ip(request))  # 挡 TOTP 暴破
     owner = await terminal_service.unlock_with_totp(session, payload.totp)
-    token, ttl = make_agent_token(owner)
+    epoch = await AdminTotpRepository(session).agent_epoch(owner)  # 带上当前吊销纪元
+    token, ttl = make_agent_token(owner, epoch)
     return ResponseModel(data=AgentUnlockResponse(token=token, ttl_seconds=ttl))
+
+
+@private_router.post("/revoke", response_model=ResponseModel[dict])
+async def revoke(
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """注销该 owner 的所有 agent_token（纪元 +1，含当前这个），需重新 TOTP 解锁。"""
+    await AdminTotpRepository(session).bump_agent_epoch(owner)
+    return ResponseModel(data={"revoked": True})
 
 
 def _chat_stream(session: AsyncSession, payload: AgentChatRequest, *, privileged: bool) -> StreamingResponse:
