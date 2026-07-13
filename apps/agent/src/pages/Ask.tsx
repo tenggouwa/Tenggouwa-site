@@ -1,12 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
-import { API_BASE } from '../lib/api';
+import { API_BASE, unlockAgent } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
 import { parseSSEFrame } from '../lib/sse';
 import AskPanel, { type AskQuestion } from '../components/AskPanel';
 import ApprovalCard, { type ApprovalRequest } from '../components/ApprovalCard';
+import UnlockPanel from '../components/UnlockPanel';
 
-// agent 对话：POST /api/public/agent/chat，SSE 事件 tool / token / plan / ask / approval / done。
-// 模型自主决定是否调用 skill（如 kb_search 查知识库），再流式作答。
+// agent 对话：公开走 POST /api/public/agent/chat；私有模式（TOTP 解锁）走 /api/agent/chat + Bearer，
+// 额外拿到文件读写等高危工具，write 操作触发 C2 审批卡。SSE 事件 tool/token/plan/ask/approval/done。
+
+const TOK_KEY = 'agent_token';
+const EXP_KEY = 'agent_token_exp'; // 过期时间戳(ms)，撑过刷新
+
+function fmtRemain(exp: number): string {
+  const m = Math.max(0, Math.round((exp - Date.now()) / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)}h${m % 60}m` : `${m}m`;
+}
+
+const LockIcon = () => (
+  <svg viewBox="0 0 24 24" className="w-3 h-3 stroke-current inline-block" fill="none" strokeWidth="1.8">
+    <rect x="5" y="11" width="14" height="9" rx="1.5" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </svg>
+);
 
 interface ToolCall {
   name: string;
@@ -64,10 +80,68 @@ export default function Ask() {
   const [busy, setBusy] = useState(false);
   const sessionId = useRef<string | null>(null); // 多轮：服务端首个 event 回传，后续请求带上
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null); // 切换公开/私有时中止在途流，防串通道
+
+  // 私有模式：TOTP 解锁换来的 agent_token（sessionStorage 撑过刷新，过期即锁）。
+  const [agentToken, setAgentToken] = useState<string | null>(() => {
+    const tok = sessionStorage.getItem(TOK_KEY);
+    if (tok && Number(sessionStorage.getItem(EXP_KEY) || 0) > Date.now()) return tok;
+    sessionStorage.removeItem(TOK_KEY);
+    sessionStorage.removeItem(EXP_KEY);
+    return null;
+  });
+  const [tokenExp, setTokenExp] = useState(() => Number(sessionStorage.getItem(EXP_KEY) || 0));
+  const [showUnlock, setShowUnlock] = useState(false);
+  const [unlockBusy, setUnlockBusy] = useState(false);
+  const [unlockError, setUnlockError] = useState<string | undefined>();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [turns]);
+
+  // token 到期自动锁定
+  useEffect(() => {
+    if (!agentToken) return;
+    const ms = tokenExp - Date.now();
+    if (ms <= 0) {
+      lock();
+      return;
+    }
+    const timer = setTimeout(() => lock(), ms);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentToken, tokenExp]);
+
+  function lock(opts?: { reset?: boolean }) {
+    abortRef.current?.abort(); // 中止在途私有流，别让它的 session 串到公开通道
+    sessionStorage.removeItem(TOK_KEY);
+    sessionStorage.removeItem(EXP_KEY);
+    setAgentToken(null);
+    setTokenExp(0);
+    sessionId.current = null; // 别把私有会话续到公开通道
+    if (opts?.reset) setTurns([]);
+  }
+
+  async function unlock(totp: string) {
+    setUnlockBusy(true);
+    setUnlockError(undefined);
+    try {
+      const { token, ttl_seconds } = await unlockAgent(totp);
+      const exp = Date.now() + ttl_seconds * 1000;
+      sessionStorage.setItem(TOK_KEY, token);
+      sessionStorage.setItem(EXP_KEY, String(exp));
+      setAgentToken(token);
+      setTokenExp(exp);
+      setShowUnlock(false);
+      abortRef.current?.abort(); // 中止在途公开流，切私有前清干净
+      sessionId.current = null; // 进私有模式开一段新会话（工具集不同）
+      setTurns([]);
+    } catch (e) {
+      setUnlockError(e instanceof Error ? e.message : '解锁失败');
+    } finally {
+      setUnlockBusy(false);
+    }
+  }
 
   function updateTurn(idx: number, fn: (t: Turn) => Turn) {
     setTurns((ts) => ts.map((t, i) => (i === idx ? fn(t) : t)));
@@ -108,13 +182,23 @@ export default function Ask() {
   // 把一次 SSE 流回填到第 idx 轮：既用于新提问，也用于审批续跑（body 换成 { approvals }）。
   async function stream(idx: number, body: Record<string, unknown>) {
     setBusy(true);
+    const ac = new AbortController();
+    abortRef.current = ac;
     try {
-      const res = await fetch(`${API_BASE}/api/public/agent/chat`, {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (agentToken) headers.Authorization = `Bearer ${agentToken}`;
+      const endpoint = agentToken ? '/api/agent/chat' : '/api/public/agent/chat';
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ ...body, session_id: sessionId.current }),
         credentials: 'include',
+        signal: ac.signal,
       });
+      if (res.status === 401 && agentToken) {
+        lock(); // 私有 token 过期/失效 → 退回公开，提示重新解锁
+        throw new Error('私有会话已过期，请重新解锁私有模式');
+      }
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -128,10 +212,12 @@ export default function Ask() {
         for (const part of parts) handleEvent(part, idx);
       }
     } catch (err) {
+      if (ac.signal.aborted) return; // 切换模式主动中止，静默（对应 turn 已被重置）
       updateTurn(idx, (t) => ({ ...t, error: err instanceof Error ? err.message : '请求失败' }));
     } finally {
+      if (abortRef.current === ac) abortRef.current = null;
       setBusy(false);
-      updateTurn(idx, (t) => ({ ...t, done: true }));
+      if (!ac.signal.aborted) updateTurn(idx, (t) => ({ ...t, done: true })); // 中止的 turn 已被重置，别再动
     }
   }
 
@@ -150,7 +236,7 @@ export default function Ask() {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const query = q.trim();
-    if (!query || busy) return;
+    if (!query || busy || unlockBusy) return; // 解锁在途别抢跑（否则会以公开身份发出）
     setQ('');
     void run(query);
   }
@@ -171,23 +257,58 @@ export default function Ask() {
           <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
           <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
           <span className="w-3 h-3 rounded-full bg-[#28c840]" />
-          <span className="text-[11px] text-terminal-gray/60 ml-2">~/ask</span>
-          {turns.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (busy) return;
-                sessionId.current = null;
-                setTurns([]);
-              }}
-              className="ml-auto text-[11px] text-terminal-gray/60 hover:text-terminal-green transition-colors disabled:opacity-40"
-              disabled={busy}
-              title="清空上下文，开一段新对话"
-            >
-              + 新对话
-            </button>
-          )}
+          <span className={`text-[11px] ml-2 ${agentToken ? 'text-terminal-green' : 'text-terminal-gray/60'}`}>
+            ~/ask{agentToken ? ' (private)' : ''}
+          </span>
+          <div className="ml-auto flex items-center gap-3">
+            {agentToken ? (
+              <>
+                <span className="text-[11px] text-terminal-green flex items-center gap-1" title="私有模式已解锁">
+                  <span className="w-1.5 h-1.5 rounded-full bg-terminal-green" />私有 · 剩 {fmtRemain(tokenExp)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => !busy && lock({ reset: true })}
+                  disabled={busy}
+                  className="text-[11px] text-terminal-gray/60 hover:text-terminal-yellow transition-colors disabled:opacity-40"
+                  title="退出私有模式"
+                >
+                  锁定
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowUnlock((v) => !v)}
+                className="text-[11px] text-terminal-yellow/80 hover:text-terminal-yellow transition-colors flex items-center gap-1"
+                title="TOTP 解锁私有模式（文件读写等高危工具）"
+              >
+                <LockIcon /> 私有
+              </button>
+            )}
+            {turns.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (busy) return;
+                  sessionId.current = null;
+                  setTurns([]);
+                }}
+                className="text-[11px] text-terminal-gray/60 hover:text-terminal-green transition-colors disabled:opacity-40"
+                disabled={busy}
+                title="清空上下文，开一段新对话"
+              >
+                + 新对话
+              </button>
+            )}
+          </div>
         </div>
+
+        {showUnlock && !agentToken && (
+          <div className="px-4 pt-3">
+            <UnlockPanel busy={unlockBusy} error={unlockError} onSubmit={unlock} />
+          </div>
+        )}
 
         <div className="max-h-[60vh] overflow-y-auto px-4 py-3 space-y-5 text-sm">
           {turns.length === 0 && (
@@ -198,7 +319,7 @@ export default function Ask() {
                   <button
                     key={s}
                     type="button"
-                    onClick={() => !busy && void run(s)}
+                    onClick={() => !busy && !unlockBusy && void run(s)}
                     className="px-2 py-1 rounded border border-terminal-line/70 text-terminal-cyan hover:border-terminal-green/60 hover:text-terminal-green transition-colors"
                   >
                     {s}
@@ -276,14 +397,14 @@ export default function Ask() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            disabled={busy}
+            disabled={busy || unlockBusy}
             autoFocus
-            placeholder={busy ? '思考中…' : '问一个问题，回车发送'}
+            placeholder={busy ? '思考中…' : agentToken ? '私有模式 · 问一个问题，回车发送' : '问一个问题，回车发送'}
             className="flex-1 bg-transparent outline-none text-terminal-gray placeholder:text-terminal-gray/40 disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={busy || !q.trim()}
+            disabled={busy || unlockBusy || !q.trim()}
             className="text-xs text-terminal-green border border-terminal-green/40 rounded px-2 py-0.5 hover:bg-terminal-green/10 disabled:opacity-40 transition-colors"
           >
             ↵
@@ -293,6 +414,7 @@ export default function Ask() {
 
       <p className="text-xs text-terminal-gray/40">
         agent 用 DeepSeek + skills（kb_search / update_plan / web_fetch / ask_user），会记住本轮对话上下文。答案由 AI 生成，可能有误。
+        {agentToken && ' 私有模式额外可用 file_list / file_read / file_write（写操作需审批）。'}
       </p>
     </div>
   );
