@@ -8,6 +8,7 @@ from .ask_user import ASK_USER
 from .base import Skill
 from .file_ops import FILE_LIST, FILE_READ, FILE_WRITE
 from .kb_search import KB_SEARCH
+from .shell_exec import SHELL_EXEC
 from .update_plan import UPDATE_PLAN
 from .web_fetch import WEB_FETCH
 
@@ -21,4 +22,6 @@ REGISTRY: dict[str, Skill] = {
     FILE_LIST.name: FILE_LIST,
     FILE_READ.name: FILE_READ,
     FILE_WRITE.name: FILE_WRITE,
+    # D2 shell（private + write，走 Pi 沙箱；未配 AGENT_PI_SANDBOX 时拒用）
+    SHELL_EXEC.name: SHELL_EXEC,
 }
