@@ -11,8 +11,9 @@ const fmtArgs = (a: Record<string, unknown>) =>
     .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
     .join(' ');
 
-// agent 想执行需授权的工具（write 风险原生 skill / 非 auto 的 MCP）时暂停，弹此卡逐项批/拒。
-// 决策组成 { tool_call_id: bool } 回传后端续跑：拒的工具回「用户拒绝」结果、不执行，其余照跑。
+// agent 想执行需授权的工具（write 原生 / 非 auto 的 MCP）时暂停，弹此卡逐项批/拒。
+// 一键：点批准/拒绝即定该项决策，全部定完立刻提交续跑（无二次「执行」确认）。
+// 决策组成 { tool_call_id: bool } 回后端：拒的回「用户拒绝」结果、不执行，其余照跑。
 // locked = 后面已有新回合或正在续跑，锁死；submitted = 本卡已决策。
 export default function ApprovalCard({
   requests,
@@ -26,20 +27,25 @@ export default function ApprovalCard({
   const [decisions, setDecisions] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
   const done = locked || submitted;
-  const allDecided = requests.every((r) => r.id in decisions);
 
-  function setAll(v: boolean) {
-    if (done) return;
-    setDecisions(Object.fromEntries(requests.map((r) => [r.id, v])));
+  // 全部定完即提交（一键：单工具点一下就走；多工具点完最后一个自动走）。
+  function commit(next: Record<string, boolean>) {
+    if (requests.every((r) => r.id in next)) {
+      setSubmitted(true);
+      onDecide(next);
+    }
   }
   function setOne(id: string, v: boolean) {
     if (done) return;
-    setDecisions((d) => ({ ...d, [id]: v }));
+    const next = { ...decisions, [id]: v };
+    setDecisions(next);
+    commit(next);
   }
-  function submit() {
-    if (done || !allDecided) return;
-    setSubmitted(true);
-    onDecide(decisions);
+  function setAll(v: boolean) {
+    if (done) return;
+    const next = Object.fromEntries(requests.map((r) => [r.id, v]));
+    setDecisions(next);
+    commit(next);
   }
 
   return (
@@ -48,7 +54,7 @@ export default function ApprovalCard({
         <svg viewBox="0 0 24 24" className="w-4 h-4 stroke-current" fill="none" strokeWidth="1.6">
           <path d="M12 9v4M12 17h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
         </svg>
-        agent 想执行以下操作，需你授权
+        agent 想执行以下操作，点批准即执行
       </div>
       {requests.map((r) => {
         const d = decisions[r.id];
@@ -90,34 +96,22 @@ export default function ApprovalCard({
           </div>
         );
       })}
-      {!done && (
+      {!done && requests.length > 1 && (
         <div className="flex items-center gap-3">
           <button
             type="button"
-            disabled={!allDecided}
-            onClick={submit}
-            className="text-xs text-terminal-green border border-terminal-green/40 rounded px-3 py-1 hover:bg-terminal-green/10 disabled:opacity-40 transition-colors"
+            onClick={() => setAll(true)}
+            className="text-[11px] text-terminal-gray/60 hover:text-terminal-green transition-colors"
           >
-            ↵ 执行
+            全部批准
           </button>
-          {requests.length > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setAll(true)}
-                className="text-[11px] text-terminal-gray/60 hover:text-terminal-green transition-colors"
-              >
-                全部批准
-              </button>
-              <button
-                type="button"
-                onClick={() => setAll(false)}
-                className="text-[11px] text-terminal-gray/60 hover:text-terminal-red transition-colors"
-              >
-                全部拒绝
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            onClick={() => setAll(false)}
+            className="text-[11px] text-terminal-gray/60 hover:text-terminal-red transition-colors"
+          >
+            全部拒绝
+          </button>
         </div>
       )}
       {submitted && <div className="text-xs text-terminal-gray/40">已提交决策</div>}

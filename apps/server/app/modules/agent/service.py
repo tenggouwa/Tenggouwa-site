@@ -103,6 +103,7 @@ class AgentService:
         session_id: str | None = None,
         approvals: dict | None = None,
         privileged: bool = False,
+        auto_approve: bool = False,
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
         existing = await repo.get_session(session_id) if session_id else None
@@ -179,10 +180,12 @@ class AgentService:
                 answered = True
                 break
 
-            # C2 权限闸（仅私有通道）：这批含需批准的工具（write 原生 / 非 auto MCP）→ 暂停，存 pending
-            # （不落 assistant 以免孤儿 tool_call），发 approval 事件收尾，等用户批/拒后带 approvals 续跑。
+            # C2 权限闸（仅私有通道、非 auto 模式）：这批含需批准的工具（write 原生 / 非 auto MCP）→ 暂停，
+            # 存 pending（不落 assistant 以免孤儿 tool_call），发 approval 事件收尾，等用户批/拒后带 approvals 续跑。
+            # auto 模式：用户在沙箱里选了自动执行 → 不暂停、直接跑（沙箱 bwrap 是安全边界）。
             # 公开通道压根不暴露高危工具，审批是私有通道概念；即便模型幻觉出高危名，invoke 也会拒执行。
-            need = [tc for tc in tool_calls if requires_approval(_tc_name(tc))] if privileged else []
+            gate = privileged and not auto_approve
+            need = [tc for tc in tool_calls if requires_approval(_tc_name(tc))] if gate else []
             if need:
                 await repo.set_pending(sid, {"content": content, "tool_calls": tool_calls})
                 yield {

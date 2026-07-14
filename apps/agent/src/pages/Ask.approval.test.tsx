@@ -54,18 +54,16 @@ describe('Ask approval flow', () => {
     await waitFor(() => expect(screen.getByText('shell_exec')).toBeTruthy());
     expect(screen.getByText('我准备执行删除')).toBeTruthy();
 
-    // 批准 → 执行
+    // 一键批准（点批准即执行，无二次确认）
     fireEvent.click(screen.getByText('批准'));
-    fireEvent.click(screen.getByText('↵ 执行'));
 
     // 续跑 token 接在 preamble 后（同一轮 answer 拼接）
     await waitFor(() => expect(screen.getByText(/已删除。/)).toBeTruthy());
 
-    // 首个请求带 q；续跑请求带 approvals + 同一 session_id
-    expect(bodies[0]).toEqual({ q: '删掉 x', session_id: null });
-    expect(bodies[1]).toEqual({ approvals: { c1: true }, session_id: 's1' });
-    // 审批卡收起（已消费）
-    expect(screen.queryByText('↵ 执行')).toBeNull();
+    // 首个请求带 q；续跑请求带 approvals + 同一 session_id（公开模式 auto_approve=false）
+    expect(bodies[0]).toEqual({ q: '删掉 x', session_id: null, auto_approve: false });
+    expect(bodies[1]).toEqual({ approvals: { c1: true }, session_id: 's1', auto_approve: false });
+    expect(screen.queryByText('批准')).toBeNull(); // 审批卡已消费收起
   });
 
   it('多步：续跑再抛 approval → 弹全新可操作的审批卡（不被上轮 submitted 锁死）', async () => {
@@ -94,22 +92,17 @@ describe('Ask approval flow', () => {
     fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '搞一批操作' } });
     fireEvent.submit(document.querySelector('form') as HTMLFormElement);
 
-    // 第 1 张卡（c1）→ 批准执行
+    // 第 1 张卡（c1）→ 一键批准
     await waitFor(() => expect(screen.getByText('shell_exec')).toBeTruthy());
     fireEvent.click(screen.getByText('批准'));
-    fireEvent.click(screen.getByText('↵ 执行'));
 
-    // 第 2 张卡（c2）：全新、可操作——执行按钮初始 disabled（未决策），选后可点
+    // 第 2 张卡（c2）：全新、可操作（不被上轮 submitted 锁死）→ 再一键批准
     await waitFor(() => expect(screen.getByText('file_write')).toBeTruthy());
-    const go2 = screen.getByText('↵ 执行') as HTMLButtonElement;
-    expect(go2.disabled).toBe(true); // 没被上轮 submitted 状态污染
     fireEvent.click(screen.getByText('批准'));
-    expect(go2.disabled).toBe(false);
-    fireEvent.click(go2);
 
     await waitFor(() => expect(screen.getByText(/全部完成。/)).toBeTruthy());
     // 三次请求：q → approvals c1 → approvals c2，session_id 始终一致
-    expect(bodies[1]).toEqual({ approvals: { c1: true }, session_id: 's1' });
-    expect(bodies[2]).toEqual({ approvals: { c2: true }, session_id: 's1' });
+    expect(bodies[1]).toEqual({ approvals: { c1: true }, session_id: 's1', auto_approve: false });
+    expect(bodies[2]).toEqual({ approvals: { c2: true }, session_id: 's1', auto_approve: false });
   });
 });

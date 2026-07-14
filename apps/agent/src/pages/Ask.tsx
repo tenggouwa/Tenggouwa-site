@@ -81,6 +81,7 @@ export default function Ask() {
   const sessionId = useRef<string | null>(null); // 多轮：服务端首个 event 回传，后续请求带上
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null); // 切换公开/私有时中止在途流，防串通道
+  const taRef = useRef<HTMLTextAreaElement>(null); // 输入框自适应高度
 
   // 私有模式：TOTP 解锁换来的 agent_token（sessionStorage 撑过刷新，过期即锁）。
   const [agentToken, setAgentToken] = useState<string | null>(() => {
@@ -94,10 +95,20 @@ export default function Ask() {
   const [showUnlock, setShowUnlock] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
   const [unlockError, setUnlockError] = useState<string | undefined>();
+  const [autoRun, setAutoRun] = useState(false); // auto 模式：私有沙箱内自动执行、免逐条审批
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [turns]);
+
+  // 输入框随内容多行自适应高度（上限 160px 后内部滚动）
+  useEffect(() => {
+    const ta = taRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
+    }
+  }, [q]);
 
   // token 到期自动锁定
   useEffect(() => {
@@ -118,6 +129,7 @@ export default function Ask() {
     sessionStorage.removeItem(EXP_KEY);
     setAgentToken(null);
     setTokenExp(0);
+    setAutoRun(false); // auto 模式每次解锁重新 opt-in，别跨会话悄悄留着
     sessionId.current = null; // 别把私有会话续到公开通道
     if (opts?.reset) setTurns([]);
   }
@@ -204,7 +216,7 @@ export default function Ask() {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ ...body, session_id: sessionId.current }),
+        body: JSON.stringify({ ...body, session_id: sessionId.current, auto_approve: !!(agentToken && autoRun) }),
         credentials: 'include',
         signal: ac.signal,
       });
@@ -246,12 +258,16 @@ export default function Ask() {
     void stream(idx, { approvals });
   }
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  function trySend() {
     const query = q.trim();
     if (!query || busy || unlockBusy) return; // 解锁在途别抢跑（否则会以公开身份发出）
     setQ('');
     void run(query);
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    trySend();
   }
 
   return (
@@ -279,6 +295,17 @@ export default function Ask() {
                 <span className="text-[11px] text-terminal-green flex items-center gap-1" title="私有模式已解锁">
                   <span className="w-1.5 h-1.5 rounded-full bg-terminal-green" />私有 · 剩 {fmtRemain(tokenExp)}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setAutoRun((v) => !v)}
+                  className={
+                    'text-[11px] transition-colors ' +
+                    (autoRun ? 'text-terminal-yellow' : 'text-terminal-gray/60 hover:text-terminal-yellow')
+                  }
+                  title={autoRun ? '沙箱内自动执行，免逐条审批（点击关闭）' : '开启后沙箱命令自动执行、不再逐条弹审批'}
+                >
+                  {autoRun ? '● 自动执行' : '○ 自动执行'}
+                </button>
                 <button
                   type="button"
                   onClick={() => !busy && lock({ reset: true })}
@@ -414,20 +441,33 @@ export default function Ask() {
           <div ref={bottomRef} />
         </div>
 
-        <form onSubmit={submit} className="flex items-center gap-2 px-4 py-3 border-t border-terminal-line/60">
-          <span className="text-terminal-pink">~$</span>
-          <input
+        <form onSubmit={submit} className="flex items-start gap-2 px-4 py-3 border-t border-terminal-line/60">
+          <span className="text-terminal-pink pt-0.5">~$</span>
+          <textarea
+            ref={taRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              // 回车发送，Shift+Enter 换行；输入法组词中的回车不发送
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                trySend();
+              }
+            }}
             disabled={busy || unlockBusy}
             autoFocus
-            placeholder={busy ? '思考中…' : agentToken ? '私有模式 · 问一个问题，回车发送' : '问一个问题，回车发送'}
-            className="flex-1 bg-transparent outline-none text-terminal-gray placeholder:text-terminal-gray/40 disabled:opacity-50"
+            rows={1}
+            placeholder={
+              busy
+                ? '思考中…'
+                : (agentToken ? '私有模式 · ' : '') + '问一个问题（回车发送，Shift+Enter 换行）'
+            }
+            className="flex-1 resize-none bg-transparent outline-none leading-6 max-h-40 text-terminal-gray placeholder:text-terminal-gray/40 disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={busy || unlockBusy || !q.trim()}
-            className="text-xs text-terminal-green border border-terminal-green/40 rounded px-2 py-0.5 hover:bg-terminal-green/10 disabled:opacity-40 transition-colors"
+            className="text-xs text-terminal-green border border-terminal-green/40 rounded px-2 py-0.5 mt-0.5 hover:bg-terminal-green/10 disabled:opacity-40 transition-colors"
           >
             ↵
           </button>

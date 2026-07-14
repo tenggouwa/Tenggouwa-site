@@ -83,6 +83,7 @@ async def run_agent(
     session_id=None,
     approvals=None,
     privileged=False,
+    auto_approve=False,
 ):
     """跑一次 answer_stream，返回 (events, repo)。mock 掉 LLM / skills / repo，全程不联网。
 
@@ -112,7 +113,7 @@ async def run_agent(
     events = [
         ev
         async for ev in svc.agent_service.answer_stream(
-            None, q, session_id=session_id, approvals=approvals, privileged=privileged
+            None, q, session_id=session_id, approvals=approvals, privileged=privileged, auto_approve=auto_approve
         )
     ]
     repo.tools_privileged = seen.get("privileged")  # type: ignore[attr-defined]

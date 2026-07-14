@@ -224,6 +224,35 @@ async def test_public_channel_never_pauses_for_approval(monkeypatch):
     assert of_type(events, "tool")  # 直接执行（invoke 层做真过滤，见 test_skills_channel）
 
 
+async def test_auto_approve_skips_pause_on_private(monkeypatch):
+    """auto 模式：私有通道里需批准工具也不暂停、直接执行（沙箱兜底），不发 approval。"""
+    import modules.agent.service as svc
+
+    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    rounds = [
+        [{"type": "tool_calls", "tool_calls": [tool_call("danger", "{}")]}],
+        [{"type": "content", "delta": "干完了"}],
+    ]
+    events, repo = await run_agent(monkeypatch, rounds, privileged=True, auto_approve=True)
+    assert of_type(events, "approval") == []  # auto → 不暂停
+    assert repo._session.pending is None
+    assert of_type(events, "tool") and "干完了" in tokens(events)  # 直接执行到底
+
+
+async def test_auto_approve_on_public_channel_still_never_pauses(monkeypatch):
+    """安全不变量：公开通道即便 auto_approve=True 也和从前一样——gate=privileged and not auto → 恒 False。
+    （write 工具在公开通道被 invoke 层拒，见 test_skills_channel；这里断言门闸不因 auto 而变松）。"""
+    import modules.agent.service as svc
+
+    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    rounds = [
+        [{"type": "tool_calls", "tool_calls": [tool_call("danger", "{}")]}],
+        [{"type": "content", "delta": "ok"}],
+    ]
+    events, repo = await run_agent(monkeypatch, rounds, privileged=False, auto_approve=True)
+    assert of_type(events, "approval") == [] and repo._session.pending is None
+
+
 async def test_approval_resume_approve_executes(monkeypatch):
     """C2：带 approvals={id:True} 续跑 → 消费 pending、真执行工具、清 pending、继续作答、全程配对。"""
     import modules.agent.service as svc
