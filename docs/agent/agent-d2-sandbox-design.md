@@ -39,9 +39,24 @@
 | 落点 | 隔离 | 适用 | 备注 |
 |---|---|---|---|
 | **A · 你的 Mac**（现成 mac-agent） | 弱（受限用户 + jailed cwd；**bwrap 是 Linux-only，Mac 上没有**） | 先跑通链路 / 你在旁边逐条审批的个人用法 | 隔离靠「你自己 + C2 审批」，别在 Mac 上放敏感数据的目录跑 |
-| **B · 便宜可丢弃的 Linux VM**（推荐终局） | 强（bwrap namespace + seccomp + rlimits + `--unshare-net` + 整机默认禁出站 + 快照回滚） | 生产化「做事 agent」 | daemon 就是同一份代码换台机跑；VM 是 throwaway |
+| **C · 你的树莓派（选定）** | 强（真 Linux → **bwrap 能用** + `--unshare-net` + rlimits） | 现成、常在线、免费；比 Mac 强、比云 VM 省 | ⚠️见下「Pi 传输变体」；在家 LAN 上 → 默认无网更要钉死；非 throwaway 但可重刷，当半可弃 |
+| **B · 便宜可丢弃的 Linux VM** | 强 + throwaway（+ 整机禁出站 + 快照回滚） | 若哪天不想维护 Pi / 要彻底隔离家 LAN | daemon 同一份代码换台机跑 |
 
-**建议：先 A 跑通、验证体验与协议，终局切 B。**
+**已选定 C（树莓派）** —— 真 Linux 拿到 bwrap 强隔离，且复用你现成设备。
+
+### Pi 传输变体：走 HTTP 长轮询，不走 WSS
+`apps/pi-agent/ROADMAP.md` §Phase2 已记：Pi 上 **WSS 穿代理难 + 装不上 `websockets` + 无 pip/venv**，所以
+mac-agent 那套 WSS PTY 在 Pi 上被搁置。D2 的 Pi 变体因此**不复用 `/api/agent/ws` WSS broker**，改走 Pi 已经
+跑通的 **HTTPS POST（穿代理稳）** 通道 —— 长轮询：
+
+```
+Pi 循环 GET /api/agent/pi/exec-poll   (长轮询，最多挂 25s，返回一条待执行命令或 null)
+   → bwrap 里跑（--unshare-net 默认无网）
+   → POST /api/agent/pi/exec-result {id, rc, output, truncated, timed_out}
+```
+
+鉴权复用现有 `PI_AGENT_TOKEN`（`pi_service.verify_token`）。服务器侧 `PiExecBroker` 内存队列 + future 做
+「一发一收」rendezvous（prod `fastapi.workers=1`，与现有 terminal broker 同假设，单进程内存够用）。
 
 ## 2. 架构
 

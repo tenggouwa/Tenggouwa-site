@@ -1,6 +1,29 @@
 from pydantic import BaseModel, Field
 
 
+class PiExecCommand(BaseModel):
+    """一条待 Pi 执行的命令（exec-poll 返回给 Pi）。"""
+
+    id: str
+    cmd: str
+    cwd: str = "workspace"
+    timeout: float = 30.0
+
+
+class PiExecPollResponse(BaseModel):
+    command: PiExecCommand | None = None  # null = 本轮无命令，Pi 立即再轮询
+
+
+class PiExecResult(BaseModel):
+    """Pi 执行完回传的结果。"""
+
+    id: str = Field(..., max_length=64)
+    rc: int
+    output: str = Field(default="", max_length=200_000)
+    truncated: bool = False
+    timed_out: bool = False
+
+
 class PiReport(BaseModel):
     """pi-agent 周期上报的一条遥测快照。"""
 

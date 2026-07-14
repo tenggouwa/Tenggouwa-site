@@ -5,7 +5,18 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
-from .schema import PiArtifact, PiArtifactReport, PiProbe, PiProbeReport, PiReport, PiStatus
+from .exec import pi_exec
+from .schema import (
+    PiArtifact,
+    PiArtifactReport,
+    PiExecCommand,
+    PiExecPollResponse,
+    PiExecResult,
+    PiProbe,
+    PiProbeReport,
+    PiReport,
+    PiStatus,
+)
 from .service import pi_service
 
 logger = logging.getLogger(__name__)
@@ -50,6 +61,29 @@ async def probe(
         raise HTTPException(status_code=401, detail="invalid pi agent token")
     await pi_service.ingest_probes(session, payload)
     return ResponseModel(data={"ok": True})
+
+
+@agent_router.get("/exec-poll", response_model=ResponseModel[PiExecPollResponse])
+async def exec_poll(
+    authorization: str | None = Header(default=None),
+) -> ResponseModel[PiExecPollResponse]:
+    """Pi 长轮询：取一条待执行命令（最多挂 25s，无命令返回 command=null）。"""
+    if not pi_service.verify_token(_bearer(authorization)):
+        raise HTTPException(status_code=401, detail="invalid pi agent token")
+    cmd = await pi_exec.poll()
+    return ResponseModel(data=PiExecPollResponse(command=PiExecCommand(**cmd) if cmd else None))
+
+
+@agent_router.post("/exec-result", response_model=ResponseModel[dict])
+async def exec_result(
+    payload: PiExecResult,
+    authorization: str | None = Header(default=None),
+) -> ResponseModel[dict]:
+    """Pi 回传命令执行结果，唤醒等待的 shell_exec。"""
+    if not pi_service.verify_token(_bearer(authorization)):
+        raise HTTPException(status_code=401, detail="invalid pi agent token")
+    ok = pi_exec.deliver(payload.id, payload.model_dump())
+    return ResponseModel(data={"ok": ok})
 
 
 # 公开只读：前台 /pi 面板轮询
