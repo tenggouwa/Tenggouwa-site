@@ -17,11 +17,12 @@ import json
 import logging
 import os
 import signal
+import threading
 import time
 import urllib.error
 import urllib.request
 
-from . import __version__, artifact, probe, telemetry
+from . import __version__, artifact, executor, probe, telemetry
 
 logger = logging.getLogger("pi-agent")
 
@@ -55,6 +56,11 @@ def run() -> None:
 
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
+
+    # 沙箱 exec（D2）：off-by-default，PI_AGENT_EXEC=1 才起一条独立线程长轮询接命令，不干扰遥测。
+    if os.environ.get("PI_AGENT_EXEC", "").strip().lower() in ("1", "true", "yes"):
+        threading.Thread(target=executor.exec_loop, args=(server, token, stop), daemon=True).start()
+        logger.info("sandbox exec enabled")
 
     logger.info("pi-agent up, reporting to %s every %.0fs", url, interval)
     backoff = 1.0
