@@ -100,6 +100,41 @@ describe('Ask private mode', () => {
     expect(screen.queryByText(/私有 · 剩/)).toBeNull();
   });
 
+  it('开启「自动执行」后 chat 请求带 auto_approve: true', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn((url: string, opts: { body?: string }) => {
+      if (url.endsWith('/api/public/agent/unlock')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ code: 0, message: '', data: { token: 'T1', ttl_seconds: 3600 } }),
+        });
+      }
+      bodies.push(JSON.parse(opts.body!));
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        body: sseStream([frame('session', { type: 'session', session_id: 's1' }), frame('done', { type: 'done' })]),
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    render(<Ask />);
+    fireEvent.click(screen.getByTitle(/TOTP 解锁私有模式/));
+    fireEvent.change(screen.getByPlaceholderText('6 位 TOTP 码'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByText('↵ 解锁'));
+    await waitFor(() => expect(screen.getByText('○ 自动执行')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('○ 自动执行')); // 开启
+    await waitFor(() => expect(screen.getByText('● 自动执行')).toBeTruthy());
+
+    fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '跑个命令' } });
+    fireEvent.submit(document.querySelector('form:last-of-type') as HTMLFormElement);
+
+    await waitFor(() => expect(bodies.length).toBeGreaterThan(0));
+    expect(bodies[0].auto_approve).toBe(true);
+  });
+
   it('公开模式（未解锁）chat 走公开端点、无 Authorization', async () => {
     const calls: Array<{ url: string; opts: { headers?: Record<string, string> } }> = [];
     const fetchMock = vi.fn((url: string, opts: { headers?: Record<string, string> }) => {

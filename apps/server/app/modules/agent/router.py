@@ -58,6 +58,7 @@ def _chat_stream(session: AsyncSession, payload: AgentChatRequest, *, privileged
                 session_id=payload.session_id,
                 approvals=payload.approvals,
                 privileged=privileged,
+                auto_approve=payload.auto_approve,
             ):
                 yield _sse(ev["type"], ev)
         except Exception as e:  # noqa: BLE001 —— 流内异常转 SSE error 事件回前端
