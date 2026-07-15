@@ -11,9 +11,13 @@ class PiExecCommand(BaseModel):
     cwd: str = "workspace"
     # 文件操作（kind=file）：
     kind: str | None = None  # None=shell；"file"=文件操作
-    op: str | None = None  # read / write / list
+    op: str | None = None  # read / write / list / edit
     path: str | None = None
     content: str | None = None
+    # edit（按精确匹配替换）：
+    old_string: str | None = None
+    new_string: str | None = None
+    replace_all: bool = False
 
 
 class PiExecPollResponse(BaseModel):

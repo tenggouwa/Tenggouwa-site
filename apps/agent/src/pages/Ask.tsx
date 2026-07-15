@@ -556,7 +556,7 @@ export default function Ask() {
 
       <p className="text-xs text-terminal-gray/40">
         agent 用 DeepSeek + skills（kb_search / update_plan / web_fetch / ask_user），会记住本轮对话上下文。答案由 AI 生成，可能有误。
-        {agentToken && ' 私有模式额外可用 file_list / file_read / file_write（写操作需审批）。'}
+        {agentToken && ' 私有模式额外可用 file_list / file_read / file_write / file_edit / shell_exec（写操作需审批）。'}
       </p>
     </div>
   );

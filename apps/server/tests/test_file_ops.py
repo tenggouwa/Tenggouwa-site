@@ -51,6 +51,37 @@ async def test_file_list_routes(monkeypatch):
     assert "a.txt" in await fo._list_handler(None, {"path": "."})
 
 
+async def test_file_edit_routes_with_strings(monkeypatch):
+    monkeypatch.setenv("AGENT_PI_SANDBOX", "1")
+    calls: list = []
+
+    async def fake(op, path, _content="", **kw):
+        calls.append((op, path, kw.get("old_string"), kw.get("new_string"), kw.get("replace_all")))
+        return {"rc": 0, "output": "（已编辑 a，替换 1 处。）"}
+
+    monkeypatch.setattr(fo.pi_exec, "submit_file", fake)
+    out = await fo._edit_handler(None, {"path": "a", "old_string": "x", "new_string": "y"})
+    assert calls == [("edit", "a", "x", "y", False)] and "已编辑" in out
+
+
+async def test_file_edit_replace_all_flag(monkeypatch):
+    monkeypatch.setenv("AGENT_PI_SANDBOX", "1")
+    calls: list = []
+
+    async def fake(_op, _path, _content="", **kw):
+        calls.append(kw.get("replace_all"))
+        return {"rc": 0, "output": "ok"}
+
+    monkeypatch.setattr(fo.pi_exec, "submit_file", fake)
+    await fo._edit_handler(None, {"path": "a", "old_string": "x", "new_string": "y", "replace_all": True})
+    assert calls == [True]
+
+
+async def test_file_edit_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("AGENT_PI_SANDBOX", raising=False)
+    assert "未启用" in await fo._edit_handler(None, {"path": "a", "old_string": "x", "new_string": "y"})
+
+
 async def test_file_op_timeout(monkeypatch):
     monkeypatch.setenv("AGENT_PI_SANDBOX", "1")
 
@@ -62,6 +93,6 @@ async def test_file_op_timeout(monkeypatch):
 
 
 def test_channel_and_risk_flags():
-    assert fo.FILE_LIST.private and fo.FILE_READ.private and fo.FILE_WRITE.private
+    assert fo.FILE_LIST.private and fo.FILE_READ.private and fo.FILE_WRITE.private and fo.FILE_EDIT.private
     assert fo.FILE_LIST.risk == "readonly" and fo.FILE_READ.risk == "readonly"
-    assert fo.FILE_WRITE.risk == "write"
+    assert fo.FILE_WRITE.risk == "write" and fo.FILE_EDIT.risk == "write"

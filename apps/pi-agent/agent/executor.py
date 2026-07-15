@@ -165,8 +165,11 @@ def _run_command(cmd: str, workspace: str, timeout: float, *, allow_net: bool, o
     }
 
 
-def _run_file(op: str, path: str, content: str, workspace: str) -> dict:
-    """在 workspace 内 jail 执行文件操作（read/write/list）。realpath 后须仍落在 workspace 内，否则拒。"""
+def _run_file(cmd: dict, workspace: str) -> dict:
+    """在 workspace 内 jail 执行文件操作（read/write/list/edit）。realpath 后须仍落在 workspace 内，否则拒。"""
+    op = cmd.get("op", "")
+    path = cmd.get("path", "")
+    content = cmd.get("content", "") or ""
     root = Path(workspace).resolve()
     target = (root / (path or ".").lstrip("/")).resolve()
     if not (target == root or target.is_relative_to(root)):  # 越狱（符号链接/`..`/绝对）→ 拒
@@ -204,6 +207,28 @@ def _run_file(op: str, path: str, content: str, workspace: str) -> dict:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
             return _fresult(0, f"（已写入 {target.relative_to(root)}，{len(content)} 字。）")
+        if op == "edit":
+            if not target.is_file():
+                return _fresult(1, f"（不存在或不是文件：{path}）")
+            old = cmd.get("old_string", "") or ""
+            new = cmd.get("new_string", "") or ""
+            if not old:
+                return _fresult(1, "（old_string 不能为空。）")
+            with target.open("rb") as f:
+                raw = f.read(_MAX_READ_BYTES + 1)
+            if len(raw) > _MAX_READ_BYTES:
+                return _fresult(1, f"（文件过大（> {_MAX_READ_BYTES} 字节），无法安全编辑，请用 shell。）")
+            text = raw.decode("utf-8", errors="replace")
+            n = text.count(old)
+            if n == 0:
+                return _fresult(1, "（未找到 old_string，未改动。请确认原文精确匹配（含缩进/换行）。）")
+            if n > 1 and not cmd.get("replace_all"):
+                return _fresult(1, f"（old_string 匹配到 {n} 处，加 replace_all=true 全改，或提供更唯一的片段。）")
+            updated = text.replace(old, new) if cmd.get("replace_all") else text.replace(old, new, 1)
+            if len(updated.encode("utf-8")) > _MAX_WRITE_BYTES:
+                return _fresult(1, f"（编辑后内容过大，上限 {_MAX_WRITE_BYTES} 字节。）")
+            target.write_text(updated, encoding="utf-8")
+            return _fresult(0, f"（已编辑 {target.relative_to(root)}，替换 {n if cmd.get('replace_all') else 1} 处。）")
         return _fresult(1, f"（未知文件操作：{op}）")
     except OSError as e:
         return _fresult(1, f"（文件操作失败：{e.strerror or '错误'}）")  # 只回 errno 文案，不泄漏宿主绝对路径
@@ -287,7 +312,7 @@ def exec_loop(server: str, token: str, stop: dict) -> None:
         # 都不能崩掉这条共享的 exec 线程——否则会连累 shell 一起挂，得重启 daemon 才恢复。
         try:
             if cmd.get("kind") == "file":
-                result = _run_file(cmd.get("op", ""), cmd.get("path", ""), cmd.get("content", ""), workspace)
+                result = _run_file(cmd, workspace)
             else:
 
                 def _chunk(text: str, _rid: str = rid) -> None:

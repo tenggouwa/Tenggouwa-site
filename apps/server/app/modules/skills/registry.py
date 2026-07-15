@@ -6,7 +6,7 @@
 
 from .ask_user import ASK_USER
 from .base import Skill
-from .file_ops import FILE_LIST, FILE_READ, FILE_WRITE
+from .file_ops import FILE_EDIT, FILE_LIST, FILE_READ, FILE_WRITE
 from .kb_search import KB_SEARCH
 from .shell_exec import SHELL_EXEC
 from .update_plan import UPDATE_PLAN
@@ -24,4 +24,6 @@ REGISTRY: dict[str, Skill] = {
     FILE_WRITE.name: FILE_WRITE,
     # D2 shell（private + write，走 Pi 沙箱；未配 AGENT_PI_SANDBOX 时拒用）
     SHELL_EXEC.name: SHELL_EXEC,
+    # file_edit（private + write，精确 find/replace 编辑，走同一 Pi 沙箱）
+    FILE_EDIT.name: FILE_EDIT,
 }

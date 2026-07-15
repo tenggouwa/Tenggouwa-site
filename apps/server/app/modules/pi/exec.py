@@ -51,13 +51,14 @@ class PiExecBroker:
             self._pending.pop(rid, None)  # 无论成/超时，都从待办清掉 → poll 会认出它已陈旧
             self._chunks.pop(rid, None)
 
-    async def submit_file(self, op: str, path: str, content: str, *, timeout: float) -> dict:
-        """入队一条文件操作（read/write/list）给 Pi 沙箱（在 Pi 的 workspace 内 jail 执行），等结果。
+    async def submit_file(self, op: str, path: str, content: str = "", *, timeout: float, **extra) -> dict:
+        """入队一条文件操作（read/write/list/edit）给 Pi 沙箱（在 Pi 的 workspace 内 jail 执行），等结果。
 
-        cmd="true" 是给「还没更新到带 _run_file 的旧 executor」的 Pi 的兜底——旧 Pi 不认 kind 会去跑 cmd，
-        跑个 no-op `true`（rc0 空输出）而非 _run_command(None) 崩掉 exec 线程（会连累 shell）。新 Pi 先看 kind。
+        edit 用 extra 传 old_string/new_string/replace_all。cmd="true" 是给「还没更新到带 _run_file 的旧
+        executor」的 Pi 的兜底——旧 Pi 不认 kind 会去跑 cmd，跑个 no-op `true`（rc0 空输出）而非
+        _run_command(None) 崩掉 exec 线程（会连累 shell）。新 Pi 先看 kind。
         """
-        payload = {"kind": "file", "op": op, "path": path, "content": content, "cmd": "true"}
+        payload = {"kind": "file", "op": op, "path": path, "content": content, "cmd": "true", **extra}
         rid, fut, _ = self._enqueue(payload, timeout)
         try:
             return await asyncio.wait_for(fut, timeout + _RESULT_GRACE)
