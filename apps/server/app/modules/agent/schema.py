@@ -17,3 +17,23 @@ class AgentUnlockRequest(BaseModel):
 class AgentUnlockResponse(BaseModel):
     token: str
     ttl_seconds: int
+
+
+class AgentSessionInfo(BaseModel):
+    """会话列表里的一条（不含消息正文）。"""
+
+    id: str
+    title: str | None = None
+    updated_at: str
+
+
+class AgentTranscriptTurn(BaseModel):
+    q: str
+    tools: list[dict] = Field(default_factory=list)  # [{name, args}]
+    answer: str = ""
+
+
+class AgentTranscript(BaseModel):
+    id: str
+    title: str | None = None
+    turns: list[AgentTranscriptTurn] = Field(default_factory=list)

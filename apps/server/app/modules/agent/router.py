@@ -3,7 +3,7 @@ import logging
 
 from common.rate_limit import client_ip, unlock_limiter
 from db import get_session
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,15 @@ from ..common_schema import ResponseModel
 from ..terminal.service import terminal_service
 from ..totp.repository import AdminTotpRepository
 from .auth import current_agent_owner, make_agent_token
-from .schema import AgentChatRequest, AgentUnlockRequest, AgentUnlockResponse
+from .repository import AgentRepository
+from .schema import (
+    AgentChatRequest,
+    AgentSessionInfo,
+    AgentTranscript,
+    AgentTranscriptTurn,
+    AgentUnlockRequest,
+    AgentUnlockResponse,
+)
 from .service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -49,7 +57,9 @@ async def revoke(
     return ResponseModel(data={"revoked": True})
 
 
-def _chat_stream(session: AsyncSession, payload: AgentChatRequest, *, privileged: bool) -> StreamingResponse:
+def _chat_stream(
+    session: AsyncSession, payload: AgentChatRequest, *, privileged: bool, owner: str | None = None
+) -> StreamingResponse:
     async def gen():
         try:
             async for ev in agent_service.answer_stream(
@@ -59,6 +69,7 @@ def _chat_stream(session: AsyncSession, payload: AgentChatRequest, *, privileged
                 approvals=payload.approvals,
                 privileged=privileged,
                 auto_approve=payload.auto_approve,
+                owner=owner,
             ):
                 yield _sse(ev["type"], ev)
         except Exception as e:  # noqa: BLE001 —— 流内异常转 SSE error 事件回前端
@@ -73,13 +84,59 @@ async def chat(
     payload: AgentChatRequest,
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
-    return _chat_stream(session, payload, privileged=False)
+    return _chat_stream(session, payload, privileged=False)  # owner=None：公开会话不归属，也不进「我的会话」
 
 
 @private_router.post("/chat")
 async def chat_privileged(
     payload: AgentChatRequest,
+    owner: str = Depends(current_agent_owner),
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
-    """owner-only 私有通道：可用 write / MCP 高危工具（仍走 C2 审批）。"""
-    return _chat_stream(session, payload, privileged=True)
+    """owner-only 私有通道：可用 write / MCP 高危工具（仍走 C2 审批）；会话归属该 owner。"""
+    return _chat_stream(session, payload, privileged=True, owner=owner)
+
+
+@private_router.get("/sessions", response_model=ResponseModel[list[AgentSessionInfo]])
+async def list_sessions(
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[AgentSessionInfo]]:
+    """列出该 owner 的会话（最近活跃在前），供前端「我的会话」侧栏。"""
+    rows = await AgentRepository(session).list_sessions(owner)
+    data = [AgentSessionInfo(id=r.id, title=r.title, updated_at=r.updated_at.isoformat()) for r in rows]
+    return ResponseModel(data=data)
+
+
+async def _owned_session(sid: str, owner: str, session: AsyncSession) -> AgentRepository:
+    """校验 sid 属于 owner，否则 404（不泄漏「存在但不属于你」）。返回 repo 复用。"""
+    repo = AgentRepository(session)
+    row = await repo.get_session(sid)
+    if row is None or row.owner != owner:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return repo
+
+
+@private_router.get("/sessions/{sid}", response_model=ResponseModel[AgentTranscript])
+async def get_transcript(
+    sid: str,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[AgentTranscript]:
+    """取某会话的完整对话记录（重建成轮次），供前端点开续聊时回填。"""
+    repo = await _owned_session(sid, owner, session)
+    row = await repo.get_session(sid)
+    turns = [AgentTranscriptTurn(**t) for t in await repo.transcript(sid)]
+    return ResponseModel(data=AgentTranscript(id=sid, title=row.title if row else None, turns=turns))
+
+
+@private_router.delete("/sessions/{sid}", response_model=ResponseModel[dict])
+async def delete_session(
+    sid: str,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """删除该 owner 名下的一个会话（连带消息）。"""
+    repo = await _owned_session(sid, owner, session)
+    await repo.delete_session(sid)
+    return ResponseModel(data={"deleted": True})
