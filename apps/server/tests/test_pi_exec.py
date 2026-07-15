@@ -42,6 +42,81 @@ def test_deliver_unknown_id_is_false():
     assert PiExecBroker().deliver("nope", {"rc": 0}) is False
 
 
+async def test_submit_stream_chunks_then_result():
+    b = PiExecBroker()
+
+    async def pi_worker():
+        cmd = await b.poll()
+        assert cmd is not None
+        b.deliver_chunk(cmd["id"], "line1\n")
+        b.deliver_chunk(cmd["id"], "line2\n")
+        b.deliver(cmd["id"], {"id": cmd["id"], "rc": 0, "output": "line1\nline2\n", "truncated": False})
+
+    task = asyncio.create_task(pi_worker())
+    chunks, result = [], None
+    async for ev in b.submit_stream("run", cwd="workspace", timeout=5):
+        if "chunk" in ev:
+            chunks.append(ev["chunk"])
+        else:
+            result = ev["result"]
+    assert chunks == ["line1\n", "line2\n"]
+    assert result is not None and result["rc"] == 0
+    await task
+
+
+def test_deliver_chunk_unknown_id_is_false():
+    assert PiExecBroker().deliver_chunk("nope", "x") is False
+
+
+async def test_submit_stream_times_out(monkeypatch):
+    import modules.pi.exec as pe
+
+    monkeypatch.setattr(pe, "_RESULT_GRACE", 0.02)
+    b = pe.PiExecBroker()
+    with pytest.raises(TimeoutError):
+        async for _ in b.submit_stream("x", cwd="w", timeout=0.02):  # 无 poll/deliver → 超时
+            pass
+
+
+async def test_submit_stream_cleanup_on_early_break():
+    b = PiExecBroker()
+
+    async def pi_worker():
+        cmd = await b.poll()
+        b.deliver_chunk(cmd["id"], "chunk1")  # 只推一块、不给 final
+
+    task = asyncio.create_task(pi_worker())
+    gen = b.submit_stream("x", cwd="w", timeout=5)
+    ev = await gen.__anext__()
+    assert ev == {"chunk": "chunk1"}
+    await gen.aclose()  # 消费者提前退出 → finally 清理
+    assert b._pending == {} and b._chunks == {}
+    await task
+
+
+async def test_stream_exec_yields_chunks_and_result(monkeypatch):
+    monkeypatch.setenv("AGENT_PI_SANDBOX", "1")
+    import modules.skills.shell_exec as se
+
+    async def fake_stream(_cmd, **_kw):
+        yield {"chunk": "a"}
+        yield {"chunk": "b"}
+        yield {"result": {"rc": 0, "output": "ab", "truncated": False, "timed_out": False}}
+
+    monkeypatch.setattr(se.pi_exec, "submit_stream", fake_stream)
+    out = [ev async for ev in se.stream_exec({"cmd": "x"})]
+    assert out[0] == {"chunk": "a"} and out[1] == {"chunk": "b"}
+    assert "rc=0" in out[2]["result"] and "ab" in out[2]["result"]
+
+
+async def test_stream_exec_disabled(monkeypatch):
+    monkeypatch.delenv("AGENT_PI_SANDBOX", raising=False)
+    import modules.skills.shell_exec as se
+
+    out = [ev async for ev in se.stream_exec({"cmd": "x"})]
+    assert len(out) == 1 and "未启用" in out[0]["result"]
+
+
 async def test_poll_drops_timed_out_command(monkeypatch):
     # 安全铁律：submit 超时的命令仍在队列，但 future 已没 → poll 丢弃、返回 None，绝不迟到执行
     import modules.pi.exec as pe

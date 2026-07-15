@@ -25,21 +25,65 @@ class PiExecBroker:
     def __init__(self) -> None:
         self._queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=_MAX_QUEUE)
         self._pending: dict[str, asyncio.Future] = {}
+        self._chunks: dict[str, asyncio.Queue] = {}  # 命令 id -> 流式输出块队列（Pi 边跑边推）
 
-    async def submit(self, cmd: str, *, cwd: str, timeout: float) -> dict:
-        """入队一条命令并等 Pi 回结果；Pi 无响应 timeout 后抛 TimeoutError，积压满抛 SandboxBusy。"""
+    def _enqueue(self, cmd: str, cwd: str, timeout: float) -> tuple[str, asyncio.Future, asyncio.Queue]:
         rid = uuid4().hex
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
+        chunk_q: asyncio.Queue = asyncio.Queue()
         self._pending[rid] = fut
+        self._chunks[rid] = chunk_q
         try:
             self._queue.put_nowait({"id": rid, "cmd": cmd, "cwd": cwd, "timeout": timeout})
         except asyncio.QueueFull:
             self._pending.pop(rid, None)
+            self._chunks.pop(rid, None)
             raise SandboxBusy from None
+        return rid, fut, chunk_q
+
+    async def submit(self, cmd: str, *, cwd: str, timeout: float) -> dict:
+        """入队一条命令并等 Pi 回结果；Pi 无响应 timeout 后抛 TimeoutError，积压满抛 SandboxBusy。"""
+        rid, fut, _ = self._enqueue(cmd, cwd, timeout)
         try:
             return await asyncio.wait_for(fut, timeout + _RESULT_GRACE)
         finally:
             self._pending.pop(rid, None)  # 无论成/超时，都从待办清掉 → poll 会认出它已陈旧
+            self._chunks.pop(rid, None)
+
+    async def submit_stream(self, cmd: str, *, cwd: str, timeout: float):
+        """流式版：yield {"chunk": str} 边跑边出，最后 yield {"result": dict}。超时抛 TimeoutError。"""
+        rid, fut, chunk_q = self._enqueue(cmd, cwd, timeout)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout + _RESULT_GRACE
+        try:
+            while True:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    raise TimeoutError
+                getter = asyncio.ensure_future(chunk_q.get())
+                done, _ = await asyncio.wait({getter, fut}, timeout=remaining, return_when=asyncio.FIRST_COMPLETED)
+                if getter in done:
+                    yield {"chunk": getter.result()}
+                else:
+                    getter.cancel()
+                if fut.done():
+                    while not chunk_q.empty():
+                        yield {"chunk": chunk_q.get_nowait()}  # 收尾把残余块吐干净
+                    yield {"result": fut.result()}
+                    return
+                if not done:
+                    raise TimeoutError
+        finally:
+            self._pending.pop(rid, None)
+            self._chunks.pop(rid, None)
+
+    def deliver_chunk(self, rid: str, chunk: str) -> bool:
+        """Pi 推来一块流式输出 → 塞进对应队列。未知 id（已结束/超时）返回 False。"""
+        q = self._chunks.get(rid)
+        if q is None:
+            return False
+        q.put_nowait(chunk)
+        return True
 
     async def poll(self) -> dict | None:
         """长轮询取下一条**仍在等结果**的待执行命令；陈旧的（submit 已超时/取消）丢弃，不投递。"""

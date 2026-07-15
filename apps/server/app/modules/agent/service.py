@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..kb.provider import chat_llm
 from ..skills.permissions import requires_approval
 from ..skills.service import skills_service
+from ..skills.shell_exec import SHELL_SKILL, stream_exec
 from .repository import AgentRepository
 
 logger = logging.getLogger(__name__)
@@ -259,9 +260,21 @@ class AgentService:
             elif name == ASK_SKILL:
                 yield {"type": "ask", "intro": content, "questions": args.get("questions", [])}
             else:
-                yield {"type": "tool", "name": name, "args": args}
+                yield {"type": "tool", "name": name, "args": args, "id": tid}
             if approvals is not None and requires_approval(name) and not approvals.get(tid, False):
                 result = "（用户拒绝执行此操作。）"
+            elif name == SHELL_SKILL and privileged:
+                # shell 输出流式：chunk 实时发前端做终端实时输出，final 作工具结果回灌 LLM
+                result = "（无输出）"
+                try:
+                    async for ev in stream_exec(args):
+                        if "chunk" in ev:
+                            yield {"type": "tool_output", "id": tid, "name": name, "delta": ev["chunk"]}
+                        else:
+                            result = ev["result"]
+                except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+                    logger.exception("shell_exec stream failed")
+                    result = f"（shell_exec 执行失败：{e}）"
             else:
                 try:
                     result = await skills_service.invoke(session, name, args, privileged=privileged)

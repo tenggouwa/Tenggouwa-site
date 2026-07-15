@@ -24,6 +24,13 @@ class PiExecResult(BaseModel):
     timed_out: bool = False
 
 
+class PiExecChunk(BaseModel):
+    """Pi 边跑边推的一块流式输出。"""
+
+    id: str = Field(..., max_length=64)
+    chunk: str = Field(default="", max_length=64_000)
+
+
 class PiReport(BaseModel):
     """pi-agent 周期上报的一条遥测快照。"""
 

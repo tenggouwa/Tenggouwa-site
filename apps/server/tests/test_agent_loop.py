@@ -253,6 +253,28 @@ async def test_auto_approve_on_public_channel_still_never_pauses(monkeypatch):
     assert of_type(events, "approval") == [] and repo._session.pending is None
 
 
+async def test_shell_exec_streams_tool_output(monkeypatch):
+    """shell 输出流式：私有通道执行 shell_exec 时 chunk 实时发 tool_output，final 作工具结果回灌 LLM。"""
+    import modules.agent.service as svc
+
+    async def fake_stream(_args):
+        yield {"chunk": "building...\n"}
+        yield {"chunk": "done\n"}
+        yield {"result": "[rc=0]\nbuilding...\ndone\n"}
+
+    monkeypatch.setattr(svc, "stream_exec", fake_stream)
+    rounds = [
+        [{"type": "tool_calls", "tool_calls": [tool_call("shell_exec", '{"cmd":"make"}')]}],
+        [{"type": "content", "delta": "构建成功"}],
+    ]
+    # 私有 + auto → 不暂停、直接流式执行
+    events, repo = await run_agent(monkeypatch, rounds, privileged=True, auto_approve=True)
+    assert [e["delta"] for e in of_type(events, "tool_output")] == ["building...\n", "done\n"]
+    tool_row = next(r for r in repo.rows if r.role == "tool")
+    assert "rc=0" in tool_row.content and "done" in tool_row.content  # final 落库
+    assert "构建成功" in tokens(events)
+
+
 async def test_approval_resume_approve_executes(monkeypatch):
     """C2：带 approvals={id:True} 续跑 → 消费 pending、真执行工具、清 pending、继续作答、全程配对。"""
     import modules.agent.service as svc
