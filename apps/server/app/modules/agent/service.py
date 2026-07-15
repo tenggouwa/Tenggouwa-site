@@ -21,6 +21,8 @@ from ..kb.provider import chat_llm
 from ..skills.permissions import requires_approval
 from ..skills.service import skills_service
 from ..skills.shell_exec import SHELL_SKILL, stream_exec
+from ..skills.subagent import SUBAGENT_SKILL
+from ..skills.subagent import stream_run as subagent_run
 from .repository import AgentRepository
 
 logger = logging.getLogger(__name__)
@@ -301,6 +303,18 @@ class AgentService:
                 except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
                     logger.exception("shell_exec stream failed")
                     result = f"（shell_exec 执行失败：{e}）"
+            elif name == SUBAGENT_SKILL:
+                # 子代理：把每步调的工具当 tool_output 流给前端（复用 shell 的实时框），结论回灌 LLM
+                result = "（子代理无输出）"
+                try:
+                    async for ev in subagent_run(session, args.get("task", "")):
+                        if "progress" in ev:
+                            yield {"type": "tool_output", "id": tid, "name": name, "delta": ev["progress"] + "\n"}
+                        else:
+                            result = ev["result"]
+                except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+                    logger.exception("run_subagent failed")
+                    result = f"（子代理执行失败：{e}）"
             else:
                 try:
                     result = await skills_service.invoke(session, name, args, privileged=privileged)

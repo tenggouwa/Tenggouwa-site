@@ -9,6 +9,7 @@ from .base import Skill
 from .file_ops import FILE_EDIT, FILE_LIST, FILE_READ, FILE_WRITE
 from .kb_search import KB_SEARCH
 from .shell_exec import SHELL_EXEC
+from .subagent import SUBAGENT
 from .update_plan import UPDATE_PLAN
 from .web_fetch import WEB_FETCH
 from .web_search import WEB_SEARCH
@@ -27,6 +28,8 @@ REGISTRY: dict[str, Skill] = {
     SHELL_EXEC.name: SHELL_EXEC,
     # file_edit（private + write，精确 find/replace 编辑，走同一 Pi 沙箱）
     FILE_EDIT.name: FILE_EDIT,
-    # web_search（readonly + 公开，DDG 找 URL，配 web_fetch 用）
+    # web_search（readonly + 公开，Bing 找 URL，配 web_fetch 用）
     WEB_SEARCH.name: WEB_SEARCH,
+    # run_subagent（readonly + 公开，只读子代理，工具集排除自身防递归）
+    SUBAGENT.name: SUBAGENT,
 }
