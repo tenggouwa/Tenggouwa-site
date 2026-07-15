@@ -2,12 +2,18 @@ from pydantic import BaseModel, Field
 
 
 class PiExecCommand(BaseModel):
-    """一条待 Pi 执行的命令（exec-poll 返回给 Pi）。"""
+    """一条待 Pi 执行的命令（exec-poll 返回给 Pi）：shell（cmd）或文件操作（kind=file）。"""
 
     id: str
-    cmd: str
-    cwd: str = "workspace"
     timeout: float = 30.0
+    # shell：
+    cmd: str | None = None
+    cwd: str = "workspace"
+    # 文件操作（kind=file）：
+    kind: str | None = None  # None=shell；"file"=文件操作
+    op: str | None = None  # read / write / list
+    path: str | None = None
+    content: str | None = None
 
 
 class PiExecPollResponse(BaseModel):

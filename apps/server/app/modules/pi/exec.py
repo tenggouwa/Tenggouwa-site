@@ -27,14 +27,15 @@ class PiExecBroker:
         self._pending: dict[str, asyncio.Future] = {}
         self._chunks: dict[str, asyncio.Queue] = {}  # 命令 id -> 流式输出块队列（Pi 边跑边推）
 
-    def _enqueue(self, cmd: str, cwd: str, timeout: float) -> tuple[str, asyncio.Future, asyncio.Queue]:
+    def _enqueue(self, payload: dict, timeout: float) -> tuple[str, asyncio.Future, asyncio.Queue]:
+        """入队一条给 Pi 的命令（payload 即命令体，如 {cmd,cwd} 或 {kind:file,op,path,content}）。"""
         rid = uuid4().hex
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
         chunk_q: asyncio.Queue = asyncio.Queue()
         self._pending[rid] = fut
         self._chunks[rid] = chunk_q
         try:
-            self._queue.put_nowait({"id": rid, "cmd": cmd, "cwd": cwd, "timeout": timeout})
+            self._queue.put_nowait({"id": rid, "timeout": timeout, **payload})
         except asyncio.QueueFull:
             self._pending.pop(rid, None)
             self._chunks.pop(rid, None)
@@ -42,17 +43,31 @@ class PiExecBroker:
         return rid, fut, chunk_q
 
     async def submit(self, cmd: str, *, cwd: str, timeout: float) -> dict:
-        """入队一条命令并等 Pi 回结果；Pi 无响应 timeout 后抛 TimeoutError，积压满抛 SandboxBusy。"""
-        rid, fut, _ = self._enqueue(cmd, cwd, timeout)
+        """入队一条 shell 命令并等 Pi 回结果；Pi 无响应 timeout 后抛 TimeoutError，积压满抛 SandboxBusy。"""
+        rid, fut, _ = self._enqueue({"cmd": cmd, "cwd": cwd}, timeout)
         try:
             return await asyncio.wait_for(fut, timeout + _RESULT_GRACE)
         finally:
             self._pending.pop(rid, None)  # 无论成/超时，都从待办清掉 → poll 会认出它已陈旧
             self._chunks.pop(rid, None)
 
+    async def submit_file(self, op: str, path: str, content: str, *, timeout: float) -> dict:
+        """入队一条文件操作（read/write/list）给 Pi 沙箱（在 Pi 的 workspace 内 jail 执行），等结果。
+
+        cmd="true" 是给「还没更新到带 _run_file 的旧 executor」的 Pi 的兜底——旧 Pi 不认 kind 会去跑 cmd，
+        跑个 no-op `true`（rc0 空输出）而非 _run_command(None) 崩掉 exec 线程（会连累 shell）。新 Pi 先看 kind。
+        """
+        payload = {"kind": "file", "op": op, "path": path, "content": content, "cmd": "true"}
+        rid, fut, _ = self._enqueue(payload, timeout)
+        try:
+            return await asyncio.wait_for(fut, timeout + _RESULT_GRACE)
+        finally:
+            self._pending.pop(rid, None)
+            self._chunks.pop(rid, None)
+
     async def submit_stream(self, cmd: str, *, cwd: str, timeout: float):
         """流式版：yield {"chunk": str} 边跑边出，最后 yield {"result": dict}。超时抛 TimeoutError。"""
-        rid, fut, chunk_q = self._enqueue(cmd, cwd, timeout)
+        rid, fut, chunk_q = self._enqueue({"cmd": cmd, "cwd": cwd}, timeout)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout + _RESULT_GRACE
         try:
