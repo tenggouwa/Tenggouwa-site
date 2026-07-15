@@ -4,10 +4,11 @@
 summarized_upto_seq 之后的窗口，配合 sessions.summary 重建 LLM messages。
 """
 
+import json
 from uuid import uuid4
 
 from db.models import AgentMessageRow, AgentSessionRow
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -25,14 +26,68 @@ class AgentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def create_session(self, title: str) -> str:
+    async def create_session(self, title: str, *, owner: str | None = None) -> str:
         sid = uuid4().hex
-        self.session.add(AgentSessionRow(id=sid, title=title[:200]))
+        self.session.add(AgentSessionRow(id=sid, title=title[:200], owner=owner))
         await self.session.flush()
         return sid
 
     async def get_session(self, sid: str) -> AgentSessionRow | None:
         return await self.session.get(AgentSessionRow, sid)
+
+    async def touch(self, sid: str) -> None:
+        """把会话 updated_at 顶到当前时间（新一轮开始时叫，让「最近会话」排序反映最后活跃）。"""
+        row = await self.session.get(AgentSessionRow, sid)
+        if row is not None:
+            row.updated_at = func.now()
+            await self.session.flush()
+
+    async def list_sessions(self, owner: str, limit: int = 50) -> list[AgentSessionRow]:
+        """按 owner 取会话列表（最近活跃在前）。owner 隔离：只返回该 owner 自己的会话。"""
+        rows = (
+            await self.session.execute(
+                select(AgentSessionRow)
+                .where(AgentSessionRow.owner == owner)
+                .order_by(AgentSessionRow.updated_at.desc())
+                .limit(limit)
+            )
+        ).scalars()
+        return list(rows)
+
+    async def transcript(self, sid: str) -> list[dict]:
+        """把 append-only 消息重建成前端可渲染的轮次 [{q, tools:[{name,args}], answer}]。
+
+        user 起一轮；assistant 的正文累进 answer、tool_calls 平铺进 tools；tool 结果不展开（保持轻量）。
+        """
+        rows = (
+            (
+                await self.session.execute(
+                    select(AgentMessageRow).where(AgentMessageRow.session_id == sid).order_by(AgentMessageRow.seq.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        turns: list[dict] = []
+        for r in rows:
+            if r.role == "user":
+                turns.append({"q": r.content, "tools": [], "answer": ""})
+            elif r.role == "assistant" and turns:
+                if r.content:
+                    turns[-1]["answer"] += r.content
+                for tc in r.tool_calls or []:
+                    fn = tc.get("function", {}) if isinstance(tc, dict) else {}
+                    try:
+                        args = json.loads(fn.get("arguments") or "{}")
+                    except (ValueError, TypeError):
+                        args = {}
+                    turns[-1]["tools"].append({"name": fn.get("name", ""), "args": args})
+        return turns
+
+    async def delete_session(self, sid: str) -> None:
+        """删除会话及其消息（message 表有 ON DELETE CASCADE，删 session 即连带清）。"""
+        await self.session.execute(delete(AgentSessionRow).where(AgentSessionRow.id == sid))
+        await self.session.flush()
 
     async def load_window(self, sid: str) -> AgentWindow:
         """取 summarized_upto_seq 之后的消息 + summary，组装成 LLM messages。"""

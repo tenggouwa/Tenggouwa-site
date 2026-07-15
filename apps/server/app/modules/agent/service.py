@@ -105,10 +105,14 @@ class AgentService:
         approvals: dict | None = None,
         privileged: bool = False,
         auto_approve: bool = False,
+        owner: str | None = None,
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
         existing = await repo.get_session(session_id) if session_id else None
-        sid = existing.id if existing else await repo.create_session(q or "（审批）")
+        # owner 隔离：只续自己名下的会话；owner 不匹配（公开想读私有 / 跨 owner / 陈旧 id）→ 当作新会话，绝不泄漏历史。
+        if existing is not None and existing.owner != owner:
+            existing = None
+        sid = existing.id if existing else await repo.create_session(q or "（审批）", owner=owner)
         yield {"type": "session", "session_id": sid}
 
         usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
@@ -142,6 +146,7 @@ class AgentService:
             if existing is not None and existing.pending:
                 await repo.set_pending(sid, None)  # 用户改问了别的 → 放弃上次待批
             await self._maybe_compact(repo, sid)
+            await repo.touch(sid)  # 顶 updated_at → 「最近会话」列表按最后活跃排序
             window = await repo.load_window(sid)
             seq = window.next_seq
             await repo.append(sid, seq, "user", q)

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { API_BASE, revokeAgent, unlockAgent } from '../lib/api';
+import { API_BASE, getTranscript, revokeAgent, unlockAgent } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
 import { parseSSEFrame } from '../lib/sse';
 import AskPanel, { type AskQuestion } from '../components/AskPanel';
 import ApprovalCard, { type ApprovalRequest } from '../components/ApprovalCard';
 import UnlockPanel from '../components/UnlockPanel';
+import SessionList from '../components/SessionList';
 
 // agent 对话：公开走 POST /api/public/agent/chat；私有模式（TOTP 解锁）走 /api/agent/chat + Bearer，
 // 额外拿到文件读写等高危工具，write 操作触发 C2 审批卡。SSE 事件 tool/token/plan/ask/approval/done。
@@ -109,6 +110,7 @@ export default function Ask() {
   });
   const [tokenExp, setTokenExp] = useState(() => Number(sessionStorage.getItem(EXP_KEY) || 0));
   const [showUnlock, setShowUnlock] = useState(false);
+  const [showSessions, setShowSessions] = useState(false); // 「我的会话」面板开关（私有模式）
   const [unlockBusy, setUnlockBusy] = useState(false);
   const [unlockError, setUnlockError] = useState<string | undefined>();
   const [autoRun, setAutoRun] = useState(false); // auto 模式：私有沙箱内自动执行、免逐条审批
@@ -157,6 +159,7 @@ export default function Ask() {
     setAgentToken(null);
     setTokenExp(0);
     setAutoRun(false); // auto 模式每次解锁重新 opt-in，别跨会话悄悄留着
+    setShowSessions(false); // 会话列表是私有能力，锁定即收起
     sessionId.current = null; // 别把私有会话续到公开通道
     if (opts?.reset) setTurns([]);
   }
@@ -288,6 +291,28 @@ export default function Ask() {
     await stream(idx, { q: query });
   }
 
+  // 点开历史会话：拉 transcript 重建成 turns 回填、把 sessionId 指向它，之后照常续聊。
+  async function loadSession(sid: string) {
+    if (busy || !agentToken) return;
+    abortRef.current?.abort();
+    setShowSessions(false);
+    try {
+      const t = await getTranscript(agentToken, sid);
+      sessionId.current = sid;
+      setTurns(
+        t.turns.map((turn) => ({
+          q: turn.q,
+          tools: turn.tools.map((tc) => ({ name: tc.name, args: tc.args })),
+          plan: [],
+          answer: turn.answer,
+          done: true,
+        })),
+      );
+    } catch {
+      /* 拉取失败：保持当前上下文不动 */
+    }
+  }
+
   // 审批决策回后端续跑：清掉本轮审批卡、置回"进行中"，续跑事件（工具执行 + 后续作答）回填同一轮。
   function resume(idx: number, approvals: Record<string, boolean>) {
     updateTurn(idx, (t) => ({ ...t, approval: undefined, done: false }));
@@ -384,6 +409,17 @@ export default function Ask() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setShowSessions((v) => !v)}
+                  className={
+                    'text-[11px] transition-colors ' +
+                    (showSessions ? 'text-terminal-cyan' : 'text-terminal-gray/60 hover:text-terminal-cyan')
+                  }
+                  title="我的历史会话：点开续聊"
+                >
+                  会话
+                </button>
+                <button
+                  type="button"
                   onClick={() => !busy && lock({ reset: true })}
                   disabled={busy}
                   className="text-[11px] text-terminal-gray/60 hover:text-terminal-yellow transition-colors disabled:opacity-40"
@@ -432,6 +468,12 @@ export default function Ask() {
         {showUnlock && !agentToken && (
           <div className="px-4 pt-3">
             <UnlockPanel busy={unlockBusy} error={unlockError} onSubmit={unlock} />
+          </div>
+        )}
+
+        {showSessions && agentToken && (
+          <div className="px-4 pt-3">
+            <SessionList token={agentToken} currentId={sessionId.current} onOpen={loadSession} busy={busy} />
           </div>
         )}
 

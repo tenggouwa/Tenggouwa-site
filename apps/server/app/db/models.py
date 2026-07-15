@@ -509,6 +509,8 @@ class AgentSessionRow(Base):
     __tablename__ = "agent_session"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)  # uuid4().hex
+    # owner 为空 = 公开/匿名会话；非空 = 私有通道该 owner 所有。列表/续聊按 owner 隔离，防跨通道读私有历史。
+    owner: Mapped[str | None] = mapped_column(String(64), nullable=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)  # 首个问题截断
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # compaction 产物（§4）
     summarized_upto_seq: Mapped[int] = mapped_column(nullable=False, default=0)  # 已被 summary 覆盖到的 seq
@@ -519,6 +521,8 @@ class AgentSessionRow(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+    __table_args__ = (Index("ix_agent_session_owner_updated", "owner", "updated_at"),)
 
 
 class AgentMessageRow(Base):

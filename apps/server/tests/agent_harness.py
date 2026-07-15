@@ -40,13 +40,20 @@ class FakeRepo:
         self.saved = None  # save_summary 的产物
         self._window = window or AgentWindow(None, [], 1, 0)
         self._rows_after = rows_after or []
-        self._session = session or SimpleNamespace(id="s", summary=None, summarized_upto_seq=0, pending=None)
+        self._session = session or SimpleNamespace(
+            id="s", owner=None, summary=None, summarized_upto_seq=0, pending=None
+        )
+        self.created = None  # 记录 create_session 的 (title, owner)，供断言 owner 隔离/新建
 
-    async def create_session(self, title):
+    async def create_session(self, title, *, owner=None):
+        self.created = (title, owner)
         return "s"
 
     async def get_session(self, sid):
         return self._session if sid else None
+
+    async def touch(self, sid):
+        pass
 
     async def load_window(self, sid):
         return self._window
@@ -84,6 +91,7 @@ async def run_agent(
     approvals=None,
     privileged=False,
     auto_approve=False,
+    owner=None,
 ):
     """跑一次 answer_stream，返回 (events, repo)。mock 掉 LLM / skills / repo，全程不联网。
 
@@ -113,7 +121,13 @@ async def run_agent(
     events = [
         ev
         async for ev in svc.agent_service.answer_stream(
-            None, q, session_id=session_id, approvals=approvals, privileged=privileged, auto_approve=auto_approve
+            None,
+            q,
+            session_id=session_id,
+            approvals=approvals,
+            privileged=privileged,
+            auto_approve=auto_approve,
+            owner=owner,
         )
     ]
     repo.tools_privileged = seen.get("privileged")  # type: ignore[attr-defined]

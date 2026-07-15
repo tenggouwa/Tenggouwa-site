@@ -290,7 +290,7 @@ async def test_approval_resume_approve_executes(monkeypatch):
 
     pending = {"content": "我准备删这个文件", "tool_calls": [tool_call("danger", '{"path":"/x"}')]}
     window = AgentWindow(None, [{"role": "user", "content": "删掉 /x"}], next_seq=2, summarized_upto_seq=0)
-    session = SimpleNamespace(id="s", summary=None, summarized_upto_seq=0, pending=pending)
+    session = SimpleNamespace(id="s", owner=None, summary=None, summarized_upto_seq=0, pending=pending)
     events, repo = await run_agent(
         monkeypatch,
         [[{"type": "content", "delta": "已经删好了。"}]],
@@ -317,7 +317,7 @@ async def test_approval_resume_without_pending_is_noop(monkeypatch):
     async def should_not_run(_s, _n, _a):
         raise AssertionError("无 pending 不该执行任何工具")
 
-    session = SimpleNamespace(id="s", summary=None, summarized_upto_seq=0, pending=None)
+    session = SimpleNamespace(id="s", owner=None, summary=None, summarized_upto_seq=0, pending=None)
     events, repo = await run_agent(
         monkeypatch,
         [[{"type": "content", "delta": "不该被调用"}]],
@@ -353,7 +353,7 @@ async def test_approval_resume_reject_skips_execution(monkeypatch):
 
     pending = {"content": "我准备删这个文件", "tool_calls": [tool_call("danger", '{"path":"/x"}')]}
     window = AgentWindow(None, [{"role": "user", "content": "删掉 /x"}], next_seq=2, summarized_upto_seq=0)
-    session = SimpleNamespace(id="s", summary=None, summarized_upto_seq=0, pending=pending)
+    session = SimpleNamespace(id="s", owner=None, summary=None, summarized_upto_seq=0, pending=pending)
     events, repo = await run_agent(
         monkeypatch,
         [[{"type": "content", "delta": "好的，已取消。"}]],
@@ -413,7 +413,7 @@ async def test_compaction_triggers_and_boundary_on_user_turn(monkeypatch):
         monkeypatch,
         [[{"type": "content", "delta": "答"}]],
         rows_after=old_rows,
-        session=SimpleNamespace(id="s", summary=None, summarized_upto_seq=0),
+        session=SimpleNamespace(id="s", owner=None, summary=None, summarized_upto_seq=0),
     )
     assert repo.saved is not None  # 触发了 compaction
     assert repo.saved[1] == 2  # summarized_upto = boundary-1；边界 seq=3 是 user 轮
@@ -427,7 +427,7 @@ async def test_compaction_skipped_when_small(monkeypatch):
         monkeypatch,
         [[{"type": "content", "delta": "答"}]],
         rows_after=small,
-        session=SimpleNamespace(id="s", summary=None, summarized_upto_seq=0),
+        session=SimpleNamespace(id="s", owner=None, summary=None, summarized_upto_seq=0),
     )
     assert repo.saved is None
 
@@ -444,7 +444,7 @@ async def test_compaction_skipped_when_few_user_turns(monkeypatch):
         monkeypatch,
         [[{"type": "content", "delta": "答"}]],
         rows_after=rows,
-        session=SimpleNamespace(id="s", summary=None, summarized_upto_seq=0),
+        session=SimpleNamespace(id="s", owner=None, summary=None, summarized_upto_seq=0),
     )
     assert repo.saved is None
 
@@ -465,7 +465,7 @@ async def test_resume_reuses_session_and_continues_seq(monkeypatch):
         monkeypatch,
         [[{"type": "content", "delta": "续答"}]],
         window=window,
-        session=SimpleNamespace(id="s", summary="摘要", summarized_upto_seq=0, pending=None),
+        session=SimpleNamespace(id="s", owner=None, summary="摘要", summarized_upto_seq=0, pending=None),
         session_id="s",
         q="继续",
     )

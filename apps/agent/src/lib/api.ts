@@ -41,6 +41,42 @@ export async function revokeAgent(token: string): Promise<void> {
   if (!res.ok) throw new Error(`注销失败 (HTTP ${res.status})`);
 }
 
+export interface SessionInfo {
+  id: string;
+  title: string | null;
+  updated_at: string;
+}
+
+export interface TranscriptTurn {
+  q: string;
+  tools: { name: string; args: Record<string, unknown> }[];
+  answer: string;
+}
+
+export interface Transcript {
+  id: string;
+  title: string | null;
+  turns: TranscriptTurn[];
+}
+
+// 私有通道：取该 owner 的会话列表（最近活跃在前）。需带 agent_token。
+async function agentApi<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}/api/agent${path}`, {
+    ...init,
+    headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}` },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const payload = (await res.json()) as Envelope<T>;
+  if (payload.code !== 0) throw new Error(payload.message || `api code ${payload.code}`);
+  return payload.data;
+}
+
+export const listSessions = (token: string) => agentApi<SessionInfo[]>('/sessions', token);
+export const getTranscript = (token: string, sid: string) => agentApi<Transcript>(`/sessions/${sid}`, token);
+export const deleteSession = (token: string, sid: string) =>
+  agentApi<{ deleted: boolean }>(`/sessions/${sid}`, token, { method: 'DELETE' });
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
