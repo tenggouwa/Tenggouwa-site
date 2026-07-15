@@ -7,6 +7,7 @@
 from .ask_user import ASK_USER
 from .base import Skill
 from .file_ops import FILE_EDIT, FILE_LIST, FILE_READ, FILE_WRITE
+from .git_ops import GIT
 from .kb_search import KB_SEARCH
 from .shell_exec import SHELL_EXEC
 from .subagent import SUBAGENT
@@ -32,4 +33,6 @@ REGISTRY: dict[str, Skill] = {
     WEB_SEARCH.name: WEB_SEARCH,
     # run_subagent（readonly + 公开，只读子代理，工具集排除自身防递归）
     SUBAGENT.name: SUBAGENT,
+    # git（private + write，走 Pi 沙箱，白名单子命令）
+    GIT.name: GIT,
 }
