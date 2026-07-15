@@ -1,10 +1,11 @@
 import { useState } from 'react';
 
 // 轻量安全的行内 markdown：**粗体** / `代码` / [文字](链接)。用 React 节点拼装（不注入 HTML），
-// 无 XSS 风险；流式时未闭合的 ** 先按原文显示，闭合后变粗体。链接只放行 http(s)。
+// 无 XSS 风险；流式时未闭合的 ** 先按原文显示，闭合后变粗体。链接只放行 http(s) 与站内绝对路径 /…
+// （回引用来源是 /posts/… 这类站内链接；只认这两种，挡掉 javascript: 等协议）。
 export function renderInline(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = [];
-  const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+|\/[^)\s]+)\)/g;
   let last = 0;
   let key = 0;
   let m: RegExpExecArray | null;

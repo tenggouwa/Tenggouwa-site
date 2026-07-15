@@ -92,4 +92,14 @@ describe('renderMarkdown 行内 + 标题 + 分隔', () => {
     const c = html('[x](javascript:alert(1))');
     expect(c.querySelector('a')).toBeNull();
   });
+
+  it('站内绝对路径 /… 链接（回引用来源）渲染成 <a>，新标签打开', () => {
+    const a = html('见 [《VPS 调优》](/posts/vps/)。').querySelector('a');
+    expect(a?.getAttribute('href')).toBe('/posts/vps/');
+    expect(a?.getAttribute('target')).toBe('_blank');
+  });
+
+  it('相对路径（不以 / 开头）不渲染成 <a>（避免误伤）', () => {
+    expect(html('[x](posts/vps)').querySelector('a')).toBeNull();
+  });
 });

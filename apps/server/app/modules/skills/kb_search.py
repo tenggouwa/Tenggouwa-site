@@ -13,7 +13,12 @@ async def _handler(session: AsyncSession, args: dict) -> str:
     hits = await kb_service.retrieve(session, query, None, limit=6)
     if not hits:
         return "知识库里没有相关内容。"
-    blocks = [f"[{i}] 《{h['title']}》（{h.get('url') or ''}）\n{h['content']}" for i, h in enumerate(hits, 1)]
+    # 每条给出**可直接粘贴的 markdown 引用链接**（有 url 才成链接），方便模型在答案里回引来源。
+    blocks = []
+    for i, h in enumerate(hits, 1):
+        url = h.get("url")
+        cite = f"[《{h['title']}》]({url})" if url else f"《{h['title']}》"
+        blocks.append(f"[{i}] 来源：{cite}\n{h['content']}")
     return "\n\n".join(blocks)
 
 
