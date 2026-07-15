@@ -47,7 +47,7 @@ describe('Ask approval flow', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     render(<Ask />);
-    fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '删掉 x' } });
+    fireEvent.change(screen.getByPlaceholderText(/回车发送/), { target: { value: '删掉 x' } });
     fireEvent.submit(document.querySelector('form') as HTMLFormElement);
 
     // 暂停：审批卡出现，preamble 已流出
@@ -89,7 +89,7 @@ describe('Ask approval flow', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     render(<Ask />);
-    fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '搞一批操作' } });
+    fireEvent.change(screen.getByPlaceholderText(/回车发送/), { target: { value: '搞一批操作' } });
     fireEvent.submit(document.querySelector('form') as HTMLFormElement);
 
     // 第 1 张卡（c1）→ 一键批准

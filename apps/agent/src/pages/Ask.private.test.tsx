@@ -58,7 +58,7 @@ describe('Ask private mode', () => {
     expect(JSON.parse(unlockCall!.opts.body!)).toEqual({ totp: '123456' });
 
     // 发一条对话 → 打私有端点、带 Bearer
-    fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '读下文件' } });
+    fireEvent.change(screen.getByPlaceholderText(/回车发送/), { target: { value: '读下文件' } });
     fireEvent.submit(document.querySelector('form:last-of-type') as HTMLFormElement);
 
     await waitFor(() => expect(screen.getByText('好的')).toBeTruthy());
@@ -128,7 +128,7 @@ describe('Ask private mode', () => {
     fireEvent.click(screen.getByText('○ 自动执行')); // 开启
     await waitFor(() => expect(screen.getByText('● 自动执行')).toBeTruthy());
 
-    fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '跑个命令' } });
+    fireEvent.change(screen.getByPlaceholderText(/回车发送/), { target: { value: '跑个命令' } });
     fireEvent.submit(document.querySelector('form:last-of-type') as HTMLFormElement);
 
     await waitFor(() => expect(bodies.length).toBeGreaterThan(0));
@@ -153,12 +153,62 @@ describe('Ask private mode', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     render(<Ask />);
-    fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '跑 make' } });
+    fireEvent.change(screen.getByPlaceholderText(/回车发送/), { target: { value: '跑 make' } });
     fireEvent.submit(document.querySelector('form:last-of-type') as HTMLFormElement);
 
     // 两块 chunk 累积到同一个终端框
     await waitFor(() => expect(screen.getByText(/building\.\.\./)).toBeTruthy());
     expect(screen.getByText(/building\.\.\./).textContent).toContain('done');
+  });
+
+  it('上下键翻历史输入', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        body: sseStream([frame('session', { type: 'session', session_id: 's1' }), frame('done', { type: 'done' })]),
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    render(<Ask />);
+    const ta = screen.getByPlaceholderText(/回车发送/) as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: 'first' } });
+    fireEvent.keyDown(ta, { key: 'Enter' });
+    await waitFor(() => expect(ta.value).toBe(''));
+    fireEvent.change(ta, { target: { value: 'second' } });
+    fireEvent.keyDown(ta, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByText('second')).toBeTruthy()); // 第二轮已渲染
+
+    fireEvent.keyDown(ta, { key: 'ArrowUp' });
+    expect(ta.value).toBe('second'); // 最近一条
+    fireEvent.keyDown(ta, { key: 'ArrowUp' });
+    expect(ta.value).toBe('first');
+    fireEvent.keyDown(ta, { key: 'ArrowDown' });
+    expect(ta.value).toBe('second');
+  });
+
+  it('Esc 停止运行（中止在途流、回到发送态）', async () => {
+    const fetchMock = vi.fn((_url: string, opts: { signal: AbortSignal }) => {
+      const enc = new TextEncoder();
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(enc.encode(frame('session', { type: 'session', session_id: 's1' })));
+          opts.signal.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError')));
+          // 不发 done → 一直挂着，直到 Esc 中止
+        },
+      });
+      return Promise.resolve({ ok: true, status: 200, body });
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    render(<Ask />);
+    const ta = screen.getByPlaceholderText(/回车发送/);
+    fireEvent.change(ta, { target: { value: 'run' } });
+    fireEvent.keyDown(ta, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByText('■ 停止')).toBeTruthy()); // busy → 停止按钮
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByText('■ 停止')).toBeNull()); // 已停止 → 回到 ↵
   });
 
   it('公开模式（未解锁）chat 走公开端点、无 Authorization', async () => {
@@ -174,7 +224,7 @@ describe('Ask private mode', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     render(<Ask />);
-    fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '你好' } });
+    fireEvent.change(screen.getByPlaceholderText(/回车发送/), { target: { value: '你好' } });
     fireEvent.submit(document.querySelector('form:last-of-type') as HTMLFormElement);
 
     await waitFor(() => expect(calls.length).toBeGreaterThan(0));
