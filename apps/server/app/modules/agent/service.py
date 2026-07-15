@@ -33,6 +33,16 @@ SYSTEM = (
     "- 确实不知道再说不知道，不编造。用简体中文、简洁作答。"
 )
 
+# 私有模式（TOTP 解锁）追加的「做事」引导：作为**独立第二条 system 消息**追加，让上面的 SYSTEM
+# 保持逐字不变——公开/私有共享同一段首块 prompt cache 前缀（§2）。私有会话恒带此块、公开恒不带，各自稳定。
+PRIVATE_SYSTEM = (
+    "【私有模式·已授权动手】你有一个 Linux 沙箱工作区（隔离、可写、断网），是个能真正干活的 agent，不是只会答话：\n"
+    "- 文件：file_list 看目录、file_read 读、file_write 写整份、file_edit 按精确匹配改局部（大文件小改动优先 edit）。\n"
+    "- 命令：shell_exec 在沙箱里跑 shell（装依赖、编译、跑脚本、git 等）。\n"
+    "- 需要多步就自己拆解、动手做到底再汇报结果，别把该做的事只列成建议丢回给用户。\n"
+    "- 写类操作（file_write/edit、shell_exec）有副作用，会走审批或在自动模式下直接执行；失败了看报错自行修正重试。"
+)
+
 MAX_STEPS = 16  # 兜底防死循环，非常规上限（对齐 Codex/Claude「没有小硬上限」）
 STEP_TOKEN_BUDGET = 40_000  # 本轮工具往返累计 token 预算，超了强制收尾
 COMPACT_TOKENS = 24_000  # 载入历史超此阈值触发 compaction（deepseek-chat 64K 上下文，留足输出）
@@ -126,7 +136,7 @@ class AgentService:
                 return
             window = await repo.load_window(sid)
             seq = window.next_seq
-            messages = self._seed(window)  # system + summary + 历史
+            messages = self._seed(window, privileged)  # system + summary + 历史
             pending = existing.pending
             content, tool_calls = pending.get("content", ""), pending.get("tool_calls", [])
             messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
@@ -151,7 +161,7 @@ class AgentService:
             seq = window.next_seq
             await repo.append(sid, seq, "user", q)
             seq += 1
-            messages = self._seed(window)
+            messages = self._seed(window, privileged)
             messages.append({"role": "user", "content": q})
 
         # 统一流式循环：每轮都带 tools 流式跑——正文实时显示、tool_calls 从结构化 delta 解析执行。
@@ -241,9 +251,11 @@ class AgentService:
         yield {"type": "done"}
 
     @staticmethod
-    def _seed(window) -> list[dict]:
-        """初始 messages：system + 早前摘要 + 历史窗口。"""
+    def _seed(window, privileged: bool = False) -> list[dict]:
+        """初始 messages：system(+私有做事引导) + 早前摘要 + 历史窗口。"""
         messages: list[dict] = [{"role": "system", "content": SYSTEM}]
+        if privileged:  # 私有通道追加做事引导（独立第二条，保 SYSTEM 首块缓存前缀不变）
+            messages.append({"role": "system", "content": PRIVATE_SYSTEM})
         if window.summary:
             messages.append({"role": "system", "content": f"[早前对话摘要]\n{window.summary}"})
         messages.extend(window.messages)

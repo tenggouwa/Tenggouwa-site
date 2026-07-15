@@ -8,7 +8,8 @@ import json
 from types import SimpleNamespace
 
 from agent_harness import run_agent
-from modules.agent.repository import AgentRepository
+from modules.agent.repository import AgentRepository, AgentWindow
+from modules.agent.service import PRIVATE_SYSTEM, SYSTEM, AgentService
 
 
 async def test_new_private_session_records_owner(monkeypatch):
@@ -104,3 +105,24 @@ async def test_transcript_tolerates_bad_tool_args():
     ]
     turns = await AgentRepository(_Session(rows)).transcript("s")
     assert turns[0]["tools"] == [{"name": "x", "args": {}}]  # 坏 JSON 参数降级为空 dict，不炸
+
+
+# ---- 私有模式「做事」系统提示 ----
+
+
+def test_seed_public_is_bare_system():
+    msgs = AgentService._seed(AgentWindow(None, [], 1, 0), False)
+    assert len(msgs) == 1 and msgs[0]["content"] == SYSTEM  # 公开：仅 SYSTEM，无做事引导
+
+
+def test_seed_private_appends_do_things_guidance():
+    msgs = AgentService._seed(AgentWindow(None, [], 1, 0), True)
+    assert msgs[0]["content"] == SYSTEM  # 首块逐字不变（保住共享缓存前缀）
+    assert msgs[1]["content"] == PRIVATE_SYSTEM  # 私有：紧跟一条做事引导
+
+
+def test_seed_private_guidance_before_summary():
+    # 做事引导排在早前摘要之前（都属 system 装配区，保前缀稳定）
+    msgs = AgentService._seed(AgentWindow("旧摘要", [], 1, 0), True)
+    assert [m["content"] for m in msgs[:2]] == [SYSTEM, PRIVATE_SYSTEM]
+    assert "旧摘要" in msgs[2]["content"]
