@@ -70,6 +70,7 @@ def _chat_stream(
                 privileged=privileged,
                 auto_approve=payload.auto_approve,
                 owner=owner,
+                deep=payload.deep_think,
             ):
                 yield _sse(ev["type"], ev)
         except Exception as e:  # noqa: BLE001 —— 流内异常转 SSE error 事件回前端

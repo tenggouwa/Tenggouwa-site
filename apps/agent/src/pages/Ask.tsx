@@ -61,6 +61,7 @@ interface Turn {
   answer: string;
   ask?: AskQuestion[]; // agent 抛的选择题（ask_user skill）
   askIntro?: string;
+  reasoning?: string; // 深度思考模式的思维链（reasoner），单独折叠展示，不进正文
   toolOutput?: Record<string, string>; // tool_call_id → 流式输出（shell_exec 实时终端）
   approval?: ApprovalRequest[]; // agent 想执行需授权的工具，等用户批/拒（C2）
   usage?: Usage;
@@ -113,6 +114,7 @@ export default function Ask() {
   const [unlockBusy, setUnlockBusy] = useState(false);
   const [unlockError, setUnlockError] = useState<string | undefined>();
   const [autoRun, setAutoRun] = useState(false); // auto 模式：私有沙箱内自动执行、免逐条审批
+  const [deepThink, setDeepThink] = useState(false); // 深度思考：换 deepseek-reasoner，显示思维链
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -236,6 +238,8 @@ export default function Ask() {
         const id = obj.id ?? '';
         return { ...t, toolOutput: { ...t.toolOutput, [id]: (t.toolOutput?.[id] ?? '') + (obj.delta ?? '') } };
       });
+    else if (event === 'reasoning')
+      updateTurn(idx, (t) => ({ ...t, reasoning: (t.reasoning ?? '') + (obj.delta ?? '') }));
     else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
     else if (event === 'done') updateTurn(idx, (t) => ({ ...t, done: true }));
     else if (event === 'error') updateTurn(idx, (t) => ({ ...t, error: obj.message ?? '出错了', done: true }));
@@ -253,7 +257,12 @@ export default function Ask() {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ ...body, session_id: sessionId.current, auto_approve: !!(agentToken && autoRun) }),
+        body: JSON.stringify({
+          ...body,
+          session_id: sessionId.current,
+          auto_approve: !!(agentToken && autoRun),
+          deep_think: deepThink,
+        }),
         credentials: 'include',
         signal: ac.signal,
       });
@@ -396,6 +405,17 @@ export default function Ask() {
             ~/ask{agentToken ? ' (private)' : ''}
           </span>
           <div className="ml-auto flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setDeepThink((v) => !v)}
+              className={
+                'text-[11px] transition-colors ' +
+                (deepThink ? 'text-terminal-cyan' : 'text-terminal-gray/60 hover:text-terminal-cyan')
+              }
+              title={deepThink ? '深度思考已开（deepseek-reasoner，更慢但更缜密）' : '开启深度思考：换推理模型、显示思维链'}
+            >
+              {deepThink ? '◆ 深度思考' : '◇ 深度思考'}
+            </button>
             {agentToken ? (
               <>
                 <span className="text-[11px] text-terminal-green flex items-center gap-1" title="私有模式已解锁">
@@ -536,7 +556,18 @@ export default function Ask() {
                   onDecide={(approvals) => resume(i, approvals)}
                 />
               )}
-              {!t.done && t.answer === '' && !t.ask && !t.approval && (
+              {t.reasoning && (
+                <details className="text-xs" open={!t.answer}>
+                  <summary className="cursor-pointer select-none text-terminal-gray/50 hover:text-terminal-cyan">
+                    <span className="text-terminal-pink">~</span> 思考过程
+                    {!t.done && !t.answer && <span className="text-terminal-gray/40"> · 推理中…</span>}
+                  </summary>
+                  <div className="mt-1 pl-2 border-l border-terminal-line/50 whitespace-pre-wrap leading-5 text-terminal-gray/45">
+                    {t.reasoning}
+                  </div>
+                </details>
+              )}
+              {!t.done && t.answer === '' && !t.reasoning && !t.ask && !t.approval && (
                 <div className="text-xs text-terminal-gray/40">
                   {t.tools.length ? '读取资料、思考中…' : '思考中…'}
                 </div>

@@ -126,3 +126,11 @@ def test_seed_private_guidance_before_summary():
     msgs = AgentService._seed(AgentWindow("旧摘要", [], 1, 0), True)
     assert [m["content"] for m in msgs[:2]] == [SYSTEM, PRIVATE_SYSTEM]
     assert "旧摘要" in msgs[2]["content"]
+
+
+async def test_reasoning_events_forwarded(monkeypatch):
+    # 深度思考：LLM 吐的 reasoning 增量被 service 原样转成 reasoning 事件，正文照常成 token。
+    rounds = [[{"type": "reasoning", "delta": "先想想"}, {"type": "content", "delta": "答案"}]]
+    events, _ = await run_agent(monkeypatch, rounds)
+    assert {"type": "reasoning", "delta": "先想想"} in events
+    assert any(e["type"] == "token" and e["delta"] == "答案" for e in events)
