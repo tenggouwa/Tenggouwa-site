@@ -110,7 +110,6 @@ export default function Ask() {
   });
   const [tokenExp, setTokenExp] = useState(() => Number(sessionStorage.getItem(EXP_KEY) || 0));
   const [showUnlock, setShowUnlock] = useState(false);
-  const [showSessions, setShowSessions] = useState(false); // 「我的会话」面板开关（私有模式）
   const [unlockBusy, setUnlockBusy] = useState(false);
   const [unlockError, setUnlockError] = useState<string | undefined>();
   const [autoRun, setAutoRun] = useState(false); // auto 模式：私有沙箱内自动执行、免逐条审批
@@ -159,7 +158,6 @@ export default function Ask() {
     setAgentToken(null);
     setTokenExp(0);
     setAutoRun(false); // auto 模式每次解锁重新 opt-in，别跨会话悄悄留着
-    setShowSessions(false); // 会话列表是私有能力，锁定即收起
     sessionId.current = null; // 别把私有会话续到公开通道
     if (opts?.reset) setTurns([]);
   }
@@ -295,7 +293,6 @@ export default function Ask() {
   async function loadSession(sid: string) {
     if (busy || !agentToken) return;
     abortRef.current?.abort();
-    setShowSessions(false);
     try {
       const t = await getTranscript(agentToken, sid);
       sessionId.current = sid;
@@ -382,14 +379,15 @@ export default function Ask() {
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-4">
-        {showSessions && agentToken && (
-          <aside className="w-full sm:w-56 shrink-0">
+      <div className="relative">
+        {/* 私有模式常驻会话侧栏：绝对定位进左侧留白，不占聊天区宽度；窄屏无留白则收起 */}
+        {agentToken && (
+          <aside className="hidden min-[1360px]:block absolute top-0 right-full mr-4 w-52 z-10">
             <SessionList token={agentToken} currentId={sessionId.current} onOpen={loadSession} busy={busy} />
           </aside>
         )}
 
-        <div className="flex-1 min-w-0 rounded-lg border border-terminal-green/40 bg-terminal-bg/95 overflow-hidden">
+        <div className="rounded-lg border border-terminal-green/40 bg-terminal-bg/95 overflow-hidden">
         <div className="flex items-center gap-1.5 px-3 py-2 border-b border-terminal-line/60 bg-terminal-panel/60">
           <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
           <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
@@ -413,17 +411,6 @@ export default function Ask() {
                   title={autoRun ? '沙箱内自动执行，免逐条审批（点击关闭）' : '开启后沙箱命令自动执行、不再逐条弹审批'}
                 >
                   {autoRun ? '● 自动执行' : '○ 自动执行'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowSessions((v) => !v)}
-                  className={
-                    'text-[11px] transition-colors ' +
-                    (showSessions ? 'text-terminal-cyan' : 'text-terminal-gray/60 hover:text-terminal-cyan')
-                  }
-                  title="我的历史会话：点开续聊"
-                >
-                  会话
                 </button>
                 <button
                   type="button"

@@ -50,8 +50,7 @@ describe('Ask 会话列表 + 续聊', () => {
     fireEvent.click(screen.getByText('↵ 解锁'));
     await waitFor(() => expect(screen.getByText(/私有 · 剩/)).toBeTruthy());
 
-    // 点开「会话」面板 → 列表拉到历史会话
-    fireEvent.click(screen.getByTitle(/我的历史会话/));
+    // 侧栏常驻：解锁后自动拉到历史会话，无需点按钮
     await waitFor(() => expect(screen.getByText('上次的活儿')).toBeTruthy());
 
     // 点开该会话 → transcript 回填：问题 + 答案 + 工具行都在
