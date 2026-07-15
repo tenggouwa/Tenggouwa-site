@@ -33,9 +33,11 @@ from . import __version__
 
 logger = logging.getLogger("pi-agent.exec")
 
-_POLL_TIMEOUT = 35.0  # > 服务端 25s 长轮询挂起上限，留网络余量
+_POLL_TIMEOUT = 20.0  # > 服务端 10s 长轮询挂起上限，留网络余量
 _MAX_OUTPUT = 64_000  # 回传输出字节上限
 _MAX_CMD_TIMEOUT = 120.0  # 单命令执行硬上限（服务端一般传 30）
+_POLL_BACKOFF_MAX = 5.0  # 轮询失败退避封顶（秒）：代理抖一下别退到几十秒不接命令
+_RESULT_RETRIES = 4  # 结果 POST 重试次数：命令跑完了别因一次 SSL EOF 把结果丢了（服务端白等超时）
 
 
 def _default_workspace() -> str:
@@ -104,11 +106,23 @@ def _poll(server: str, token: str) -> dict | None:
 
 
 def _post_result(server: str, token: str, result: dict) -> None:
+    """回传结果，带重试——命令已经跑完了，别因一次网络抖动把结果丢了（服务端会白等到超时）。"""
     body = json.dumps(result).encode("utf-8")
     headers = {**_headers(token), "Content-Type": "application/json"}
-    req = urllib.request.Request(f"{server}/api/agent/pi/exec-result", data=body, method="POST", headers=headers)
-    with urllib.request.urlopen(req, timeout=10.0) as resp:  # noqa: S310
-        resp.read()
+    last: Exception | None = None
+    for attempt in range(_RESULT_RETRIES):
+        try:
+            req = urllib.request.Request(
+                f"{server}/api/agent/pi/exec-result", data=body, method="POST", headers=headers
+            )
+            with urllib.request.urlopen(req, timeout=10.0) as resp:  # noqa: S310
+                resp.read()
+            return
+        except (urllib.error.URLError, OSError) as e:
+            last = e
+            if attempt < _RESULT_RETRIES - 1:
+                time.sleep(min(1.0 * 2**attempt, 8.0))
+    raise last if last else RuntimeError("exec-result post failed")
 
 
 def exec_loop(server: str, token: str, stop: dict) -> None:
@@ -127,16 +141,17 @@ def exec_loop(server: str, token: str, stop: dict) -> None:
             backoff = 1.0
         except urllib.error.HTTPError as e:
             logger.warning("exec-poll rejected: HTTP %s", e.code)
-            time.sleep(min(backoff, 30.0))
-            backoff = min(backoff * 2, 30.0)
+            time.sleep(backoff)
+            backoff = min(backoff * 2, _POLL_BACKOFF_MAX)
             continue
         except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
+            # 代理抖动（SSL EOF / timeout）很常见：小步退避快速重连，别一抖就几十秒不接命令
             logger.warning("exec-poll failed: %s (retry in %.0fs)", e, backoff)
             time.sleep(backoff)
-            backoff = min(backoff * 2, 30.0)
+            backoff = min(backoff * 2, _POLL_BACKOFF_MAX)
             continue
         if not cmd:
-            continue  # 空轮询（25s 内无命令）→ 立即再来
+            continue  # 空轮询（挂起上限内无命令）→ 立即再来
         result = _run_command(cmd["cmd"], workspace, float(cmd.get("timeout", 30)), allow_net=allow_net)
         result["id"] = cmd["id"]
         try:
