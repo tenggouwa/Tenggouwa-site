@@ -84,6 +84,9 @@ export default function Ask() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null); // 切换公开/私有时中止在途流，防串通道
   const taRef = useRef<HTMLTextAreaElement>(null); // 输入框自适应高度
+  const history = useRef<string[]>([]); // 历史输入（新的在末尾），上下键翻
+  const histIdx = useRef(-1); // -1=不在翻历史（当前草稿）；0=最近一条
+  const draft = useRef(''); // 进历史前暂存的草稿
 
   // 私有模式：TOTP 解锁换来的 agent_token（sessionStorage 撑过刷新，过期即锁）。
   const [agentToken, setAgentToken] = useState<string | null>(() => {
@@ -111,6 +114,17 @@ export default function Ask() {
       ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
     }
   }, [q]);
+
+  // 运行中按 Esc 停止（输入框此时 disabled 收不到键，挂 document 上）
+  useEffect(() => {
+    if (!busy) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') stopRun();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy]);
 
   // token 到期自动锁定
   useEffect(() => {
@@ -272,6 +286,9 @@ export default function Ask() {
   function trySend() {
     const query = q.trim();
     if (!query || busy || unlockBusy) return; // 解锁在途别抢跑（否则会以公开身份发出）
+    if (history.current[history.current.length - 1] !== query) history.current.push(query);
+    histIdx.current = -1;
+    draft.current = '';
     setQ('');
     void run(query);
   }
@@ -279,6 +296,35 @@ export default function Ask() {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     trySend();
+  }
+
+  // Esc：停止当前运行（中止在途流；Pi 上已派发的命令会在后台跑完但结果被丢弃）。
+  function stopRun() {
+    if (!busy) return;
+    abortRef.current?.abort();
+    setTurns((ts) => ts.map((t, i) => (i === ts.length - 1 && !t.done ? { ...t, done: true } : t)));
+  }
+
+  // 上下键翻历史输入：仅当光标在首行（↑）/末行（↓）时接管，多行编辑不受影响。
+  function navHistory(dir: 1 | -1): boolean {
+    const h = history.current;
+    if (dir === 1) {
+      // 更早
+      if (histIdx.current === -1) draft.current = q;
+      if (histIdx.current + 1 >= h.length) return h.length > 0; // 到底了但仍接管（别让光标乱跳）
+      histIdx.current += 1;
+    } else {
+      if (histIdx.current < 0) return false; // 不在历史里 → 交回默认行为
+      histIdx.current -= 1;
+    }
+    setQ(histIdx.current === -1 ? draft.current : h[h.length - 1 - histIdx.current]);
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        const ta = taRef.current;
+        if (ta) ta.setSelectionRange(ta.value.length, ta.value.length);
+      });
+    }
+    return true;
   }
 
   return (
@@ -466,10 +512,15 @@ export default function Ask() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
+              const ta = e.currentTarget;
               // 回车发送，Shift+Enter 换行；输入法组词中的回车不发送
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 trySend();
+              } else if (e.key === 'ArrowUp' && ta.value.slice(0, ta.selectionStart).indexOf('\n') === -1) {
+                if (navHistory(1)) e.preventDefault(); // 光标在首行 → 翻上一条历史
+              } else if (e.key === 'ArrowDown' && ta.value.slice(ta.selectionStart).indexOf('\n') === -1) {
+                if (navHistory(-1)) e.preventDefault(); // 光标在末行 → 翻下一条历史
               }
             }}
             disabled={busy || unlockBusy}
@@ -477,18 +528,29 @@ export default function Ask() {
             rows={1}
             placeholder={
               busy
-                ? '思考中…'
-                : (agentToken ? '私有模式 · ' : '') + '问一个问题（回车发送，Shift+Enter 换行）'
+                ? '运行中…（Esc 停止）'
+                : (agentToken ? '私有模式 · ' : '') + '回车发送 · Shift+Enter 换行 · ↑↓ 翻历史'
             }
             className="flex-1 resize-none bg-transparent outline-none leading-6 max-h-40 text-terminal-gray placeholder:text-terminal-gray/40 disabled:opacity-50"
           />
-          <button
-            type="submit"
-            disabled={busy || unlockBusy || !q.trim()}
-            className="text-xs text-terminal-green border border-terminal-green/40 rounded px-2 py-0.5 mt-0.5 hover:bg-terminal-green/10 disabled:opacity-40 transition-colors"
-          >
-            ↵
-          </button>
+          {busy ? (
+            <button
+              type="button"
+              onClick={stopRun}
+              className="text-xs text-terminal-red border border-terminal-red/40 rounded px-2 py-0.5 mt-0.5 hover:bg-terminal-red/10 transition-colors"
+              title="停止当前运行（Esc）"
+            >
+              ■ 停止
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={unlockBusy || !q.trim()}
+              className="text-xs text-terminal-green border border-terminal-green/40 rounded px-2 py-0.5 mt-0.5 hover:bg-terminal-green/10 disabled:opacity-40 transition-colors"
+            >
+              ↵
+            </button>
+          )}
         </form>
       </div>
 
