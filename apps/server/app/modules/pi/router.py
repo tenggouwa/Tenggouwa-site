@@ -9,6 +9,7 @@ from .exec import pi_exec
 from .schema import (
     PiArtifact,
     PiArtifactReport,
+    PiExecChunk,
     PiExecCommand,
     PiExecPollResponse,
     PiExecResult,
@@ -83,6 +84,18 @@ async def exec_result(
     if not pi_service.verify_token(_bearer(authorization)):
         raise HTTPException(status_code=401, detail="invalid pi agent token")
     ok = pi_exec.deliver(payload.id, payload.model_dump())
+    return ResponseModel(data={"ok": ok})
+
+
+@agent_router.post("/exec-chunk", response_model=ResponseModel[dict])
+async def exec_chunk(
+    payload: PiExecChunk,
+    authorization: str | None = Header(default=None),
+) -> ResponseModel[dict]:
+    """Pi 边跑边推的一块流式输出 → 转给等待的 shell_exec 实时显示。"""
+    if not pi_service.verify_token(_bearer(authorization)):
+        raise HTTPException(status_code=401, detail="invalid pi agent token")
+    ok = pi_exec.deliver_chunk(payload.id, payload.chunk)
     return ResponseModel(data={"ok": ok})
 
 

@@ -7,17 +7,24 @@
 """
 
 import os
+from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..pi.exec import SandboxBusy, pi_exec
 from .base import Skill
 
-_TIMEOUT = 30.0  # Pi 侧执行超时（秒）；服务器等待多留 10s 网络往返
+_TIMEOUT = 30.0  # Pi 侧执行超时（秒）；服务器等待多留网络往返
+SHELL_SKILL = "shell_exec"
 
 
 def _enabled() -> bool:
     return os.environ.get("AGENT_PI_SANDBOX", "").strip().lower() in ("1", "true", "yes")
+
+
+def _fmt(r: dict) -> str:
+    flags = ("・超时" if r.get("timed_out") else "") + ("・已截断" if r.get("truncated") else "")
+    return f"[rc={r.get('rc')}{flags}]\n" + (r.get("output") or "（无输出）")
 
 
 async def _handler(_session: AsyncSession, args: dict) -> str:
@@ -32,8 +39,32 @@ async def _handler(_session: AsyncSession, args: dict) -> str:
         return "（Pi 沙箱无响应——daemon 在线吗？命令可能超时。）"
     except SandboxBusy:
         return "（沙箱积压已满，稍后再试。）"
-    flags = ("・超时" if r.get("timed_out") else "") + ("・已截断" if r.get("truncated") else "")
-    return f"[rc={r.get('rc')}{flags}]\n" + (r.get("output") or "（无输出）")
+    return _fmt(r)
+
+
+async def stream_exec(args: dict) -> AsyncIterator[dict]:
+    """流式执行：yield {"chunk": str} 边跑边出，最后恰好一个 {"result": str}（喂回 LLM 的工具结果）。
+
+    agent 循环对 shell_exec 特判走这条：chunk 实时发到前端做「终端实时输出」，result 落库回灌 LLM。
+    """
+    if not _enabled():
+        yield {"result": "（未启用 Pi 沙箱（设 AGENT_PI_SANDBOX=1 开启），shell_exec 不可用。）"}
+        return
+    cmd = str(args.get("cmd", "")).strip()
+    if not cmd:
+        yield {"result": "（空命令。）"}
+        return
+    try:
+        async for ev in pi_exec.submit_stream(cmd, cwd="workspace", timeout=_TIMEOUT):
+            if "chunk" in ev:
+                yield {"chunk": ev["chunk"]}
+            else:
+                yield {"result": _fmt(ev["result"])}
+                return
+    except TimeoutError:
+        yield {"result": "（Pi 沙箱无响应——daemon 在线吗？命令可能超时。）"}
+    except SandboxBusy:
+        yield {"result": "（沙箱积压已满，稍后再试。）"}
 
 
 SHELL_EXEC = Skill(

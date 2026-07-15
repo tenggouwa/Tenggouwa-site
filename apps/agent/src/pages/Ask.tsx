@@ -27,6 +27,7 @@ const LockIcon = () => (
 interface ToolCall {
   name: string;
   args: Record<string, unknown>;
+  id?: string; // tool_call_id，用于把流式输出挂到对应工具行下
 }
 
 interface PlanStep {
@@ -48,6 +49,7 @@ interface Turn {
   answer: string;
   ask?: AskQuestion[]; // agent 抛的选择题（ask_user skill）
   askIntro?: string;
+  toolOutput?: Record<string, string>; // tool_call_id → 流式输出（shell_exec 实时终端）
   approval?: ApprovalRequest[]; // agent 想执行需授权的工具，等用户批/拒（C2）
   usage?: Usage;
   error?: string;
@@ -179,6 +181,7 @@ export default function Ask() {
       delta?: string;
       name?: string;
       args?: Record<string, unknown>;
+      id?: string;
       message?: string;
       session_id?: string;
       plan?: PlanStep[];
@@ -198,7 +201,15 @@ export default function Ask() {
     else if (event === 'ask')
       updateTurn(idx, (t) => ({ ...t, ask: obj.questions ?? [], askIntro: obj.intro || '' }));
     else if (event === 'tool')
-      updateTurn(idx, (t) => ({ ...t, tools: [...t.tools, { name: obj.name ?? '', args: obj.args ?? {} }] }));
+      updateTurn(idx, (t) => ({
+        ...t,
+        tools: [...t.tools, { name: obj.name ?? '', args: obj.args ?? {}, id: obj.id }],
+      }));
+    else if (event === 'tool_output')
+      updateTurn(idx, (t) => {
+        const id = obj.id ?? '';
+        return { ...t, toolOutput: { ...t.toolOutput, [id]: (t.toolOutput?.[id] ?? '') + (obj.delta ?? '') } };
+      });
     else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
     else if (event === 'done') updateTurn(idx, (t) => ({ ...t, done: true }));
     else if (event === 'error') updateTurn(idx, (t) => ({ ...t, error: obj.message ?? '出错了', done: true }));
@@ -402,9 +413,16 @@ export default function Ask() {
                 </div>
               )}
               {t.tools.map((tc, ti) => (
-                <div key={ti} className="text-xs text-terminal-green/80">
-                  <span className="text-terminal-gray/50">$</span> {tc.name}
-                  <span className="text-terminal-gray/60"> {fmtArgs(tc.args)}</span>
+                <div key={ti} className="space-y-1">
+                  <div className="text-xs text-terminal-green/80">
+                    <span className="text-terminal-gray/50">$</span> {tc.name}
+                    <span className="text-terminal-gray/60"> {fmtArgs(tc.args)}</span>
+                  </div>
+                  {tc.id && t.toolOutput?.[tc.id] && (
+                    <pre className="max-h-48 overflow-auto rounded border border-terminal-line/60 bg-terminal-bg/80 px-2 py-1 text-[11px] leading-5 text-terminal-gray/80 whitespace-pre-wrap break-all">
+                      {t.toolOutput[tc.id]}
+                    </pre>
+                  )}
                 </div>
               ))}
               {t.ask && t.ask.length > 0 && (

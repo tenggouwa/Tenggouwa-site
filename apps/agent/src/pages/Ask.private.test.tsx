@@ -135,6 +135,32 @@ describe('Ask private mode', () => {
     expect(bodies[0].auto_approve).toBe(true);
   });
 
+  it('shell 输出流式：tool_output 事件实时渲染到工具行下的终端框', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        body: sseStream([
+          frame('session', { type: 'session', session_id: 's1' }),
+          frame('tool', { type: 'tool', name: 'shell_exec', args: { cmd: 'make' }, id: 'c1' }),
+          frame('tool_output', { type: 'tool_output', id: 'c1', delta: 'building...\n' }),
+          frame('tool_output', { type: 'tool_output', id: 'c1', delta: 'done\n' }),
+          frame('token', { type: 'token', delta: '构建成功' }),
+          frame('done', { type: 'done' }),
+        ]),
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    render(<Ask />);
+    fireEvent.change(screen.getByPlaceholderText(/问一个问题/), { target: { value: '跑 make' } });
+    fireEvent.submit(document.querySelector('form:last-of-type') as HTMLFormElement);
+
+    // 两块 chunk 累积到同一个终端框
+    await waitFor(() => expect(screen.getByText(/building\.\.\./)).toBeTruthy());
+    expect(screen.getByText(/building\.\.\./).textContent).toContain('done');
+  });
+
   it('公开模式（未解锁）chat 走公开端点、无 Authorization', async () => {
     const calls: Array<{ url: string; opts: { headers?: Record<string, string> } }> = [];
     const fetchMock = vi.fn((url: string, opts: { headers?: Record<string, string> }) => {
