@@ -20,13 +20,13 @@ def _enabled() -> bool:
     return os.environ.get("AGENT_PI_SANDBOX", "").strip().lower() in ("1", "true", "yes")
 
 
-async def _file_op(op: str, args: dict) -> str:
+async def _file_op(op: str, args: dict, **extra) -> str:
     if not _enabled():
         return "（未启用 Pi 沙箱（设 AGENT_PI_SANDBOX=1 开启），文件工具不可用。）"
     path = str(args.get("path", ""))
     content = str(args.get("content", "")) if op == "write" else ""
     try:
-        r = await pi_exec.submit_file(op, path, content, timeout=_TIMEOUT)
+        r = await pi_exec.submit_file(op, path, content, timeout=_TIMEOUT, **extra)
     except TimeoutError:
         return "（Pi 沙箱无响应——daemon 在线吗？）"
     except SandboxBusy:
@@ -44,6 +44,16 @@ async def _read_handler(_session: AsyncSession, args: dict) -> str:
 
 async def _write_handler(_session: AsyncSession, args: dict) -> str:
     return await _file_op("write", args)
+
+
+async def _edit_handler(_session: AsyncSession, args: dict) -> str:
+    return await _file_op(
+        "edit",
+        args,
+        old_string=str(args.get("old_string", "")),
+        new_string=str(args.get("new_string", "")),
+        replace_all=bool(args.get("replace_all", False)),
+    )
 
 
 FILE_LIST = Skill(
@@ -83,6 +93,28 @@ FILE_WRITE = Skill(
         "required": ["path", "content"],
     },
     handler=_write_handler,
+    risk="write",
+    private=True,
+)
+
+FILE_EDIT = Skill(
+    name="file_edit",
+    description=(
+        "精确编辑 owner 私有工作区（Pi 沙箱）内一个文本文件：把 old_string 替换为 new_string，"
+        "不必重写整个文件（适合大文件的小改动）。old_string 须在文件中唯一匹配，否则拒改；"
+        "要替换全部相同片段时置 replace_all=true。有副作用，需批准。"
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "workspace 内的相对文件路径"},
+            "old_string": {"type": "string", "description": "要被替换的原文（须与文件内容精确匹配，含缩进/换行）"},
+            "new_string": {"type": "string", "description": "替换后的新文本"},
+            "replace_all": {"type": "boolean", "description": "true=替换所有匹配；默认 false，仅唯一匹配时才改"},
+        },
+        "required": ["path", "old_string", "new_string"],
+    },
+    handler=_edit_handler,
     risk="write",
     private=True,
 )
