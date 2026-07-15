@@ -66,6 +66,36 @@ async def test_stream_content_chunks(monkeypatch):
     ]
 
 
+async def test_stream_reasoning_deltas(monkeypatch):
+    # reasoner：reasoning_content 先于 content，解析成独立 reasoning 事件
+    lines = [
+        _sse({"choices": [{"delta": {"reasoning_content": "先想想"}}]}),
+        _sse({"choices": [{"delta": {"content": "答案"}}]}),
+    ]
+    events = await _collect(monkeypatch, lines)
+    assert events == [
+        {"type": "reasoning", "delta": "先想想"},
+        {"type": "content", "delta": "答案"},
+    ]
+
+
+async def test_stream_model_override_in_payload(monkeypatch):
+    from modules.kb import provider
+
+    captured: dict = {}
+
+    class _CapClient(_FakeClient):
+        def stream(self, _method, _url, *, headers=None, json=None):  # noqa: A002
+            captured.update(json or {})
+            return _FakeResp(self._lines)
+
+    monkeypatch.setattr(provider.chat_llm, "api_key", "test-key")
+    monkeypatch.setattr(provider.httpx, "AsyncClient", lambda **_kw: _CapClient(["data: [DONE]"]))
+    async for _ in provider.chat_llm.stream_step([{"role": "user", "content": "x"}], model="deepseek-reasoner"):
+        pass
+    assert captured["model"] == "deepseek-reasoner"
+
+
 async def test_stream_toolcalls_fragmented(monkeypatch):
     # name 在首片，arguments 分三片，末尾一个 usage-only chunk（无 choices）
     lines = [

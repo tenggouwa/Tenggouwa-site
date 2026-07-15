@@ -61,8 +61,8 @@ describe('Ask approval flow', () => {
     await waitFor(() => expect(screen.getByText(/已删除。/)).toBeTruthy());
 
     // 首个请求带 q；续跑请求带 approvals + 同一 session_id（公开模式 auto_approve=false）
-    expect(bodies[0]).toEqual({ q: '删掉 x', session_id: null, auto_approve: false });
-    expect(bodies[1]).toEqual({ approvals: { c1: true }, session_id: 's1', auto_approve: false });
+    expect(bodies[0]).toEqual({ q: '删掉 x', session_id: null, auto_approve: false, deep_think: false });
+    expect(bodies[1]).toEqual({ approvals: { c1: true }, session_id: 's1', auto_approve: false, deep_think: false });
     expect(screen.queryByText('批准')).toBeNull(); // 审批卡已消费收起
   });
 
@@ -102,7 +102,7 @@ describe('Ask approval flow', () => {
 
     await waitFor(() => expect(screen.getByText(/全部完成。/)).toBeTruthy());
     // 三次请求：q → approvals c1 → approvals c2，session_id 始终一致
-    expect(bodies[1]).toEqual({ approvals: { c1: true }, session_id: 's1', auto_approve: false });
-    expect(bodies[2]).toEqual({ approvals: { c2: true }, session_id: 's1', auto_approve: false });
+    expect(bodies[1]).toEqual({ approvals: { c1: true }, session_id: 's1', auto_approve: false, deep_think: false });
+    expect(bodies[2]).toEqual({ approvals: { c2: true }, session_id: 's1', auto_approve: false, deep_think: false });
   });
 });

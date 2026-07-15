@@ -131,17 +131,20 @@ class ChatLLM:
         tools: list[dict] | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.3,
+        model: str | None = None,
     ) -> AsyncIterator[dict]:
         """流式跑一轮：实时 yield 正文增量，并把结构化 tool_calls 累积到最后一并 yield。
 
-        事件：{"type":"content","delta": str} / {"type":"tool_calls","tool_calls": [...]}。
+        事件：{"type":"content","delta": str} / {"type":"reasoning","delta": str}（reasoner 思维链）
+        / {"type":"tool_calls","tool_calls": [...]}。
         tools 一直带着（tool_choice=auto）——模型走结构化 delta.tool_calls，不会把工具调用吐成文本。
+        model 传入覆盖默认模型（深度思考模式用 deepseek-reasoner）。
         瞬时错误只在「首个事件到达前」重试；已开始流式再断则透传（避免重复输出）。
         """
         if not self.api_key:
             raise RuntimeError("KB_LLM_API_KEY 未配置")
         payload: dict = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": messages,
             "stream": True,
             "stream_options": {"include_usage": True},
@@ -196,6 +199,8 @@ class ChatLLM:
                     _log_cache("stream_step", usage)
                 choice = (obj.get("choices") or [{}])[0]
                 delta = choice.get("delta") or {}
+                if delta.get("reasoning_content"):  # reasoner 思维链，前端单独展示、不进正文
+                    yield {"type": "reasoning", "delta": delta["reasoning_content"]}
                 if delta.get("content"):
                     yield {"type": "content", "delta": delta["content"]}
                 _merge_tool_call_deltas(acc, delta.get("tool_calls") or [])

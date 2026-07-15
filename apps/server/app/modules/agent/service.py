@@ -11,6 +11,7 @@
 
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 
 from db.models import AgentMessageRow
@@ -52,6 +53,9 @@ MAX_TOOL_RESULT_CHARS = 8_000  # 单个 tool 结果上限（对齐 Codex exec_co
 
 PLAN_SKILL = "update_plan"
 ASK_SKILL = "ask_user"  # 抛选择题给用户，触发后结束本轮、等用户点选下一轮续上
+
+# 深度思考模式用的推理模型（返回 reasoning_content 思维链，仍支持 tools）；env 可覆盖。
+REASONER_MODEL = os.environ.get("KB_LLM_REASONER_MODEL") or "deepseek-reasoner"
 
 LEAK_TOKEN = "｜"  # ｜ DeepSeek tool-call 特殊 token 分隔符；正常文本/代码不会出现，用作泄漏起点
 
@@ -117,8 +121,10 @@ class AgentService:
         privileged: bool = False,
         auto_approve: bool = False,
         owner: str | None = None,
+        deep: bool = False,
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
+        model = REASONER_MODEL if deep else None  # 深度思考 → 换推理模型（带 reasoning_content 思维链）
         existing = await repo.get_session(session_id) if session_id else None
         # owner 隔离：只续自己名下的会话；owner 不匹配（公开想读私有 / 跨 owner / 陈旧 id）→ 当作新会话，绝不泄漏历史。
         if existing is not None and existing.owner != owner:
@@ -174,8 +180,10 @@ class AgentService:
                 break
             content, tool_calls = "", []
             leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
-            async for ev in chat_llm.stream_step(messages, tools=tools):
-                if ev["type"] == "content":
+            async for ev in chat_llm.stream_step(messages, tools=tools, model=model):
+                if ev["type"] == "reasoning":  # 深度思考的思维链：实时转发给前端单独展示，不进正文/不落库
+                    yield {"type": "reasoning", "delta": ev["delta"]}
+                elif ev["type"] == "content":
                     if leaked:
                         continue
                     piece = ev["delta"]
