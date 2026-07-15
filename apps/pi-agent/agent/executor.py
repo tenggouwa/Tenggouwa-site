@@ -42,6 +42,10 @@ _MAX_OUTPUT = 64_000  # 回传输出字节上限
 _MAX_CMD_TIMEOUT = 120.0  # 单命令执行硬上限（服务端一般传 30）
 _POLL_BACKOFF_MAX = 5.0  # 轮询失败退避封顶（秒）：代理抖一下别退到几十秒不接命令
 _RESULT_RETRIES = 4  # 结果 POST 重试次数：命令跑完了别因一次 SSL EOF 把结果丢了（服务端白等超时）
+_MAX_READ_CHARS = 8_000  # file_read 回给 LLM 的正文上限
+_MAX_READ_BYTES = 200_000  # file_read 读盘上限
+_MAX_WRITE_BYTES = 100_000  # file_write 内容上限
+_MAX_ENTRIES = 200  # file_list 条数上限
 
 
 def _default_workspace() -> str:
@@ -161,6 +165,54 @@ def _run_command(cmd: str, workspace: str, timeout: float, *, allow_net: bool, o
     }
 
 
+def _run_file(op: str, path: str, content: str, workspace: str) -> dict:
+    """在 workspace 内 jail 执行文件操作（read/write/list）。realpath 后须仍落在 workspace 内，否则拒。"""
+    root = Path(workspace).resolve()
+    target = (root / (path or ".").lstrip("/")).resolve()
+    if not (target == root or target.is_relative_to(root)):  # 越狱（符号链接/`..`/绝对）→ 拒
+        return {"rc": 1, "output": "（拒绝：路径越出 workspace。）", "truncated": False, "timed_out": False}
+    try:
+        if op == "list":
+            if not target.exists():
+                return _fresult(1, f"（不存在：{path}）")
+            if not target.is_dir():
+                return _fresult(1, f"（不是目录：{path}）")
+            lines = []
+            for i, p in enumerate(sorted(target.iterdir())):
+                if i >= _MAX_ENTRIES:
+                    lines.append(f"…（还有更多，已截断到 {_MAX_ENTRIES} 项）")
+                    break
+                lines.append(
+                    f"{'dir ' if p.is_dir() else 'file'}\t{p.stat().st_size if p.is_file() else '-'}\t{p.name}"
+                )
+            header = "./" if target == root else f"{target.relative_to(root)}/"
+            return _fresult(0, header + "\n" + ("\n".join(lines) if lines else "（空目录）"))
+        if op == "read":
+            if not target.is_file():
+                return _fresult(1, f"（不存在或不是文件：{path}）")
+            with target.open("rb") as f:
+                raw = f.read(_MAX_READ_BYTES + 1)  # 至多读上限+1 字节，别把超大文件整个吃进内存（Pi OOM）
+            text = raw[:_MAX_READ_BYTES].decode("utf-8", errors="replace")
+            if len(raw) > _MAX_READ_BYTES or len(text) > _MAX_READ_CHARS:
+                return _fresult(0, text[:_MAX_READ_CHARS] + "\n…[已截断，文件更大]", truncated=True)
+            return _fresult(0, text or "（空文件）")
+        if op == "write":
+            if target == root or target.is_dir():
+                return _fresult(1, f"（目标是目录，不能写：{path}）")
+            if len(content.encode("utf-8")) > _MAX_WRITE_BYTES:
+                return _fresult(1, f"（内容过大，上限 {_MAX_WRITE_BYTES} 字节。）")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+            return _fresult(0, f"（已写入 {target.relative_to(root)}，{len(content)} 字。）")
+        return _fresult(1, f"（未知文件操作：{op}）")
+    except OSError as e:
+        return _fresult(1, f"（文件操作失败：{e.strerror or '错误'}）")  # 只回 errno 文案，不泄漏宿主绝对路径
+
+
+def _fresult(rc: int, output: str, *, truncated: bool = False) -> dict:
+    return {"rc": rc, "output": output, "truncated": truncated, "timed_out": False}
+
+
 def _headers(token: str) -> dict[str, str]:
     # 自定义 UA：Cloudflare 会 403 拦 "Python-urllib"（error 1010）
     return {"Authorization": f"Bearer {token}", "User-Agent": f"tenggouwa-pi-agent/{__version__}"}
@@ -231,15 +283,25 @@ def exec_loop(server: str, token: str, stop: dict) -> None:
             continue  # 空轮询（挂起上限内无命令）→ 立即再来
         rid = cmd["id"]
 
-        def _chunk(text: str, _rid: str = rid) -> None:
-            try:
-                _post_chunk(server, token, _rid, text)
-            except (urllib.error.URLError, OSError):
-                pass  # chunk 是纯 UI 实时输出，丢了无碍（最终结果照常回传）
+        # 整段执行兜底 try：一条命令的任何异常（如 path 含 null 字节的 ValueError、超大文件 MemoryError）
+        # 都不能崩掉这条共享的 exec 线程——否则会连累 shell 一起挂，得重启 daemon 才恢复。
+        try:
+            if cmd.get("kind") == "file":
+                result = _run_file(cmd.get("op", ""), cmd.get("path", ""), cmd.get("content", ""), workspace)
+            else:
 
-        result = _run_command(
-            cmd["cmd"], workspace, float(cmd.get("timeout", 30)), allow_net=allow_net, on_chunk=_chunk
-        )
+                def _chunk(text: str, _rid: str = rid) -> None:
+                    try:
+                        _post_chunk(server, token, _rid, text)
+                    except (urllib.error.URLError, OSError):
+                        pass  # chunk 是纯 UI 实时输出，丢了无碍（最终结果照常回传）
+
+                result = _run_command(
+                    cmd["cmd"], workspace, float(cmd.get("timeout", 30)), allow_net=allow_net, on_chunk=_chunk
+                )
+        except Exception as e:  # noqa: BLE001 —— 单条命令出错不该崩线程
+            logger.exception("command %s failed", rid)
+            result = {"rc": 1, "output": f"（执行出错：{e}）", "truncated": False, "timed_out": False}
         result["id"] = rid
         try:
             _post_result(server, token, result)
