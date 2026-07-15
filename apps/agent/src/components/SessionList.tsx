@@ -52,14 +52,14 @@ export default function SessionList({
   }
 
   return (
-    <div className="my-1 rounded border border-terminal-line/70 bg-terminal-panel/30 p-2 text-xs">
-      <div className="px-1 pb-1.5 text-terminal-gray/60">
+    <div className="sticky top-4 rounded-lg border border-terminal-line/70 bg-terminal-bg/95 p-2 text-xs">
+      <div className="px-1 pb-2 mb-1 border-b border-terminal-line/50 text-terminal-gray/60">
         <span className="text-terminal-pink">~$</span> <span className="text-terminal-green">ls</span> ~/sessions
       </div>
       {error && <div className="px-1 py-2 text-terminal-red">加载失败：{error}</div>}
       {!error && items === null && <div className="px-1 py-2 text-terminal-gray/50">加载中…</div>}
       {!error && items?.length === 0 && <div className="px-1 py-2 text-terminal-gray/50">还没有历史会话。</div>}
-      <div className="max-h-64 overflow-y-auto">
+      <div className="max-h-[60vh] overflow-y-auto">
         {items?.map((s) => (
           <div
             key={s.id}
