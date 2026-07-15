@@ -382,7 +382,14 @@ export default function Ask() {
         </p>
       </div>
 
-      <div className="rounded-lg border border-terminal-green/40 bg-terminal-bg/95 overflow-hidden">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-4">
+        {showSessions && agentToken && (
+          <aside className="w-full sm:w-56 shrink-0">
+            <SessionList token={agentToken} currentId={sessionId.current} onOpen={loadSession} busy={busy} />
+          </aside>
+        )}
+
+        <div className="flex-1 min-w-0 rounded-lg border border-terminal-green/40 bg-terminal-bg/95 overflow-hidden">
         <div className="flex items-center gap-1.5 px-3 py-2 border-b border-terminal-line/60 bg-terminal-panel/60">
           <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
           <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
@@ -468,12 +475,6 @@ export default function Ask() {
         {showUnlock && !agentToken && (
           <div className="px-4 pt-3">
             <UnlockPanel busy={unlockBusy} error={unlockError} onSubmit={unlock} />
-          </div>
-        )}
-
-        {showSessions && agentToken && (
-          <div className="px-4 pt-3">
-            <SessionList token={agentToken} currentId={sessionId.current} onOpen={loadSession} busy={busy} />
           </div>
         )}
 
@@ -613,6 +614,7 @@ export default function Ask() {
             </button>
           )}
         </form>
+        </div>
       </div>
 
       <p className="text-xs text-terminal-gray/40">
