@@ -59,6 +59,9 @@ ASK_SKILL = "ask_user"  # 抛选择题给用户，触发后结束本轮、等用
 # 深度思考模式用的推理模型（返回 reasoning_content 思维链，仍支持 tools）；env 可覆盖。
 REASONER_MODEL = os.environ.get("KB_LLM_REASONER_MODEL") or "deepseek-reasoner"
 
+MAX_SUBAGENTS_PER_TURN = 2  # 每个用户轮最多派几个子代理，防主代理狂开（实测会一口气开 4 个）
+_SEARCH_SKILLS = {"web_search", "kb_search"}  # 按 query 去重的检索类工具，挡反复换措辞搜同一件事
+
 LEAK_TOKEN = "｜"  # ｜ DeepSeek tool-call 特殊 token 分隔符；正常文本/代码不会出现，用作泄漏起点
 
 
@@ -101,6 +104,22 @@ def _tc_args(tc: dict) -> dict:
         return {}
 
 
+def _turn_cap(name: str, args: dict, state: dict) -> str | None:
+    """本轮收敛闸：返回非 None 表示这次工具调用被拦（子代理超限 / 检索重复），用返回文案当结果、不真执行。"""
+    if name == SUBAGENT_SKILL:
+        if state["subagents"] >= MAX_SUBAGENTS_PER_TURN:
+            return f"（本轮子代理已达上限 {MAX_SUBAGENTS_PER_TURN} 个，别再派了，用现有信息直接作答。）"
+        state["subagents"] += 1
+        return None
+    if name in _SEARCH_SKILLS:
+        q = str(args.get("query", "")).strip().lower()
+        if q and q in state["searched"]:
+            return "（这个查询本轮已经搜过了，别重复搜同一件事；用已有结果，或换一个实质不同的角度。）"
+        if q:
+            state["searched"].add(q)
+    return None
+
+
 def _strip_leak(text: str) -> str:
     """砍掉 DeepSeek 泄漏的 tool-call 文本：首个 ｜ 及之后全丢，并去掉悬空的 '<'。
 
@@ -135,6 +154,7 @@ class AgentService:
         yield {"type": "session", "session_id": sid}
 
         usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
+        turn_state: dict = {"subagents": 0, "searched": set()}  # 本轮收敛闸：子代理计数 + 检索查询去重
 
         # 组装初始 messages + seq：C2 审批续跑（消费 pending、按 approvals 执行）vs 正常提问
         resume_asked = False  # 续跑批里若含 ask_user，执行完也要停（等用户点选），别继续生成
@@ -152,7 +172,7 @@ class AgentService:
             await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
             seq += 1
             async for ev in self._execute_batch(
-                session, repo, sid, seq, content, tool_calls, messages, approvals, privileged
+                session, repo, sid, seq, content, tool_calls, messages, approvals, privileged, turn_state
             ):
                 yield ev
             seq += len(tool_calls)
@@ -228,7 +248,7 @@ class AgentService:
             seq += 1
             asked = any(_tc_name(tc) == ASK_SKILL for tc in tool_calls)
             async for ev in self._execute_batch(
-                session, repo, sid, seq, content, tool_calls, messages, None, privileged
+                session, repo, sid, seq, content, tool_calls, messages, None, privileged, turn_state
             ):
                 yield ev
             seq += len(tool_calls)
@@ -272,12 +292,15 @@ class AgentService:
         messages.extend(window.messages)
         return messages
 
-    async def _execute_batch(self, session, repo, sid, start_seq, content, tool_calls, messages, approvals, privileged):
+    async def _execute_batch(
+        self, session, repo, sid, start_seq, content, tool_calls, messages, approvals, privileged, turn_state
+    ):
         """执行一批 tool_calls：发 plan/ask/tool 事件、按 approvals 决定执行/拒绝、落库、回填 messages。
 
         approvals=None：这批全部无需审批（pause 已在上游拦过），全执行。
         approvals=dict：resume 路径，被拒的需批准工具回"用户拒绝"，其余执行。
         privileged：透传给 skills_service.invoke，公开通道拒执行 write/MCP 工具（纵深兜底）。
+        turn_state：本轮收敛闸（子代理计数 + 检索去重），挡主代理狂开子代理 / 反复搜同一件事。
         每个 tool_call → 恰好一条 tool 结果（保 H1 配对）；seq 由上层按 len(tool_calls) 推进。
         """
         for i, tc in enumerate(tool_calls):
@@ -289,7 +312,10 @@ class AgentService:
                 yield {"type": "ask", "intro": content, "questions": args.get("questions", [])}
             else:
                 yield {"type": "tool", "name": name, "args": args, "id": tid}
-            if approvals is not None and requires_approval(name) and not approvals.get(tid, False):
+            capped = _turn_cap(name, args, turn_state)  # 收敛闸：超限/重复检索直接给提示、不真执行
+            if capped is not None:
+                result = capped
+            elif approvals is not None and requires_approval(name) and not approvals.get(tid, False):
                 result = "（用户拒绝执行此操作。）"
             elif name == SHELL_SKILL and privileged:
                 # shell 输出流式：chunk 实时发前端做终端实时输出，final 作工具结果回灌 LLM

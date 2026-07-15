@@ -109,3 +109,53 @@ def test_registered_readonly_public():
 
     s = REGISTRY["run_subagent"]
     assert s.risk == "readonly" and not s.private
+
+
+async def test_subagent_internal_dedup(monkeypatch):
+    # 子代理连续两轮搜等价 query（大小写/空格归一化后相同）→ 第二次本地去重、不再 invoke。
+    from modules.kb import provider
+    from modules.skills import service as svc
+
+    scripted = _Scripted(
+        [
+            [_tc("web_search", '{"query":"x"}')],
+            [_tc("web_search", '{"query":" X "}')],
+            [{"type": "content", "delta": "done"}],
+        ]
+    )
+    monkeypatch.setattr(provider.chat_llm, "stream_step", scripted.stream_step)
+    calls = []
+
+    async def fake_invoke(_session, _name, args, **_kw):
+        calls.append(args.get("query"))
+        return "结果"
+
+    monkeypatch.setattr(svc.skills_service, "invoke", fake_invoke)
+    monkeypatch.setattr(
+        svc.skills_service, "tools", lambda **_kw: [{"type": "function", "function": {"name": "web_search"}}]
+    )
+    evs = [e async for e in sub.stream_run(None, "查 x")]
+    assert calls == ["x"]  # 只真搜了一次；第二次等价 query 被去重
+    assert evs[-1] == {"result": "done"}
+
+
+# ---- 主代理侧收敛闸（_turn_cap）----
+
+
+def test_turn_cap_subagent_limit():
+    from modules.agent.service import MAX_SUBAGENTS_PER_TURN, _turn_cap
+
+    state = {"subagents": 0, "searched": set()}
+    for _ in range(MAX_SUBAGENTS_PER_TURN):
+        assert _turn_cap("run_subagent", {}, state) is None  # 上限内放行
+    assert "上限" in _turn_cap("run_subagent", {}, state)  # 超限拦截
+
+
+def test_turn_cap_search_dedup():
+    from modules.agent.service import _turn_cap
+
+    state = {"subagents": 0, "searched": set()}
+    assert _turn_cap("web_search", {"query": "DeepSeek"}, state) is None
+    assert _turn_cap("web_search", {"query": " deepseek "}, state) is not None  # 归一化后同 query → 拦
+    assert _turn_cap("kb_search", {"query": "别的"}, state) is None  # 不同 query 放行
+    assert _turn_cap("web_fetch", {"url": "x"}, state) is None  # 非检索类不受去重影响

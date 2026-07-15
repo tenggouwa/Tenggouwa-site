@@ -14,13 +14,15 @@ import json
 from .base import Skill
 
 SUBAGENT_SKILL = "run_subagent"
-_SUB_MAX_STEPS = 6
+_SUB_MAX_STEPS = 4  # 子代理步数上限（收敛过度检索：两三次拿到信息就下结论）
 _SUB_MAX_TOOL_RESULT = 6_000
+_SEARCH_SKILLS = {"web_search", "kb_search"}  # 子代理内按 query 去重的检索工具
 
 _SUB_SYSTEM = (
     "你是一个子任务代理，只负责完成主代理交给你的这**一个**子任务。\n"
     "- 用只读工具（kb_search 查站内知识库 / web_search 搜网 / web_fetch 抓网页）收集信息，用到就把来源"
     "用 markdown 链接回引出来。\n"
+    "- **别反复换措辞搜同一件事**：两三次检索拿到足够信息就停手下结论，不追求穷尽。\n"
     "- 不要反问、不要请求澄清，基于已有信息直接把子任务做到底，给出简洁、结论性的回答供主代理汇总。\n"
     "- 用简体中文。"
 )
@@ -52,6 +54,7 @@ async def stream_run(session, task: str):
         {"role": "system", "content": _SUB_SYSTEM},
         {"role": "user", "content": task},
     ]
+    seen: set[str] = set()  # 已搜过的 query，挡子代理反复换措辞搜同一件事
     content = ""
     for _ in range(_SUB_MAX_STEPS):
         content, tool_calls = "", []
@@ -66,7 +69,14 @@ async def stream_run(session, task: str):
         yield {"progress": "· " + ", ".join(_tc_name(tc) for tc in tool_calls)}
         messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
         for tc in tool_calls:
-            result = await skills_service.invoke(session, _tc_name(tc), _tc_args(tc), privileged=False)
+            name, args = _tc_name(tc), _tc_args(tc)
+            q = str(args.get("query", "")).strip().lower()
+            if name in _SEARCH_SKILLS and q and q in seen:
+                result = "（这个查询已经搜过了，别重复；用已有结果或直接下结论。）"
+            else:
+                if name in _SEARCH_SKILLS and q:
+                    seen.add(q)
+                result = await skills_service.invoke(session, name, args, privileged=False)
             messages.append({"role": "tool", "tool_call_id": tc.get("id"), "content": result[:_SUB_MAX_TOOL_RESULT]})
     yield {"result": content or "（子代理达到步数上限，未得结论）"}
 
