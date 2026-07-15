@@ -11,6 +11,17 @@ import UnlockPanel from '../components/UnlockPanel';
 
 const TOK_KEY = 'agent_token';
 const EXP_KEY = 'agent_token_exp'; // 过期时间戳(ms)，撑过刷新
+const HIST_KEY = 'agent_input_history'; // 输入历史（localStorage，撑过刷新/重开）
+const HIST_MAX = 100; // 历史条数上限，超出丢最旧
+
+function loadHistory(): string[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(HIST_KEY) || '[]');
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string').slice(-HIST_MAX) : [];
+  } catch {
+    return [];
+  }
+}
 
 function fmtRemain(exp: number): string {
   const m = Math.max(0, Math.round((exp - Date.now()) / 60000));
@@ -84,7 +95,7 @@ export default function Ask() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null); // 切换公开/私有时中止在途流，防串通道
   const taRef = useRef<HTMLTextAreaElement>(null); // 输入框自适应高度
-  const history = useRef<string[]>([]); // 历史输入（新的在末尾），上下键翻
+  const history = useRef<string[]>(loadHistory()); // 历史输入（新的在末尾），上下键翻；localStorage 持久化
   const histIdx = useRef(-1); // -1=不在翻历史（当前草稿）；0=最近一条
   const draft = useRef(''); // 进历史前暂存的草稿
 
@@ -286,7 +297,15 @@ export default function Ask() {
   function trySend() {
     const query = q.trim();
     if (!query || busy || unlockBusy) return; // 解锁在途别抢跑（否则会以公开身份发出）
-    if (history.current[history.current.length - 1] !== query) history.current.push(query);
+    if (history.current[history.current.length - 1] !== query) {
+      history.current.push(query);
+      if (history.current.length > HIST_MAX) history.current = history.current.slice(-HIST_MAX);
+      try {
+        localStorage.setItem(HIST_KEY, JSON.stringify(history.current));
+      } catch {
+        /* 隐私模式 / 配额满：历史不持久化也不影响本次会话 */
+      }
+    }
     histIdx.current = -1;
     draft.current = '';
     setQ('');
