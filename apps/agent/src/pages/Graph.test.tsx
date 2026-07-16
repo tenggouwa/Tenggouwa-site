@@ -84,4 +84,13 @@ describe('Graph 概念图谱页（力导向全图）', () => {
       expect(a?.getAttribute('href')).toBe('https://tenggouwa.com/posts/gpt/');
     });
   });
+
+  it('左侧关键词列表渲染，点一个 → 拉邻域详情', async () => {
+    stub();
+    render(<Graph />, { wrapper: MemoryRouter });
+    // 侧栏列表项（不带 node: 前缀，区别于 mock 的图节点）
+    await waitFor(() => expect(screen.getByText('Docker')).toBeTruthy());
+    fireEvent.click(screen.getByText('Docker'));
+    await waitFor(() => expect(screen.getByText('《GPT 家族》')).toBeTruthy());
+  });
 });
