@@ -1,0 +1,50 @@
+name: Live smoke (nightly)
+
+# 第 5 层「真模型冒烟」（见 docs/agent/agent-roadmap.md §A0）：跑真 DeepSeek 断言金标准场景，
+# 守模型行为漂移。普通 CI 不联网/不花钱/不 flaky，所以这套单独放夜里跑，不进 PR 门禁。
+on:
+  schedule:
+    - cron: '0 18 * * *' # UTC 18:00 = 北京 02:00
+  workflow_dispatch: # 也可手动触发
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-smoke
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: Live smoke (real DeepSeek)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - run: uv sync --extra dev
+
+      # 没配 key 时 live 用例会被 pytest 全部 skip（等于这条 cron 白跑）→ 显式告警，别让它静默绿着。
+      - name: Warn if API key not configured
+        env:
+          KB_LLM_API_KEY: ${{ secrets.KB_LLM_API_KEY }}
+        run: |
+          if [ -z "$KB_LLM_API_KEY" ]; then
+            echo "::warning::未配置 secrets.KB_LLM_API_KEY —— live 冒烟会全部 skip，模型漂移没人守。请到 repo Settings → Secrets and variables → Actions 添加。"
+          fi
+
+      - name: Live smoke (real model)
+        env:
+          RUN_LIVE_TESTS: '1'
+          KB_LLM_API_KEY: ${{ secrets.KB_LLM_API_KEY }}
+        run: uv run pytest tests/test_live_smoke.py -q
