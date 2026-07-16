@@ -121,6 +121,17 @@ class KBService:
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
 
+    async def graph_hubs(self, session: AsyncSession, *, limit: int = 40) -> list[dict]:
+        """图谱页着陆入口：枢纽概念（按出现文章数排）。"""
+        return await KBRepository(session).graph_hubs(limit=limit)
+
+    async def graph_neighborhood(self, session: AsyncSession, entity_id: int) -> dict:
+        """一个概念的邻域（中心 + 邻居 + 边 + 佐证文章）。不存在 → 抛，由 router 转 404。"""
+        nb = await KBRepository(session).graph_neighborhood(entity_id)
+        if nb is None:
+            raise ValueError(f"没有这个概念: {entity_id}")
+        return nb
+
     async def preview_graph(self, session: AsyncSession, external_id: str) -> dict:
         """对某篇文章 dry-run 抽取（只回不写），用来调 prompt / 诊断为什么某篇抽不出东西。"""
         doc = await KBRepository(session).get_doc_by_external_id(external_id)
