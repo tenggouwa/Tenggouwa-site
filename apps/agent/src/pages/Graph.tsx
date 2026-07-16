@@ -113,29 +113,30 @@ export default function Graph() {
     return m;
   }, [full]);
 
-  const matches = useMemo(() => {
+  // 关键词列表：所有有边节点按重要度排（出现文章数 → 度数）。搜索时就地过滤。
+  const keywords = useMemo(() => {
+    if (!full) return [];
+    return [...full.nodes].sort((a, b) => b.docs - a.docs || b.deg - a.deg);
+  }, [full]);
+  const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q || !full) return [];
-    return full.nodes.filter((n) => n.name.toLowerCase().includes(q)).slice(0, 8);
-  }, [query, full]);
-
-  const select = useCallback((id: number) => {
-    setSelId(id);
-    apiGet<Neighborhood>(`/api/public/kb/graph/entity/${id}`)
-      .then(setDetail)
-      .catch(() => setDetail(null));
-  }, []);
+    return q ? keywords.filter((n) => n.name.toLowerCase().includes(q)) : keywords;
+  }, [keywords, query]);
 
   const focus = useCallback(
     (id: number) => {
-      select(id);
-      const n = data.nodes.find((x) => x.id === id) as NodeObject<GNode> | undefined;
-      if (n && fgRef.current && n.x != null && n.y != null) {
-        fgRef.current.centerAt(n.x, n.y, 600);
-        fgRef.current.zoom(4, 600);
-      }
+      setSelId(id);
+      apiGet<Neighborhood>(`/api/public/kb/graph/entity/${id}`)
+        .then(setDetail)
+        .catch(() => setDetail(null));
+      // 放大到「这个节点 + 它的直接邻居」——只框住关联节点，而不是缩到单点。
+      const nbrs = adj.get(id);
+      fgRef.current?.zoomToFit(600, 70, (n) => {
+        const nid = n.id as number;
+        return nid === id || (nbrs?.has(nid) ?? false);
+      });
     },
-    [data, select],
+    [adj],
   );
 
   const paintNode = useCallback(
@@ -236,59 +237,63 @@ export default function Graph() {
       {!full && !error && <div className="text-sm text-terminal-gray/50">加载中…</div>}
 
       {full && (
-        <div className="rounded-lg border border-terminal-green/40 bg-terminal-bg/95 overflow-hidden">
-          {/* mac 三色点 title bar + 图例 + 搜索 */}
-          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-terminal-line/60 bg-terminal-panel/60">
-            <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
-            <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
-            <span className="w-3 h-3 rounded-full bg-[#28c840]" />
-            <span className="text-[11px] ml-2 text-terminal-gray/60">~/graph</span>
-            <div className="ml-auto flex items-center gap-3 text-[11px] text-terminal-gray/50">
-              {(['ai', 'linux', 'other'] as const).map((s) => (
-                <span key={s} className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full" style={{ background: SERIES_COLOR[s] }} />
-                  {SERIES_LABEL[s]}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* 搜索定位 */}
-          <div className="relative px-3 py-2 border-b border-terminal-line/50 bg-terminal-bg/60">
-            <div className="flex items-center gap-2 text-xs">
+        <div className="flex flex-col md:flex-row gap-4 items-start">
+          {/* 左：关键词列表 + 搜索（点一个 → 图里聚焦缩放） */}
+          <aside className="w-full md:w-56 shrink-0 rounded-lg border border-terminal-line/70 bg-terminal-bg/95 text-xs">
+            <div className="px-3 py-2 border-b border-terminal-line/50 flex items-center gap-2">
               <span className="text-terminal-pink">~$</span>
               <span className="text-terminal-green">grep</span>
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="按名字定位概念…"
-                className="flex-1 bg-transparent outline-none text-terminal-gray placeholder:text-terminal-gray/30"
+                placeholder="关键词…"
+                className="flex-1 min-w-0 bg-transparent outline-none text-terminal-gray placeholder:text-terminal-gray/30"
               />
+              <span className="text-terminal-gray/30 shrink-0">{shown.length}</span>
             </div>
-            {matches.length > 0 && (
-              <div className="absolute left-3 right-3 top-full z-10 mt-1 rounded border border-terminal-line/70 bg-terminal-panel shadow-lg">
-                {matches.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => {
-                      focus(m.id);
-                      setQuery('');
-                    }}
-                    className="w-full flex items-center gap-2 px-2 py-1 text-left text-xs text-terminal-gray/80 hover:bg-terminal-green/10 hover:text-terminal-green"
-                  >
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: SERIES_COLOR[m.series] }} />
-                    <span className="flex-1 truncate">{m.name}</span>
-                    <span className="text-terminal-gray/40 shrink-0">
-                      {m.docs}·{m.deg}
-                    </span>
-                  </button>
+            <div className="max-h-[520px] overflow-y-auto p-1">
+              {shown.length === 0 && <div className="px-2 py-3 text-terminal-gray/40">没匹配到概念</div>}
+              {shown.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => focus(n.id)}
+                  className={
+                    'w-full flex items-center gap-2 rounded px-1.5 py-1 text-left transition-colors ' +
+                    (n.id === selId
+                      ? 'bg-terminal-green/10 text-terminal-green'
+                      : 'text-terminal-gray/80 hover:bg-terminal-line/30 hover:text-terminal-green')
+                  }
+                >
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: SERIES_COLOR[n.series] }} />
+                  <span className="flex-1 truncate">{n.name}</span>
+                  <span className="text-terminal-gray/40 shrink-0" title={`${n.docs} 篇 · ${n.deg} 关系`}>
+                    {n.docs}·{n.deg}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          {/* 右：力导向图 + 详情覆盖卡 */}
+          <div className="flex-1 min-w-0 rounded-lg border border-terminal-green/40 bg-terminal-bg/95 overflow-hidden">
+            {/* mac 三色点 title bar + 图例 */}
+            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-terminal-line/60 bg-terminal-panel/60">
+              <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+              <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
+              <span className="w-3 h-3 rounded-full bg-[#28c840]" />
+              <span className="text-[11px] ml-2 text-terminal-gray/60">~/graph</span>
+              <div className="ml-auto flex items-center gap-3 text-[11px] text-terminal-gray/50">
+                {(['ai', 'linux', 'other'] as const).map((s) => (
+                  <span key={s} className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full" style={{ background: SERIES_COLOR[s] }} />
+                    {SERIES_LABEL[s]}
+                  </span>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* 力导向画布 + 详情覆盖卡 */}
+            {/* 力导向画布 + 详情覆盖卡 */}
           <div ref={wrapRef} className="relative">
             <ForceGraph2D<GNode, GLink>
               ref={fgRef}
@@ -304,10 +309,11 @@ export default function Graph() {
               linkWidth={(l) =>
                 selId != null && (linkEnd(l.source) === selId || linkEnd(l.target) === selId) ? 1.6 : 0.6
               }
+              maxZoom={7}
               cooldownTicks={120}
               d3VelocityDecay={0.32}
               warmupTicks={24}
-              onNodeClick={(n) => select(n.id as number)}
+              onNodeClick={(n) => focus(n.id as number)}
               onBackgroundClick={() => {
                 setSelId(null);
                 setDetail(null);
@@ -384,6 +390,7 @@ export default function Graph() {
                 )}
               </div>
             )}
+          </div>
           </div>
         </div>
       )}
