@@ -217,11 +217,14 @@ class ChatLLM:
         tool_choice: str | dict = "auto",
         max_tokens: int = 1024,
         temperature: float = 0.3,
+        response_format: dict | None = None,
     ) -> dict:
         """非流式，返回 choices[0].message（含 content / tool_calls）。M4 agent 的工具决策用。
 
-        tool_choice 除 "auto"/"none" 外也可传 {"type":"function","function":{"name":...}} 强制指定函数，
-        用来把模型输出钉成结构化 JSON（概念图谱抽取就靠这个）。
+        tool_choice 除 "auto"/"none" 外也可传 {"type":"function","function":{"name":...}} 强制指定函数。
+        response_format 传 {"type":"json_object"} 走 JSON 模式：模型把 JSON 直接写进 content，
+        绕开 tool_call 把结果塞进 arguments 字符串那条路（实测那条路会偶发塞两份 JSON 进去）。
+        **DeepSeek 的 JSON 模式要求 prompt 里出现 "json" 字样**，否则会报错/空转。
         """
         if not self.api_key:
             raise RuntimeError("KB_LLM_API_KEY 未配置")
@@ -234,6 +237,8 @@ class ChatLLM:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = tool_choice
+        if response_format:
+            payload["response_format"] = response_format
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         url = f"{self.base_url}/chat/completions"
         for attempt in range(_RETRY_MAX):

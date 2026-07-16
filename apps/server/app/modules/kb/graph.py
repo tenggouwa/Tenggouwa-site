@@ -26,56 +26,45 @@ MAX_ENTITIES = 12
 MAX_RELATIONS = 10
 _TYPES = ["概念", "技术", "工具", "人物", "组织", "标准"]
 
-_SYSTEM = (
-    "你从技术文章里抽取**概念图谱**，供跨文章检索与可视化用。\n"
+# 两趟抽取（别合成一次）：实测一次调用里同时要「实体 + 关系」时，模型 2/3 概率只吐实体、relations 给空数组，
+# 剩下 1/3 把关系单独塞进第二份 JSON 里。它把两件事当成两次输出在做。拆成两趟后每次输出小一半、
+# 任务单一，稳得多；而且第二趟拿到的是**规范化后的实体清单**，悬空端点从根上没了。
+_ENTITY_SYSTEM = (
+    "你从技术文章里抽取**概念**，供跨文章检索与可视化用。\n"
     "只抽**有专名**的东西：概念/技术/工具/人物/组织/标准（如 Transformer、cgroup、word2vec、POSIX、"
     "Linus Torvalds）。\n"
     "**绝不要**泛化的普通名词（系统、数据、方法、性能、用户、文件），它们会把图连成一团毛球、毫无信息量。\n"
     "名字必须用**最短的规范名**：写 Transformer 而不是「Transformer 架构」，写 cgroup 而不是「cgroups 机制」——"
     "同一个概念在别的文章里也要能对上号，名字不统一就合并不了。\n"
-    "关系的 type 用**短动词短语**（基于/前身/替代/属于/用于/对比/实现/依赖），别写整句。\n"
-    "关系两端必须都出现在你抽的实体列表里。只抽文章**真正讲到**的关系，别脑补常识。\n"
-    f"最多 {MAX_ENTITIES} 个实体、{MAX_RELATIONS} 条关系；宁缺毋滥。用简体中文写 description（一句话）。"
+    f"最多 {MAX_ENTITIES} 个；宁缺毋滥。用简体中文写 description（一句话）。"
 )
 
-_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "emit_graph",
-        "description": "提交从这篇文章抽取的概念与关系",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "entities": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string", "description": "规范短名"},
-                            "type": {"type": "string", "enum": _TYPES},
-                            "description": {"type": "string", "description": "一句话说明"},
-                        },
-                        "required": ["name", "type", "description"],
-                    },
-                },
-                "relations": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "source": {"type": "string", "description": "起点实体名（须在 entities 里）"},
-                            "target": {"type": "string", "description": "终点实体名（须在 entities 里）"},
-                            "type": {"type": "string", "description": "短动词短语，如 基于/前身/用于"},
-                            "description": {"type": "string", "description": "一句话依据"},
-                        },
-                        "required": ["source", "target", "type", "description"],
-                    },
-                },
-            },
-            "required": ["entities", "relations"],
-        },
-    },
-}
+# 关系这趟不写「宁缺毋滥」：它本来就容易交白卷，再劝节制就真一条都不给了。清单已给定，风险只在脑补，
+# 所以改成盯死「必须是文章真讲到的」。
+_RELATION_SYSTEM = (
+    "下面给你一篇技术文章、以及已经从它里面抽好的**概念清单**。\n"
+    "你的任务：找出这些概念之间、**文章真正讲到**的关系，越多越好，但**绝不能脑补常识**——"
+    "文章没说的关系一条都不要写。\n"
+    "source/target **必须逐字**来自给定清单（不要改写、不要新造概念）。\n"
+    "type 用**短动词短语**（基于/前身/替代/属于/用于/对比/实现/依赖/解释/修正），别写整句。\n"
+    f"最多 {MAX_RELATIONS} 条。用简体中文写 description（一句话，说明文章在哪讲了这层关系）。"
+)
+
+# JSON 模式（response_format=json_object）：模型把 JSON 直接写进 content，不经 tool_call 的 arguments
+# 字符串——那条路实测会偶发把两份 JSON 塞进同一个字段。DeepSeek 的 JSON 模式**要求 prompt 里出现
+# "json" 字样**，所以下面两段格式说明都显式写了 json 并给出样例。
+_ENTITY_FORMAT = (
+    "只输出一个 json 对象，形如：\n"
+    '{"entities": [{"name": "Transformer", "type": "技术", "description": "并行处理序列的架构"}]}\n'
+    f"type 只能取：{'/'.join(_TYPES)}。不要输出 json 以外的任何文字。"
+)
+
+_RELATION_FORMAT = (
+    "只输出一个 json 对象，形如：\n"
+    '{"relations": [{"source": "Chinchilla", "target": "Kaplan 论文", "type": "修正", '
+    '"description": "Chinchilla 用等量算力重做实验，修正了 Kaplan 的参数/数据配比结论"}]}\n'
+    "source/target 必须逐字来自给定概念清单。不要输出 json 以外的任何文字。"
+)
 
 
 def _loads_merged(s: str) -> dict | None:
@@ -154,67 +143,71 @@ def _parse(payload: dict) -> tuple[list[dict], list[dict]]:
     return list(ents.values()), rels
 
 
-async def _call(title: str, raw_md: str) -> tuple[dict | None, dict]:
-    """调一次 LLM 拿原始 payload（未清洗）+ 诊断信息。拿不到结构化结果时 payload 为 None。
+async def _call_json(system: str, user: str) -> tuple[dict | None, dict]:
+    """走 JSON 模式跑一次，返回 (payload, diag)。拿不到可解析 JSON 时 payload 为 None。
 
-    诊断存在的理由：「模型没吐 tool_call」和「吐了但 arguments 解析不了（=被 max_tokens 截断，
-    尾巴是半截 JSON）」症状一样、修法完全相反，光看失败计数分不清。
+    诊断存在的理由：「模型没吐」「吐了但被 max_tokens 截断成半截」「吐了但被 _parse 丢光」三种失败
+    症状相同、修法完全不同，光看失败计数分不清。
     """
-    body = (raw_md or "")[:MAX_INPUT_CHARS]
-    messages = [
-        {"role": "system", "content": _SYSTEM},
-        {"role": "user", "content": f"文章标题：{title}\n\n正文：\n{body}"},
-    ]
     r = await chat_llm.complete(
-        messages,
-        tools=[_TOOL],
-        tool_choice={"type": "function", "function": {"name": "emit_graph"}},
+        [{"role": "system", "content": system}, {"role": "user", "content": user}],
         max_tokens=MAX_OUTPUT_TOKENS,
+        response_format={"type": "json_object"},
     )
-    tcs = r.get("tool_calls") or []
-    diag: dict = {"tool_calls": len(tcs), "content_head": (r.get("content") or "")[:200]}
-    for tc in tcs:
-        args = tc.get("function", {}).get("arguments") or ""
-        diag["args_len"] = len(args)
-        payload = _loads_merged(args)  # 容忍模型把两份 JSON 拼一起
-        if payload is not None:
-            return payload, diag
-        diag["args_tail"] = args[-160:]  # 连第一份都解不出 → 大概率真被 max_tokens 截断了
     text = (r.get("content") or "").strip().removeprefix("```json").removeprefix("```").removesuffix("```")
-    payload = _loads_merged(text)  # 兜底：模型没走 tool_call，试着从正文里抠 JSON
-    if payload is not None:
-        return payload, diag
-    logger.warning("概念抽取未拿到结构化结果: %s（diag=%s）", title, diag)
-    return None, diag
+    diag: dict = {"len": len(text), "head": text[:120]}
+    payload = _loads_merged(text)  # JSON 模式下正常就一份；容错留着防 provider 抽风
+    if payload is None:
+        diag["tail"] = text[-160:]
+        logger.warning("概念抽取未拿到可解析 json（diag=%s）", diag)
+    return payload, diag
 
 
 async def extract(title: str, raw_md: str) -> tuple[list[dict], list[dict]]:
-    """抽一篇文章的概念与关系。LLM 不配 / 抽失败 → 返回空，调用方跳过（不该炸整个构建）。"""
+    """两趟抽一篇文章：先抽概念，再把概念清单喂回去问关系。
+
+    为什么分两趟见文件头。LLM 不配 / 抽失败 → 返回空，调用方跳过（不该炸整个构建）。
+    """
     if not chat_llm.api_key:
         return [], []
-    payload, _diag = await _call(title, raw_md)
-    return _parse(payload or {})
+    ents, rels, _diag = await _extract_both(title, raw_md)
+    return ents, rels
+
+
+async def _extract_both(title: str, raw_md: str) -> tuple[list[dict], list[dict], dict]:
+    body = (raw_md or "")[:MAX_INPUT_CHARS]
+    article = f"文章标题：{title}\n\n正文：\n{body}"
+
+    ent_payload, ent_diag = await _call_json(f"{_ENTITY_SYSTEM}\n\n{_ENTITY_FORMAT}", article)
+    ents, _ = _parse(ent_payload or {})
+    diag: dict = {"entities": ent_diag}
+    if not ents:  # 第一趟就没概念 → 没必要再问关系
+        return [], [], diag
+
+    names = "、".join(e["name"] for e in ents)
+    rel_payload, rel_diag = await _call_json(
+        f"{_RELATION_SYSTEM}\n\n{_RELATION_FORMAT}",
+        f"{article}\n\n已抽出的概念清单：{names}",
+    )
+    diag["relations"] = rel_diag
+    # 关系跟着第一趟的实体一起过 _parse：端点必须落在清单里，脏边照样挡
+    _, rels = _parse(
+        {
+            "entities": [{"name": e["name"], "type": e["type"], "description": ""} for e in ents],
+            "relations": (rel_payload or {}).get("relations") or [],
+        }
+    )
+    return ents, rels, diag
 
 
 async def preview(title: str, raw_md: str) -> dict:
-    """dry-run：同样跑一次抽取，但**只回不写**，并带上诊断。
-
-    调 prompt 时的眼睛：一眼分清「模型压根没吐」「吐了但被 max_tokens 截断」「吐了但被 _parse 丢光」——
-    三种失败修法完全不同，靠 documents_failed 计数分不出来。
-    """
+    """dry-run：跑同样的两趟抽取，但**只回不写**，并带上两趟各自的诊断。"""
     if not chat_llm.api_key:
         return {"error": "KB_LLM_API_KEY 未配置"}
-    raw, diag = await _call(title, raw_md)
-    if raw is None:
-        return {"raw": None, "entities": [], "relations": [], "note": "模型没返回可解析的结构化结果", "diag": diag}
-    ents, rels = _parse(raw)
+    ents, rels, diag = await _extract_both(title, raw_md)
     return {
-        "raw_entities": len(raw.get("entities") or []),
-        "raw_relations": len(raw.get("relations") or []),
         "entities": ents,
         "relations": rels,
-        "dropped_entities": len(raw.get("entities") or []) - len(ents),
-        "dropped_relations": len(raw.get("relations") or []) - len(rels),
+        "counts": {"entities": len(ents), "relations": len(rels)},
         "diag": diag,
-        "raw": raw,
     }
