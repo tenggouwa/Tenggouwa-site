@@ -214,11 +214,15 @@ class ChatLLM:
         messages: list[dict],
         *,
         tools: list[dict] | None = None,
-        tool_choice: str = "auto",
+        tool_choice: str | dict = "auto",
         max_tokens: int = 1024,
         temperature: float = 0.3,
     ) -> dict:
-        """非流式，返回 choices[0].message（含 content / tool_calls）。M4 agent 的工具决策用。"""
+        """非流式，返回 choices[0].message（含 content / tool_calls）。M4 agent 的工具决策用。
+
+        tool_choice 除 "auto"/"none" 外也可传 {"type":"function","function":{"name":...}} 强制指定函数，
+        用来把模型输出钉成结构化 JSON（概念图谱抽取就靠这个）。
+        """
         if not self.api_key:
             raise RuntimeError("KB_LLM_API_KEY 未配置")
         payload: dict = {

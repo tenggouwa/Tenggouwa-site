@@ -43,3 +43,14 @@ class ReindexResult(BaseModel):
     documents_total: int
     documents_changed: int
     chunks: int
+
+
+class GraphBuildResult(BaseModel):
+    """概念图谱构建结果。pending=本次待抽的文档数（受 limit 前），done/failed=实际抽取情况。"""
+
+    documents_pending: int
+    documents_done: int
+    documents_failed: int
+    pruned: int  # 清掉的孤儿实体/关系
+    entities: int  # 库里现有总量
+    relations: int

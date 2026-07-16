@@ -474,6 +474,9 @@ class KBDocumentRow(Base):
     url: Mapped[str | None] = mapped_column(String(500), nullable=True)  # 引用回链
     raw_md: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # 增量：变了才重嵌
+    # 概念图谱抽取时的 content_hash 快照：!= content_hash 就说明正文变了要重抽（与嵌入各自独立增量，
+    # 因为抽取要调 LLM、贵得多，不该跟着嵌入一起白跑）。NULL = 从没抽过。
+    graph_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
@@ -496,6 +499,54 @@ class KBChunkRow(Base):
     meta: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     __table_args__ = (Index("uq_kb_chunk_doc_ord", "document_id", "ord", unique=True),)
+
+
+class KBEntityRow(Base):
+    """概念图谱的节点：从文章里 LLM 抽出的概念 / 技术 / 工具 / 人物 等。
+
+    norm_key 是归一化后的唯一键（小写去空白），让同一概念在不同文章里合并成一个节点——
+    图谱的价值全在这个合并上：概念跨文档连接，才织得出网（文档级相似度织不出，实测两坨毛球）。
+    """
+
+    __tablename__ = "kb_entity"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    norm_key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)  # 展示名（规范短名）
+    type: Mapped[str] = mapped_column(String(32), nullable=False)  # 概念|技术|工具|人物|组织|标准
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class KBEntityDocRow(Base):
+    """实体 ↔ 文档：provenance（这个概念在哪几篇里出现），也用来算节点热度 + 回引用。"""
+
+    __tablename__ = "kb_entity_doc"
+
+    entity_id: Mapped[int] = mapped_column(ForeignKey("kb_entity.id", ondelete="CASCADE"), primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("kb_document.id", ondelete="CASCADE"), primary_key=True)
+
+
+class KBRelationRow(Base):
+    """概念图谱的边：source —type→ target（如 Transformer —基于→ Attention）。"""
+
+    __tablename__ = "kb_relation"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey("kb_entity.id", ondelete="CASCADE"), nullable=False)
+    target_id: Mapped[int] = mapped_column(ForeignKey("kb_entity.id", ondelete="CASCADE"), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)  # 短动词短语：基于/前身/替代/属于/用于/对比
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    __table_args__ = (Index("uq_kb_relation_triple", "source_id", "target_id", "type", unique=True),)
+
+
+class KBRelationDocRow(Base):
+    """关系 ↔ 文档：哪几篇文章佐证了这条边（回引用 + 边权重都靠它）。"""
+
+    __tablename__ = "kb_relation_doc"
+
+    relation_id: Mapped[int] = mapped_column(ForeignKey("kb_relation.id", ondelete="CASCADE"), primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("kb_document.id", ondelete="CASCADE"), primary_key=True)
 
 
 # ---------- agent：对话会话（多轮记忆 + 恢复）----------
