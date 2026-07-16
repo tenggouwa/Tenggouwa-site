@@ -160,6 +160,59 @@ class KBRepository:
         await self.session.flush()
         return n1 + n2
 
+    async def search_entities(self, q: str, *, limit: int = 4) -> list[dict]:
+        """按名字找概念：查询里**直接出现**该名字算满分，否则退到 trigram 模糊匹配。
+
+        实体名很短（Transformer / cgroup），所以 word_similarity(name, q) 量的是「名字能否对上 q 的某一段」，
+        正好适合「什么是 Transformer」这种问法。同分优先长名（更具体，别让 "AI" 压过 "Constitutional AI"）。
+        """
+        sql = text("""
+            SELECT e.id, e.name, e.type, e.description,
+                   GREATEST(
+                     word_similarity(e.name, :q),
+                     CASE WHEN :q ILIKE '%' || e.name || '%' THEN 1.0 ELSE 0.0 END
+                   ) AS score
+            FROM kb_entity e
+            WHERE e.name % :q OR :q ILIKE '%' || e.name || '%'
+            ORDER BY score DESC, length(e.name) DESC
+            LIMIT :limit
+        """)
+        rows = (await self.session.execute(sql, {"q": q, "limit": limit})).all()
+        return [
+            {"id": r.id, "name": r.name, "type": r.type, "description": r.description, "score": float(r.score or 0)}
+            for r in rows
+        ]
+
+    async def entity_relations(self, ids: list[int], *, limit: int = 30) -> list[dict]:
+        """取这些概念的关系（出边 + 入边都要——「谁基于我」和「我基于谁」一样有信息量）。"""
+        if not ids:
+            return []
+        sql = text("""
+            SELECT r.type, r.description, es.name AS source, et.name AS target
+            FROM kb_relation r
+            JOIN kb_entity es ON es.id = r.source_id
+            JOIN kb_entity et ON et.id = r.target_id
+            WHERE r.source_id = ANY(:ids) OR r.target_id = ANY(:ids)
+            LIMIT :limit
+        """)
+        rows = (await self.session.execute(sql, {"ids": ids, "limit": limit})).all()
+        return [{"source": r.source, "target": r.target, "type": r.type, "description": r.description} for r in rows]
+
+    async def entity_docs(self, ids: list[int], *, limit: int = 30) -> list[dict]:
+        """取佐证这些概念的文章（provenance）——回引用要用。"""
+        if not ids:
+            return []
+        sql = text("""
+            SELECT ed.entity_id, d.title, d.url
+            FROM kb_entity_doc ed
+            JOIN kb_document d ON d.id = ed.document_id
+            WHERE ed.entity_id = ANY(:ids)
+            ORDER BY d.title
+            LIMIT :limit
+        """)
+        rows = (await self.session.execute(sql, {"ids": ids, "limit": limit})).all()
+        return [{"entity_id": r.entity_id, "title": r.title, "url": r.url} for r in rows]
+
     async def graph_stats(self) -> dict:
         entities = (await self.session.execute(select(func.count(KBEntityRow.id)))).scalar() or 0
         relations = (await self.session.execute(select(func.count(KBRelationRow.id)))).scalar() or 0

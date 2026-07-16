@@ -8,6 +8,7 @@ from .ask_user import ASK_USER
 from .base import Skill
 from .file_ops import FILE_EDIT, FILE_LIST, FILE_READ, FILE_WRITE
 from .git_ops import GIT
+from .kb_graph import KB_GRAPH
 from .kb_search import KB_SEARCH
 from .shell_exec import SHELL_EXEC
 from .subagent import SUBAGENT
@@ -35,4 +36,6 @@ REGISTRY: dict[str, Skill] = {
     SUBAGENT.name: SUBAGENT,
     # git（private + write，走 Pi 沙箱，白名单子命令）
     GIT.name: GIT,
+    # kb_graph（readonly + 公开，概念图谱：结构/关系，与 kb_search 的块检索互补）
+    KB_GRAPH.name: KB_GRAPH,
 }
