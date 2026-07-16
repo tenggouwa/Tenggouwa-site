@@ -88,6 +88,39 @@ class KBService:
             relations=stats["relations"],
         )
 
+    async def graph_search(self, session: AsyncSession, query: str, *, limit: int = 4) -> str:
+        """顺着概念图谱查：命中概念 → 它的关系 → 佐证文章。返回喂给 LLM 的文本。
+
+        和 kb_search 互补：那个捞的是**文本块**（这段话讲了啥），这个给的是**结构**
+        （这个概念跟谁有什么关系、哪几篇讲过）——「X 和 Y 什么关系」「顺着 X 还能看什么」靠它。
+        来源给成 markdown 链接，和 kb_search 的回引用保持一致。
+        """
+        repo = KBRepository(session)
+        ents = await repo.search_entities(query, limit=limit)
+        if not ents:
+            return "（概念图谱里没匹配到相关概念。）"
+        ids = [e["id"] for e in ents]
+        rels = await repo.entity_relations(ids)
+        docs = await repo.entity_docs(ids)
+        by_ent: dict[int, list[dict]] = {}
+        for d in docs:
+            by_ent.setdefault(d["entity_id"], []).append(d)
+
+        blocks: list[str] = []
+        for e in ents:
+            lines = [f"【{e['name']}】（{e['type']}）{e['description']}"]
+            mine = [r for r in rels if e["name"] in (r["source"], r["target"])]
+            if mine:
+                lines.append("  关系：")
+                lines += [f"    {r['source']} —{r['type']}→ {r['target']}：{r['description']}" for r in mine]
+            srcs = [
+                f"[《{d['title']}》]({d['url']})" if d["url"] else f"《{d['title']}》" for d in by_ent.get(e["id"], [])
+            ]
+            if srcs:
+                lines.append("  出现在：" + "、".join(srcs))
+            blocks.append("\n".join(lines))
+        return "\n\n".join(blocks)
+
     async def preview_graph(self, session: AsyncSession, external_id: str) -> dict:
         """对某篇文章 dry-run 抽取（只回不写），用来调 prompt / 诊断为什么某篇抽不出东西。"""
         doc = await KBRepository(session).get_doc_by_external_id(external_id)
