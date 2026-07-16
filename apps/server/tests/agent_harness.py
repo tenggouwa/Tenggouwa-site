@@ -139,8 +139,15 @@ async def run_agent_live(monkeypatch, q, *, invoke):
     import modules.agent.service as svc
 
     repo = FakeRepo()
+
+    # 必须经 adapter 吞掉 privileged=（真签名是 invoke(session,name,args,*,privileged)）。
+    # 曾经直接 setattr(invoke)，导致每次工具调用都 TypeError → 被 _exec_one 吞成「skill 执行失败」
+    # 喂回模型；不变量照样成立，于是 live 用例一直**假绿**、工具从没真跑过。与 run_agent 保持一致。
+    async def _invoke_adapter(session, name, args, **_kw):
+        return await invoke(session, name, args)
+
     monkeypatch.setattr(svc, "AgentRepository", lambda _session: repo)
-    monkeypatch.setattr(svc.skills_service, "invoke", invoke)  # kb_search 用 canned、其余真跑
+    monkeypatch.setattr(svc.skills_service, "invoke", _invoke_adapter)  # kb_search 用 canned、其余真跑
     events = [ev async for ev in svc.agent_service.answer_stream(None, q, session_id=None)]
     return events, repo
 
