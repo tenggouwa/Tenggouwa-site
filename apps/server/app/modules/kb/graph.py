@@ -78,18 +78,35 @@ _TOOL = {
 }
 
 
-def _loads_first(s: str) -> dict | None:
-    """只取字符串里**第一个**完整 JSON 对象，忽略后面的多余内容。
+def _loads_merged(s: str) -> dict | None:
+    """把字符串里连续的**多个** JSON 对象全解出来并合并成一份 {entities, relations}。
 
-    DeepSeek 会偶发把两份 JSON 直接拼在 tool_call 的 arguments 里（`{...}{...}`），
-    json.loads 要求整串是单个 JSON → 报 "Extra data" → 整篇白抽（scaling-laws-and-emergence 就这么挂的）。
-    raw_decode 解到第一个对象结束就停，正好对症。
+    DeepSeek 偶发把两份 JSON 直接拼在 tool_call 的 arguments 里（`{...}{...}`），json.loads 要求整串
+    是单个 JSON → 报 "Extra data" → 整篇白抽。而且实测两份内容**不一样**：第一份可能只有实体、
+    关系全在第二份里——所以只取第一份会把关系丢光，必须全解出来合并。
+    解不出任何对象（真被 max_tokens 截断）→ None。
     """
-    try:
-        obj, _end = json.JSONDecoder().raw_decode(s.strip())
-    except (json.JSONDecodeError, ValueError):
+    dec = json.JSONDecoder()
+    s = s.strip()
+    objs: list[dict] = []
+    idx = 0
+    while idx < len(s):
+        try:
+            obj, end = dec.raw_decode(s, idx)
+        except (json.JSONDecodeError, ValueError):
+            break  # 后面是半截/垃圾，前面解出来的照用
+        if isinstance(obj, dict):
+            objs.append(obj)
+        idx = end
+        while idx < len(s) and s[idx] in " \t\r\n,":  # 跳过对象之间的分隔
+            idx += 1
+    if not objs:
         return None
-    return obj if isinstance(obj, dict) else None
+    merged: dict = {"entities": [], "relations": []}
+    for o in objs:
+        merged["entities"].extend(o.get("entities") or [])
+        merged["relations"].extend(o.get("relations") or [])
+    return merged
 
 
 def norm_key(name: str) -> str:
@@ -99,9 +116,13 @@ def norm_key(name: str) -> str:
 
 
 def _parse(payload: dict) -> tuple[list[dict], list[dict]]:
-    """把 LLM 返回的原始 dict 清洗成 (entities, relations)：丢掉空名/未知类型/悬空端点/自环。"""
+    """把 LLM 返回的原始 dict 清洗成 (entities, relations)：丢掉空名/未知类型/悬空端点/自环。
+
+    先按 norm_key 去重、再截上限（顺序不能反）：合并多份 JSON 后原始列表可能有重复，
+    先截会把后面才出现、却被关系引用的实体切掉，关系跟着一起没。
+    """
     ents: dict[str, dict] = {}
-    for e in (payload.get("entities") or [])[:MAX_ENTITIES]:
+    for e in payload.get("entities") or []:
         name = str(e.get("name", "")).strip()
         key = norm_key(name)
         if not key:
@@ -113,9 +134,12 @@ def _parse(payload: dict) -> tuple[list[dict], list[dict]]:
             "type": etype if etype in _TYPES else "概念",
             "description": str(e.get("description", "")).strip()[:500],
         }
+    ents = dict(list(ents.items())[:MAX_ENTITIES])  # 去重之后再截上限
     rels: list[dict] = []
     seen: set[tuple[str, str, str]] = set()
-    for r in (payload.get("relations") or [])[:MAX_RELATIONS]:
+    for r in payload.get("relations") or []:
+        if len(rels) >= MAX_RELATIONS:
+            break
         s, t = norm_key(r.get("source", "")), norm_key(r.get("target", ""))
         rtype = str(r.get("type", "")).strip()[:32]
         # 悬空端点（模型编了个没抽的实体）/ 自环 / 空类型 一律丢——脏边比没边更坏
@@ -152,12 +176,12 @@ async def _call(title: str, raw_md: str) -> tuple[dict | None, dict]:
     for tc in tcs:
         args = tc.get("function", {}).get("arguments") or ""
         diag["args_len"] = len(args)
-        payload = _loads_first(args)  # 容忍模型把两份 JSON 拼一起
+        payload = _loads_merged(args)  # 容忍模型把两份 JSON 拼一起
         if payload is not None:
             return payload, diag
         diag["args_tail"] = args[-160:]  # 连第一份都解不出 → 大概率真被 max_tokens 截断了
     text = (r.get("content") or "").strip().removeprefix("```json").removeprefix("```").removesuffix("```")
-    payload = _loads_first(text)  # 兜底：模型没走 tool_call，试着从正文里抠 JSON
+    payload = _loads_merged(text)  # 兜底：模型没走 tool_call，试着从正文里抠 JSON
     if payload is not None:
         return payload, diag
     logger.warning("概念抽取未拿到结构化结果: %s（diag=%s）", title, diag)
