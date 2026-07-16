@@ -133,28 +133,58 @@ async def test_preview_separates_model_silence_from_parse_drops(monkeypatch):
     assert out["raw_relations"] == 1 and out["dropped_relations"] == 1  # 吐了但被丢 → 一眼看出
 
 
-def test_loads_first_tolerates_concatenated_json():
-    """真实故障：DeepSeek 把两份 JSON 拼进 arguments（json.loads 报 Extra data）→ 只取第一份。"""
+def test_loads_merged_merges_concatenated_json():
+    """真实故障：DeepSeek 把两份 JSON 拼进 arguments（json.loads 报 Extra data）。
+
+    实测两份内容不同——第一份只有实体、关系全在第二份里，所以必须**合并**而不是只取第一份，
+    不然关系会被整批丢掉（scaling-laws-and-emergence 就是这么变成 0 关系的）。
+    """
     a = '{"entities": [{"name": "A"}], "relations": []}'
-    b = '{"entities": [{"name": "B"}], "relations": []}'
-    assert g._loads_first(a + b)["entities"][0]["name"] == "A"
-    assert g._loads_first(a) == json.loads(a)  # 单份也正常
-    assert g._loads_first('{"entities": [{"name": "半截') is None  # 真截断仍判失败
-    assert g._loads_first("不是 JSON") is None
-    assert g._loads_first("[1,2]") is None  # 顶层不是对象也不收
+    b = '{"entities": [{"name": "B"}], "relations": [{"source": "A", "target": "B"}]}'
+    merged = g._loads_merged(a + b)
+    assert [e["name"] for e in merged["entities"]] == ["A", "B"]
+    assert len(merged["relations"]) == 1  # 第二份里的关系没丢
+    assert g._loads_merged(a) == json.loads(a)  # 单份也正常
+    assert g._loads_merged('{"entities": [{"name": "半截') is None  # 真截断仍判失败
+    assert g._loads_merged("不是 JSON") is None
+    assert g._loads_merged("[1,2]") is None  # 顶层不是对象也不收
 
 
-async def test_extract_survives_concatenated_json(monkeypatch):
-    """端到端：模型吐两份拼一起，仍能抽出第一份（scaling-laws-and-emergence 挂的就是这个）。"""
-    one = json.dumps({"entities": [{"name": "Scaling Laws", "type": "概念", "description": "d"}], "relations": []})
+async def test_extract_recovers_relations_from_second_blob(monkeypatch):
+    """端到端复现线上故障：实体在第一份、关系在第二份 → 合并后关系必须还在。"""
+    first = json.dumps(
+        {
+            "entities": [
+                {"name": "Scaling Laws", "type": "概念", "description": "d"},
+                {"name": "双下降", "type": "概念", "description": "d"},
+            ],
+            "relations": [],
+        }
+    )
+    second = json.dumps(
+        {
+            "entities": [],
+            "relations": [{"source": "双下降", "target": "Scaling Laws", "type": "解释", "description": "d"}],
+        }
+    )
 
     async def fake_complete(_messages, **_kw):
-        return {"content": "", "tool_calls": [{"function": {"arguments": one + one}}]}
+        return {"content": "", "tool_calls": [{"function": {"arguments": first + second}}]}
 
     monkeypatch.setattr(g.chat_llm, "api_key", "test-key")
     monkeypatch.setattr(g.chat_llm, "complete", fake_complete)
-    ents, _ = await g.extract("t", "b")
-    assert [e["norm_key"] for e in ents] == ["scalinglaws"]
+    ents, rels = await g.extract("t", "b")
+    assert len(ents) == 2
+    assert rels and rels[0]["type"] == "解释"  # 关系从第二份救回来了
+
+
+def test_parse_dedups_before_capping():
+    """去重必须在截断之前：合并后有重复实体时，先截会把被关系引用的实体切掉、关系跟着没。"""
+    dup = [{"name": "A", "type": "概念", "description": "d"}] * 20
+    tail = [{"name": "Z", "type": "概念", "description": "d"}]  # 排在 20 个重复之后
+    ents, rels = g._parse(_payload(dup + tail, [{"source": "A", "target": "Z", "type": "用于", "description": "d"}]))
+    assert [e["norm_key"] for e in ents] == ["a", "z"]  # 去重后只剩 2 个，Z 没被切掉
+    assert len(rels) == 1  # 关系因此得以保留
 
 
 async def test_preview_exposes_real_truncation(monkeypatch):
