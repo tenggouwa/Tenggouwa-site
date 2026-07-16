@@ -51,6 +51,12 @@ def _base_invariants(events, repo):
     assert events[-1]["type"] == "done"
     usage = [e for e in events if e["type"] == "usage"]
     assert usage and usage[0].get("prompt_tokens", 0) > 0  # A4：有真实用量
+    # 工具不能是「意外异常」收场：_exec_one 只在抛异常时才产出「…执行失败」。
+    # 曾经 harness 签名不匹配（少收 privileged）→ 每次工具调用 TypeError 被吞成这个，
+    # 而不变量照样成立 → 用例假绿、工具从没真跑过。这条就是防那种假绿的哨兵。
+    # 注意：工具**优雅**报错是「抓取失败 / 搜索失败」等，不含此标记，不会误伤。
+    crashed = [r.content[:80] for r in repo.rows if r.role == "tool" and "执行失败" in r.content]
+    assert not crashed, f"工具以意外异常收场（harness 或 skill 坏了）: {crashed}"
     return ans
 
 
