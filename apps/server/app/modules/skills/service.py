@@ -18,7 +18,9 @@ def _load_tools_schema(catalog: list[dict]) -> dict:
     """按当前 MCP 目录动态生成 load_tools 的 schema。
 
     目录（名字 + 一句话）写进 description、名字塞进 enum——**模型看得见有什么、但看不见完整 schema**，
-    这就是渐进披露：常驻的是目录（每个十几 token），完整 schema（每个上百）用到才拉。
+    这就是渐进披露：常驻的是目录，完整 schema 用到才拉。
+    实测（mcp-server-time，2 个工具）：完整 schema 均摊 276 tok/个，目录项 ~97 tok/个 → **约 2.8 倍**。
+    量级不大但随工具数线性放大：真接到 40 个工具就是常驻 ~11k vs ~3.9k token。
     enum 同时把「编个不存在的工具名」挡在门外。
     """
     listing = "\n".join(f"- {c['name']}：{c['description']}" for c in catalog)
