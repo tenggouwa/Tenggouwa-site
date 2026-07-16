@@ -133,19 +133,43 @@ async def test_preview_separates_model_silence_from_parse_drops(monkeypatch):
     assert out["raw_relations"] == 1 and out["dropped_relations"] == 1  # 吐了但被丢 → 一眼看出
 
 
-async def test_preview_exposes_truncated_tool_call(monkeypatch):
-    """被 max_tokens 截断的指纹：有 tool_call、但 arguments 是半截 JSON。这跟「模型没吐」修法完全不同。"""
+def test_loads_first_tolerates_concatenated_json():
+    """真实故障：DeepSeek 把两份 JSON 拼进 arguments（json.loads 报 Extra data）→ 只取第一份。"""
+    a = '{"entities": [{"name": "A"}], "relations": []}'
+    b = '{"entities": [{"name": "B"}], "relations": []}'
+    assert g._loads_first(a + b)["entities"][0]["name"] == "A"
+    assert g._loads_first(a) == json.loads(a)  # 单份也正常
+    assert g._loads_first('{"entities": [{"name": "半截') is None  # 真截断仍判失败
+    assert g._loads_first("不是 JSON") is None
+    assert g._loads_first("[1,2]") is None  # 顶层不是对象也不收
+
+
+async def test_extract_survives_concatenated_json(monkeypatch):
+    """端到端：模型吐两份拼一起，仍能抽出第一份（scaling-laws-and-emergence 挂的就是这个）。"""
+    one = json.dumps({"entities": [{"name": "Scaling Laws", "type": "概念", "description": "d"}], "relations": []})
 
     async def fake_complete(_messages, **_kw):
-        half = '{"entities": [{"name": "Scaling Laws", "type": "概念", "desc'  # 截断
+        return {"content": "", "tool_calls": [{"function": {"arguments": one + one}}]}
+
+    monkeypatch.setattr(g.chat_llm, "api_key", "test-key")
+    monkeypatch.setattr(g.chat_llm, "complete", fake_complete)
+    ents, _ = await g.extract("t", "b")
+    assert [e["norm_key"] for e in ents] == ["scalinglaws"]
+
+
+async def test_preview_exposes_real_truncation(monkeypatch):
+    """真被 max_tokens 截断（连第一份都解不出）→ 仍报失败，并把半截 JSON 尾巴露出来。"""
+
+    async def fake_complete(_messages, **_kw):
+        half = '{"entities": [{"name": "Scaling Laws", "type": "概念", "desc'
         return {"content": "", "tool_calls": [{"function": {"arguments": half}}]}
 
     monkeypatch.setattr(g.chat_llm, "api_key", "test-key")
     monkeypatch.setattr(g.chat_llm, "complete", fake_complete)
     out = await g.preview("t", "b")
-    assert out["raw"] is None  # 解析不出来
-    assert out["diag"]["tool_calls"] == 1  # 但模型确实吐了 → 不是「沉默」
-    assert "args_error" in out["diag"] and out["diag"]["args_tail"].endswith("desc")  # 半截 JSON
+    assert out["raw"] is None
+    assert out["diag"]["tool_calls"] == 1  # 模型确实吐了 → 不是「沉默」
+    assert out["diag"]["args_tail"].endswith("desc")
 
 
 async def test_preview_reports_model_silence(monkeypatch):
