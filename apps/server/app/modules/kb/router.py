@@ -31,6 +31,14 @@ async def graph_hubs(
     return ResponseModel(data=await kb_service.graph_hubs(session, limit=limit))
 
 
+@public_router.get("/graph/full", response_model=ResponseModel[dict])
+async def graph_full(
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """全图 dump（公开只读）：{nodes, edges, stats}——力导向图一次拉全。"""
+    return ResponseModel(data=await kb_service.graph_full(session))
+
+
 @public_router.get("/graph/entity/{entity_id}", response_model=ResponseModel[dict])
 async def graph_neighborhood(
     entity_id: int,
