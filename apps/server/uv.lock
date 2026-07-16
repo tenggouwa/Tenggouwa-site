@@ -575,6 +575,21 @@ wheels = [
 ]
 
 [[package]]
+name = "mcp-server-time"
+version = "2026.7.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mcp" },
+    { name = "pydantic" },
+    { name = "tzdata" },
+    { name = "tzlocal" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ed/d7/27d984c1cd61847975ed33c528b86ea3cba946dd37c0ceb597fba062df03/mcp_server_time-2026.7.10.tar.gz", hash = "sha256:47fcd220e529d9a2e08c68af3d64633197b6f920489d391293bfe9ef0f387830", size = 63132 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/1a/c1bb1eeea019fc547964384db9c6a092837cb3cb4936d75517e19826d8d9/mcp_server_time-2026.7.10-py3-none-any.whl", hash = "sha256:b99cb0ecfe94ec8e05d4abb65c617b591a21e61a17a084ac782af0fa9e82c944", size = 6759 },
+]
+
+[[package]]
 name = "numpy"
 version = "2.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1028,6 +1043,7 @@ dependencies = [
     { name = "h2" },
     { name = "httpx", extra = ["http2"] },
     { name = "mcp" },
+    { name = "mcp-server-time" },
     { name = "pgvector" },
     { name = "psutil" },
     { name = "pydantic" },
@@ -1067,6 +1083,7 @@ requires-dist = [
     { name = "h2", specifier = "==4.3.0" },
     { name = "httpx", extras = ["http2"], specifier = "==0.28.1" },
     { name = "mcp", specifier = ">=1.9,<2" },
+    { name = "mcp-server-time", specifier = ">=2026.7.10" },
     { name = "pgvector", specifier = "==0.3.6" },
     { name = "psutil", specifier = "==7.2.2" },
     { name = "pydantic", specifier = "==2.13.4" },
