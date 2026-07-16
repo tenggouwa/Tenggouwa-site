@@ -9,7 +9,7 @@ Tenggouwa-site 是一个 monorepo：
 - `packages/api-types` —— OpenAPI 自动生成的 TS 类型，前端共享。**改 schema 后跑 `pnpm gen:api-types` 再 commit**（`apps/web/src/lib/apiTypes.ts` 已经接进来）。
 - `scripts/*` —— 部署、构建、`gen-api-types.sh` 等辅助脚本。
 - `deploy/*` —— nginx / systemd / cloudflare-tunnel 模板。
-- `.github/workflows/` —— `ci.yml`（PR 门禁）+ `deploy-pages.yml`（前端部署）。
+- `.github/workflows/` —— `ci.yml`（PR 门禁）+ `deploy-pages.yml`（前端部署）+ `live-smoke.yml`（夜间真模型冒烟，需 repo secret `KB_LLM_API_KEY`）。
 - `.github/dependabot.yml` —— 每周自动提 npm / pip / github-actions 升级 PR。
 - `lefthook.yml` —— 本机 git hooks（pre-commit ruff，pre-push typecheck + ruff 全量）。
 
