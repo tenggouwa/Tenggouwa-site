@@ -19,8 +19,9 @@ from db.models import AgentMessageRow
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..kb.provider import chat_llm
+from ..mcp.manager import mcp_manager
 from ..skills.permissions import is_parallel_safe, requires_approval
-from ..skills.service import skills_service
+from ..skills.service import LOAD_TOOLS, skills_service
 from ..skills.shell_exec import SHELL_SKILL, stream_exec
 from ..skills.subagent import SUBAGENT_SKILL
 from ..skills.subagent import stream_run as subagent_run
@@ -111,6 +112,23 @@ def _tc_args(tc: dict) -> dict:
         return {}
 
 
+def _load_tools(args: dict, state: dict) -> str:
+    """渐进披露：把选中的 MCP 工具 schema 加进本轮 tools（下一步重算 tools 时生效）。
+
+    它本身不执行任何外部动作，只是「把说明书翻开」——所以无需审批；真调用时该工具自己的
+    risk/auto 判定照常生效。
+    """
+    names = [str(n) for n in (args.get("names") or [])]
+    known = {t["name"] for t in mcp_manager.catalog()}
+    ok = sorted(set(names) & known)
+    bad = sorted(set(names) - known)
+    if not ok:
+        return f"（没有这些工具：{'、'.join(bad) or '(空)'}。请从清单里挑。）"
+    state["loaded"].update(ok)
+    msg = f"（已加载：{'、'.join(ok)}，现在可以直接调用了。）"
+    return msg + (f"（忽略未知：{'、'.join(bad)}）" if bad else "")
+
+
 def _turn_cap(name: str, args: dict, state: dict) -> str | None:
     """本轮收敛闸：返回非 None 表示这次工具调用被拦（子代理超限 / 检索重复），用返回文案当结果、不真执行。"""
     if name == SUBAGENT_SKILL:
@@ -161,7 +179,8 @@ class AgentService:
         yield {"type": "session", "session_id": sid}
 
         usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
-        turn_state: dict = {"subagents": 0, "searched": set()}  # 本轮收敛闸：子代理计数 + 检索查询去重
+        # 本轮状态：收敛闸（子代理计数 + 检索去重）+ 渐进披露已加载的 MCP 工具名
+        turn_state: dict = {"subagents": 0, "searched": set(), "loaded": set()}
 
         # 组装初始 messages + seq：C2 审批续跑（消费 pending、按 approvals 执行）vs 正常提问
         resume_asked = False  # 续跑批里若含 ask_user，执行完也要停（等用户点选），别继续生成
@@ -201,7 +220,7 @@ class AgentService:
             messages.append({"role": "user", "content": q})
 
         # 统一流式循环：每轮都带 tools 流式跑——正文实时显示、tool_calls 从结构化 delta 解析执行。
-        tools = skills_service.tools(privileged=privileged)
+        # tools 每步重算：渐进披露下 load_tools 会把 MCP schema 加进来（原生工具恒定在前，核心前缀不受影响）
         budget_warned = False  # 预算提示只发一次，别每轮重复 append
         answered = resume_asked  # 本轮是否已产出最终答案（无 tool_calls）/ 以 ask_user 收尾 / 以审批收尾
         for _ in range(MAX_STEPS):
@@ -209,6 +228,7 @@ class AgentService:
                 break
             content, tool_calls = "", []
             leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
+            tools = skills_service.tools(privileged=privileged, loaded=turn_state["loaded"])
             async for ev in chat_llm.stream_step(messages, tools=tools, model=model):
                 if ev["type"] == "reasoning":  # 深度思考的思维链：实时转发给前端单独展示，不进正文/不落库
                     yield {"type": "reasoning", "delta": ev["delta"]}
@@ -304,11 +324,24 @@ class AgentService:
 
         任何异常都收敛成结果文案——单个 skill 炸了不该毒化会话，更不能带崩同批并发的兄弟任务。
         """
+        if name == LOAD_TOOLS:
+            return _load_tools(args, turn_state)
         capped = _turn_cap(name, args, turn_state)  # 收敛闸：超限/重复检索直接给提示、不真执行
         if capped is not None:
             return capped
         if approvals is not None and requires_approval(name) and not approvals.get(tid, False):
             return "（用户拒绝执行此操作。）"
+        streamed = await self._exec_streaming(session, name, args, tid, privileged, emit)
+        if streamed is not None:
+            return streamed
+        try:
+            return await skills_service.invoke(session, name, args, privileged=privileged)
+        except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+            logger.exception("skill %s failed", name)
+            return f"（skill {name} 执行失败：{e}）"
+
+    async def _exec_streaming(self, session, name, args, tid, privileged, emit) -> str | None:
+        """边跑边出的两个特判（shell / 子代理）：返回结果字符串；不是这两个 → None，交回普通 invoke。"""
         if name == SHELL_SKILL and privileged:
             # shell 输出流式：chunk 实时发前端做终端实时输出，final 作工具结果回灌 LLM
             result = "（无输出）"
@@ -335,11 +368,7 @@ class AgentService:
                 logger.exception("run_subagent failed")
                 result = f"（子代理执行失败：{e}）"
             return result
-        try:
-            return await skills_service.invoke(session, name, args, privileged=privileged)
-        except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
-            logger.exception("skill %s failed", name)
-            return f"（skill {name} 执行失败：{e}）"
+        return None
 
     async def _execute_batch(
         self, session, repo, sid, start_seq, content, tool_calls, messages, approvals, privileged, turn_state

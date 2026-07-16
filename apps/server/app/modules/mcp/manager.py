@@ -122,6 +122,24 @@ class MCPManager:
             ],
         }
 
+    def catalog(self) -> list[dict]:
+        """只要「名字 + 一句话」的轻目录（渐进披露用）：常驻上下文的是它，不是完整 schema。
+
+        一个 MCP 工具的完整 schema 动辄一两百 token（别人写的，参数可能很啰嗦），而目录项只要十几个。
+        模型先看目录、要用哪个再 load_tools 拉 schema。
+        """
+        out = []
+        for oai in sorted(self._route):
+            full = next((t for t in self._tools if t["function"]["name"] == oai), None)
+            desc = (full or {}).get("function", {}).get("description") or ""
+            out.append({"name": oai, "description": desc.strip().splitlines()[0][:100] if desc else ""})
+        return out
+
+    def tools_by_names(self, names: list[str]) -> list[dict]:
+        """按名字取完整 schema（load_tools 之后才把这些塞进 tools）。未知名忽略。"""
+        want = set(names)
+        return [t for t in self._tools if t["function"]["name"] in want]
+
     def has(self, name: str) -> bool:
         return name in self._route
 

@@ -104,7 +104,7 @@ async def run_agent(
     repo = FakeRepo(window=window, rows_after=rows_after, session=session)
     seen: dict = {}  # 记录 tools() 收到的 privileged，供断言通道透传
 
-    def _tools(*, privileged=False):
+    def _tools(*, privileged=False, **_kw):  # **_kw 吞掉 loaded=（渐进披露）等新参，别让 harness 卡真签名
         seen["privileged"] = privileged
         return tools or []
 
