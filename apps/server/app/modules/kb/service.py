@@ -4,10 +4,11 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import graph
 from .ingest import INGESTERS, chunk_markdown, content_hash
 from .provider import embedder
 from .repository import KBRepository
-from .schema import Citation, KBDocumentItem, KBDocumentPage, KBSourceOverview, ReindexResult
+from .schema import Citation, GraphBuildResult, KBDocumentItem, KBDocumentPage, KBSourceOverview, ReindexResult
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,44 @@ class KBService:
             documents_total=len(docs),
             documents_changed=changed_docs,
             chunks=total_chunks,
+        )
+
+    async def build_graph(
+        self, session: AsyncSession, *, force: bool = False, limit: int | None = None
+    ) -> GraphBuildResult:
+        """抽概念图谱：按 graph_hash 增量，只对新增/改过的文档调 LLM（贵，别白跑）。
+
+        单篇失败不中断整体（记日志跳过）——57 篇里坏一篇不该让整次构建作废。
+        limit 用来先小批试跑、看质量，别一上来烧完所有文档。
+        """
+        repo = KBRepository(session)
+        docs = await repo.docs_needing_graph(force=force)
+        pending = len(docs)
+        if limit is not None:
+            docs = docs[:limit]
+        done = failed = 0
+        for doc in docs:
+            try:
+                entities, relations = await graph.extract(doc.title, doc.raw_md)
+            except Exception:  # noqa: BLE001 —— 单篇抽取失败不该中断整次构建
+                logger.exception("概念抽取失败，跳过: %s", doc.external_id)
+                failed += 1
+                continue
+            if not entities:
+                logger.warning("概念抽取无结果，跳过: %s", doc.external_id)
+                failed += 1
+                continue
+            await repo.replace_doc_graph(doc, entities, relations)
+            done += 1
+        pruned = await repo.prune_orphans()
+        stats = await repo.graph_stats()
+        return GraphBuildResult(
+            documents_pending=pending,
+            documents_done=done,
+            documents_failed=failed,
+            pruned=pruned,
+            entities=stats["entities"],
+            relations=stats["relations"],
         )
 
     async def retrieve(

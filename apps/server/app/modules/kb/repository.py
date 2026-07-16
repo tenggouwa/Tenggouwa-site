@@ -2,8 +2,16 @@
 
 from datetime import UTC, datetime
 
-from db.models import KBChunkRow, KBDocumentRow, KBSourceRow
-from sqlalchemy import delete, select, text
+from db.models import (
+    KBChunkRow,
+    KBDocumentRow,
+    KBEntityDocRow,
+    KBEntityRow,
+    KBRelationDocRow,
+    KBRelationRow,
+    KBSourceRow,
+)
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .ingest import KBDoc
@@ -68,6 +76,87 @@ class KBRepository:
         row = await self.session.get(KBSourceRow, source_id)
         if row is not None:
             row.last_synced_at = datetime.now(UTC)
+
+    # ---------- 概念图谱 ----------
+
+    async def docs_needing_graph(self, *, force: bool = False) -> list[KBDocumentRow]:
+        """待抽取的文档：从没抽过（graph_hash 为空）或正文变了（graph_hash != content_hash）。force 则全量。"""
+        q = select(KBDocumentRow).order_by(KBDocumentRow.id)
+        if not force:
+            q = q.where(or_(KBDocumentRow.graph_hash.is_(None), KBDocumentRow.graph_hash != KBDocumentRow.content_hash))
+        return list((await self.session.execute(q)).scalars().all())
+
+    async def _upsert_entity(self, e: dict) -> int:
+        """按 norm_key 合并——这是图谱能织成网的关键：同一概念在不同文章里落到同一个节点。"""
+        row = (
+            await self.session.execute(select(KBEntityRow).where(KBEntityRow.norm_key == e["norm_key"]))
+        ).scalar_one_or_none()
+        if row is None:
+            row = KBEntityRow(norm_key=e["norm_key"], name=e["name"], type=e["type"], description=e["description"])
+            self.session.add(row)
+            await self.session.flush()
+        elif not row.description and e["description"]:  # 先到先得，只补空描述，别让后来的覆盖已有的
+            row.description = e["description"]
+        return row.id
+
+    async def _upsert_relation(self, source_id: int, target_id: int, r: dict) -> int:
+        row = (
+            await self.session.execute(
+                select(KBRelationRow).where(
+                    KBRelationRow.source_id == source_id,
+                    KBRelationRow.target_id == target_id,
+                    KBRelationRow.type == r["type"],
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            row = KBRelationRow(source_id=source_id, target_id=target_id, type=r["type"], description=r["description"])
+            self.session.add(row)
+            await self.session.flush()
+        return row.id
+
+    async def replace_doc_graph(self, doc: KBDocumentRow, entities: list[dict], relations: list[dict]) -> None:
+        """用新抽取结果替换这篇文档的图谱贡献，并把 graph_hash 推到当前 content_hash。
+
+        只删「本文档的链接」，不删实体/关系本身——它们可能还被别的文档引用着。孤儿由 prune_orphans 收。
+        """
+        await self.session.execute(delete(KBEntityDocRow).where(KBEntityDocRow.document_id == doc.id))
+        await self.session.execute(delete(KBRelationDocRow).where(KBRelationDocRow.document_id == doc.id))
+        key_to_id: dict[str, int] = {}
+        for e in entities:
+            eid = await self._upsert_entity(e)
+            key_to_id[e["norm_key"]] = eid
+            self.session.add(KBEntityDocRow(entity_id=eid, document_id=doc.id))
+        for r in relations:
+            sid, tid = key_to_id.get(r["source"]), key_to_id.get(r["target"])
+            if sid is None or tid is None:  # 端点不在本次实体里（_parse 已挡，双保险）
+                continue
+            rid = await self._upsert_relation(sid, tid, r)
+            self.session.add(KBRelationDocRow(relation_id=rid, document_id=doc.id))
+        doc.graph_hash = doc.content_hash
+        await self.session.flush()
+
+    async def prune_orphans(self) -> int:
+        """删掉没有任何文档佐证的实体/关系（文章改了、原来的概念没了）。先删关系再删实体。"""
+        rel_orphan = (
+            select(KBRelationRow.id)
+            .outerjoin(KBRelationDocRow, KBRelationDocRow.relation_id == KBRelationRow.id)
+            .where(KBRelationDocRow.relation_id.is_(None))
+        )
+        n1 = (await self.session.execute(delete(KBRelationRow).where(KBRelationRow.id.in_(rel_orphan)))).rowcount or 0
+        ent_orphan = (
+            select(KBEntityRow.id)
+            .outerjoin(KBEntityDocRow, KBEntityDocRow.entity_id == KBEntityRow.id)
+            .where(KBEntityDocRow.entity_id.is_(None))
+        )
+        n2 = (await self.session.execute(delete(KBEntityRow).where(KBEntityRow.id.in_(ent_orphan)))).rowcount or 0
+        await self.session.flush()
+        return n1 + n2
+
+    async def graph_stats(self) -> dict:
+        entities = (await self.session.execute(select(func.count(KBEntityRow.id)))).scalar() or 0
+        relations = (await self.session.execute(select(func.count(KBRelationRow.id)))).scalar() or 0
+        return {"entities": entities, "relations": relations}
 
     @staticmethod
     def _rows_to_hits(rows) -> list[dict]:

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
 from .provider import chat_llm
-from .schema import AskRequest, KBDocumentPage, KBSourceOverview, ReindexResult
+from .schema import AskRequest, GraphBuildResult, KBDocumentPage, KBSourceOverview, ReindexResult
 from .service import kb_service
 
 logger = logging.getLogger(__name__)
@@ -73,4 +73,15 @@ async def reindex(
     session: AsyncSession = Depends(get_session),
 ) -> ResponseModel[ReindexResult]:
     result = await kb_service.reindex(session, source, force=force)
+    return ResponseModel(data=result)
+
+
+@admin_router.post("/graph/build", response_model=ResponseModel[GraphBuildResult])
+async def build_graph(
+    force: bool = Query(default=False, description="忽略 graph_hash，全量重抽（会重新烧 LLM）"),
+    limit: int | None = Query(default=None, ge=1, description="本次最多抽几篇；先小批试跑看质量"),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[GraphBuildResult]:
+    """抽概念图谱（LLM，按 graph_hash 增量）。耗时随篇数线性增长，建议先 limit=3 试跑。"""
+    result = await kb_service.build_graph(session, force=force, limit=limit)
     return ResponseModel(data=result)
