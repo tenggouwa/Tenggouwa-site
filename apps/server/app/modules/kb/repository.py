@@ -213,6 +213,84 @@ class KBRepository:
         rows = (await self.session.execute(sql, {"ids": ids, "limit": limit})).all()
         return [{"entity_id": r.entity_id, "title": r.title, "url": r.url} for r in rows]
 
+    async def graph_hubs(self, *, limit: int = 40) -> list[dict]:
+        """枢纽概念：按「出现文章数」降序（连接越多篇=越是入口）。图谱页的着陆入口。"""
+        sql = text("""
+            SELECT e.id, e.name, e.type,
+                   count(DISTINCT ed.document_id) AS docs,
+                   count(DISTINCT r.id) AS rels
+            FROM kb_entity e
+            JOIN kb_entity_doc ed ON ed.entity_id = e.id
+            LEFT JOIN kb_relation r ON r.source_id = e.id OR r.target_id = e.id
+            GROUP BY e.id, e.name, e.type
+            HAVING count(DISTINCT r.id) > 0
+            ORDER BY docs DESC, rels DESC, length(e.name)
+            LIMIT :limit
+        """)
+        rows = (await self.session.execute(sql, {"limit": limit})).all()
+        return [{"id": r.id, "name": r.name, "type": r.type, "docs": r.docs, "rels": r.rels} for r in rows]
+
+    async def graph_neighborhood(self, entity_id: int) -> dict | None:
+        """一个概念的邻域：中心 + 直接邻居 + 边 + 佐证文章（含系列标签，前端着色用）。
+
+        节点携带 series（ai/linux/other，取自佐证文章 tags 的众数）——这就是「两个星系」的颜色来源。
+        """
+        center = await self.session.get(KBEntityRow, entity_id)
+        if center is None:
+            return None
+        rel_sql = text("""
+            SELECT r.id, r.type, r.description, r.source_id, r.target_id,
+                   es.name AS source, es.type AS s_type, et.name AS target, et.type AS t_type
+            FROM kb_relation r
+            JOIN kb_entity es ON es.id = r.source_id
+            JOIN kb_entity et ON et.id = r.target_id
+            WHERE r.source_id = :id OR r.target_id = :id
+        """)
+        rels = (await self.session.execute(rel_sql, {"id": entity_id})).all()
+        node_ids = {entity_id}
+        for r in rels:
+            node_ids.update((r.source_id, r.target_id))
+        # 每个节点的系列：佐证文章 tags 里 ai-series/linux-series 谁多算谁
+        ser_sql = text("""
+            SELECT ed.entity_id,
+                   CASE WHEN d.meta->>'tags' LIKE '%ai-series%' THEN 'ai'
+                        WHEN d.meta->>'tags' LIKE '%linux-series%' THEN 'linux'
+                        ELSE 'other' END AS series,
+                   count(*) AS c
+            FROM kb_entity_doc ed JOIN kb_document d ON d.id = ed.document_id
+            WHERE ed.entity_id = ANY(:ids)
+            GROUP BY 1, 2
+        """)
+        best: dict[int, tuple[str, int]] = {}
+        for row in (await self.session.execute(ser_sql, {"ids": list(node_ids)})).all():
+            cur = best.get(row.entity_id)
+            if cur is None or row.c > cur[1]:
+                best[row.entity_id] = (row.series, row.c)
+        names = {
+            entity_id: center.name,
+            **{r.source_id: r.source for r in rels},
+            **{r.target_id: r.target for r in rels},
+        }
+        types = {
+            entity_id: center.type,
+            **{r.source_id: r.s_type for r in rels},
+            **{r.target_id: r.t_type for r in rels},
+        }
+        nodes = [
+            {"id": nid, "name": names[nid], "type": types[nid], "series": best.get(nid, ("other", 0))[0]}
+            for nid in node_ids
+        ]
+        docs = await self.entity_docs([entity_id])
+        return {
+            "center": entity_id,
+            "nodes": nodes,
+            "edges": [
+                {"source": r.source_id, "target": r.target_id, "type": r.type, "description": r.description}
+                for r in rels
+            ],
+            "docs": docs,
+        }
+
     async def graph_stats(self) -> dict:
         entities = (await self.session.execute(select(func.count(KBEntityRow.id)))).scalar() or 0
         relations = (await self.session.execute(select(func.count(KBRelationRow.id)))).scalar() or 0

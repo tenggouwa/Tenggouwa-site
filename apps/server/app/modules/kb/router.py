@@ -3,7 +3,7 @@ import logging
 
 from db import get_session
 from dependencies import current_admin
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,27 @@ def _sse(event: str, data: dict) -> str:
 
 
 public_router = APIRouter(prefix="/public/kb", tags=["public.kb"])
+
+
+@public_router.get("/graph/hubs", response_model=ResponseModel[list])
+async def graph_hubs(
+    limit: int = Query(default=40, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list]:
+    """概念图谱的枢纽入口（公开只读）：图谱页着陆时列这些。"""
+    return ResponseModel(data=await kb_service.graph_hubs(session, limit=limit))
+
+
+@public_router.get("/graph/entity/{entity_id}", response_model=ResponseModel[dict])
+async def graph_neighborhood(
+    entity_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """一个概念的邻域（公开只读）：点节点展开时拉这个。"""
+    try:
+        return ResponseModel(data=await kb_service.graph_neighborhood(session, entity_id))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @public_router.post("/ask")
