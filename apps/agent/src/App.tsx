@@ -3,7 +3,6 @@ import { Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 
 const Ask = lazy(() => import('./pages/Ask'));
-const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'));
 const Graph = lazy(() => import('./pages/Graph'));
 const Skills = lazy(() => import('./pages/Skills'));
 
@@ -19,7 +18,6 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Ask />} />
-          <Route path="knowledge-base" element={<KnowledgeBase />} />
           <Route path="graph" element={<Graph />} />
           <Route path="skills" element={<Skills />} />
           <Route path="*" element={<Ask />} />

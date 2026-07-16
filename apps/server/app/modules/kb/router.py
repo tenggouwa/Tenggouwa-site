@@ -22,12 +22,12 @@ def _sse(event: str, data: dict) -> str:
 public_router = APIRouter(prefix="/public/kb", tags=["public.kb"])
 
 
-@public_router.get("/graph/hubs", response_model=ResponseModel[list])
+@public_router.get("/graph/hubs", response_model=ResponseModel[dict])
 async def graph_hubs(
     limit: int = Query(default=40, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
-) -> ResponseModel[list]:
-    """概念图谱的枢纽入口（公开只读）：图谱页着陆时列这些。"""
+) -> ResponseModel[dict]:
+    """概念图谱着陆数据（公开只读）：{hubs, stats}——枢纽入口 + 覆盖度统计。"""
     return ResponseModel(data=await kb_service.graph_hubs(session, limit=limit))
 
 
