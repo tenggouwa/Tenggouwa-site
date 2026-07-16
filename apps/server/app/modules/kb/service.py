@@ -129,6 +129,12 @@ class KBService:
         repo = KBRepository(session)
         return {"hubs": await repo.graph_hubs(limit=limit), "stats": await repo.graph_coverage()}
 
+    async def graph_full(self, session: AsyncSession) -> dict:
+        """全图 dump：{nodes, edges, stats}——力导向图一次性拉全，顶部统计条也一起给。"""
+        repo = KBRepository(session)
+        full = await repo.graph_full()
+        return {**full, "stats": await repo.graph_coverage()}
+
     async def graph_neighborhood(self, session: AsyncSession, entity_id: int) -> dict:
         """一个概念的邻域（中心 + 邻居 + 边 + 佐证文章）。不存在 → 抛，由 router 转 404。"""
         nb = await KBRepository(session).graph_neighborhood(entity_id)

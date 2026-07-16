@@ -250,22 +250,7 @@ class KBRepository:
         node_ids = {entity_id}
         for r in rels:
             node_ids.update((r.source_id, r.target_id))
-        # 每个节点的系列：佐证文章 tags 里 ai-series/linux-series 谁多算谁
-        ser_sql = text("""
-            SELECT ed.entity_id,
-                   CASE WHEN d.meta->>'tags' LIKE '%ai-series%' THEN 'ai'
-                        WHEN d.meta->>'tags' LIKE '%linux-series%' THEN 'linux'
-                        ELSE 'other' END AS series,
-                   count(*) AS c
-            FROM kb_entity_doc ed JOIN kb_document d ON d.id = ed.document_id
-            WHERE ed.entity_id = ANY(:ids)
-            GROUP BY 1, 2
-        """)
-        best: dict[int, tuple[str, int]] = {}
-        for row in (await self.session.execute(ser_sql, {"ids": list(node_ids)})).all():
-            cur = best.get(row.entity_id)
-            if cur is None or row.c > cur[1]:
-                best[row.entity_id] = (row.series, row.c)
+        series = await self._series_of(list(node_ids))
         names = {
             entity_id: center.name,
             **{r.source_id: r.source for r in rels},
@@ -277,8 +262,7 @@ class KBRepository:
             **{r.target_id: r.t_type for r in rels},
         }
         nodes = [
-            {"id": nid, "name": names[nid], "type": types[nid], "series": best.get(nid, ("other", 0))[0]}
-            for nid in node_ids
+            {"id": nid, "name": names[nid], "type": types[nid], "series": series.get(nid, "other")} for nid in node_ids
         ]
         docs = await self.entity_docs([entity_id])
         return {
@@ -290,6 +274,59 @@ class KBRepository:
             ],
             "docs": docs,
         }
+
+    async def _series_of(self, node_ids: list[int]) -> dict[int, str]:
+        """每个实体的系列（ai/linux/other）：取佐证文章 tags 的众数。两个星系的颜色来源。"""
+        if not node_ids:
+            return {}
+        sql = text("""
+            SELECT ed.entity_id,
+                   CASE WHEN d.meta->>'tags' LIKE '%ai-series%' THEN 'ai'
+                        WHEN d.meta->>'tags' LIKE '%linux-series%' THEN 'linux'
+                        ELSE 'other' END AS series,
+                   count(*) AS c
+            FROM kb_entity_doc ed JOIN kb_document d ON d.id = ed.document_id
+            WHERE ed.entity_id = ANY(:ids)
+            GROUP BY 1, 2
+        """)
+        best: dict[int, tuple[str, int]] = {}
+        for row in (await self.session.execute(sql, {"ids": node_ids})).all():
+            cur = best.get(row.entity_id)
+            if cur is None or row.c > cur[1]:
+                best[row.entity_id] = (row.series, row.c)
+        return {eid: v[0] for eid, v in best.items()}
+
+    async def graph_full(self) -> dict:
+        """全图 dump：所有有关系的实体 + 全部关系，带系列着色 + 度数（前端力导向渲染）。
+
+        529 实体 / 499 关系量级，一次全给。孤立实体（0 关系）不给——力导向里就是一堆散点，
+        逛不到也点不亮，只添乱。度数 deg 给前端定节点大小（枢纽大、长尾小）。
+        """
+        node_sql = text("""
+            SELECT e.id, e.name, e.type,
+                   count(DISTINCT ed.document_id) AS docs,
+                   count(DISTINCT r.id) AS deg
+            FROM kb_entity e
+            JOIN kb_relation r ON r.source_id = e.id OR r.target_id = e.id
+            LEFT JOIN kb_entity_doc ed ON ed.entity_id = e.id
+            GROUP BY e.id, e.name, e.type
+        """)
+        nrows = (await self.session.execute(node_sql)).all()
+        series = await self._series_of([r.id for r in nrows])
+        nodes = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "type": r.type,
+                "docs": r.docs,
+                "deg": r.deg,
+                "series": series.get(r.id, "other"),
+            }
+            for r in nrows
+        ]
+        erows = (await self.session.execute(text("SELECT source_id, target_id, type FROM kb_relation"))).all()
+        edges = [{"source": r.source_id, "target": r.target_id, "type": r.type} for r in erows]
+        return {"nodes": nodes, "edges": edges}
 
     async def graph_stats(self) -> dict:
         entities = (await self.session.execute(select(func.count(KBEntityRow.id)))).scalar() or 0
