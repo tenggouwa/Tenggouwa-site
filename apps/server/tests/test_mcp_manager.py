@@ -127,11 +127,22 @@ async def test_skills_service_merges_mcp_tools(monkeypatch):
     await m.refresh_tools()
     monkeypatch.setattr("modules.skills.service.mcp_manager", m)
 
-    # MCP 是私有（鉴权）通道能力：privileged=True 才追加；公开通道拿不到
-    assert "fs__read" not in [t["function"]["name"] for t in skills_service.tools(privileged=False)]
+    # MCP 是私有（鉴权）通道能力：公开通道连 load_tools 都看不到
+    pub = [t["function"]["name"] for t in skills_service.tools(privileged=False)]
+    assert "fs__read" not in pub and "load_tools" not in pub
+
+    # 渐进披露：私有通道默认也**不给** MCP 的完整 schema，只给 load_tools（其 description 带轻目录）
     names = [t["function"]["name"] for t in skills_service.tools(privileged=True)]
     assert names[:4] == ["kb_search", "update_plan", "web_fetch", "ask_user"]  # 原生在前、顺序固定
-    assert "fs__read" in names  # MCP 追加在后
+    assert "fs__read" not in names, "未加载时不该暴露完整 schema"
+    assert names[-1] == "load_tools"  # 元工具挂在原生之后 → 原生前缀不被打断
+    loader = skills_service.tools(privileged=True)[-1]["function"]
+    assert "fs__read" in loader["description"]  # 目录里看得见名字
+    assert loader["parameters"]["properties"]["names"]["items"]["enum"] == ["fs__read"]  # enum 挡编造的名字
+
+    # load 之后完整 schema 才进来
+    names2 = [t["function"]["name"] for t in skills_service.tools(privileged=True, loaded={"fs__read"})]
+    assert "fs__read" in names2
     # invoke 路由到 MCP（私有通道）
     m._sessions["fs"] = _FakeSession(
         [_tool("read")],
@@ -216,3 +227,59 @@ async def test_status_reports_servers_and_tools():
     st = mgr.status()
     assert st["connected"] == ["time"]
     assert st["tools"] == [{"name": "time__get_current_time", "server": "time", "auto": False}]
+
+
+async def test_load_tools_makes_mcp_callable_in_turn(monkeypatch):
+    """渐进披露端到端：模型先 load_tools → 下一步 tools 里才出现该 MCP 工具 → 可直接调用。
+
+    不用 run_agent：它内部也 mock 掉 tools()，会盖掉这里的 spy——而 tools() 正是本测试要观察的对象。
+    """
+    import modules.agent.service as agsvc
+    from agent_harness import FakeRepo, ScriptedLLM
+
+    m = MCPManager()
+    m._sessions = {"fs": _FakeSession([_tool("read")])}
+    await m.refresh_tools()
+    monkeypatch.setattr("modules.skills.service.mcp_manager", m)
+    monkeypatch.setattr(agsvc, "mcp_manager", m)
+
+    seen: list[list[str]] = []
+    real_tools = agsvc.skills_service.tools
+
+    def _spy(**kw):
+        out = real_tools(**kw)
+        seen.append([t["function"]["name"] for t in out])
+        return out
+
+    monkeypatch.setattr(agsvc.skills_service, "tools", _spy)
+
+    def _tc(name, args):
+        return {"type": "tool_calls", "tool_calls": [{"id": "c1", "function": {"name": name, "arguments": args}}]}
+
+    repo = FakeRepo()
+    monkeypatch.setattr(agsvc, "AgentRepository", lambda _s: repo)
+    monkeypatch.setattr(
+        agsvc,
+        "chat_llm",
+        ScriptedLLM([[_tc("load_tools", '{"names":["fs__read"]}')], [{"type": "content", "delta": "好"}]]),
+    )
+    _events = [e async for e in agsvc.agent_service.answer_stream(None, "q", privileged=True)]
+
+    assert "fs__read" not in seen[0], "第一步只该有目录，不该有完整 schema"
+    assert "load_tools" in seen[0]
+    assert "fs__read" in seen[1], "加载后完整 schema 该进来"
+    assert any("已加载" in r.content for r in repo.rows if r.role == "tool")
+
+
+async def test_load_tools_rejects_unknown_name(monkeypatch):
+    """enum 之外的名字（模型编的）→ 不加载、给提示，不炸。"""
+    import modules.agent.service as agsvc
+
+    m = MCPManager()
+    m._sessions = {"fs": _FakeSession([_tool("read")])}
+    await m.refresh_tools()
+    monkeypatch.setattr(agsvc, "mcp_manager", m)
+
+    state = {"loaded": set()}
+    out = agsvc._load_tools({"names": ["查无此工具"]}, state)
+    assert "没有这些工具" in out and state["loaded"] == set()
