@@ -128,6 +128,19 @@ def test_seed_private_guidance_before_summary():
     assert "旧摘要" in msgs[2]["content"]
 
 
+def test_system_prompt_names_no_tools():
+    """铁律：SYSTEM/PRIVATE_SYSTEM 只讲策略，不点名工具——「何时用我」是各 skill description 的职责。
+
+    以前这里点名了 11 个 skill：每加一个就得改提示词（O(n) 膨胀 + 打断 prompt cache），而且会**盖掉**
+    description（kb_graph 上线后死活选不中，就是被「先用 kb_search」压的）。这条测试就是防它长回来。
+    """
+    from modules.skills.registry import REGISTRY
+
+    blob = SYSTEM + PRIVATE_SYSTEM
+    named = sorted(n for n in REGISTRY if n in blob)
+    assert not named, f"提示词又点名工具了：{named}。请把「什么时候用」写进该 skill 的 description。"
+
+
 async def test_reasoning_events_forwarded(monkeypatch):
     # 深度思考：LLM 吐的 reasoning 增量被 service 原样转成 reasoning 事件，正文照常成 token。
     rounds = [[{"type": "reasoning", "delta": "先想想"}, {"type": "content", "delta": "答案"}]]
