@@ -4,6 +4,7 @@
 （不连接、不拉子进程、零 prod 变化）。单 server 连接/列举失败隔离降级，不拖垮整个 agent。
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -16,6 +17,13 @@ from mcp.client.streamable_http import streamablehttp_client
 from .bridge import content_to_text, mcp_tool_to_openai, openai_tool_name
 
 logger = logging.getLogger(__name__)
+
+# 连接 + initialize 的硬超时（秒）。**这条是启用真 server 的前置**：MCP 在 app lifespan 里连，
+# 没有超时的话，一个 hang 住/首次要下载依赖的 server 就能让 FastAPI 永远起不来 = 整站挂。
+# 宁可跳过这个 server 跑起来（agent 少几个工具），也不能让站起不来。env 可调。
+_CONNECT_TIMEOUT = float(os.environ.get("MCP_CONNECT_TIMEOUT") or 20.0)
+_LIST_TIMEOUT = float(os.environ.get("MCP_LIST_TIMEOUT") or 10.0)  # list_tools 同理，别卡在启动/刷新
+_CALL_TIMEOUT = float(os.environ.get("MCP_CALL_TIMEOUT") or 30.0)  # 单次工具调用；超时收敛成结果，不吊死本轮
 
 
 def load_configs() -> list[dict]:
@@ -50,10 +58,14 @@ class MCPManager:
         if not configs:
             return  # 未配置 → 完全 inert
         for cfg in configs:
+            name = cfg.get("name", "?")
             try:
-                await self._connect(cfg.get("name", ""), cfg)
+                # 硬超时：hang 住的 server 绝不能卡死 lifespan（否则整站起不来）
+                await asyncio.wait_for(self._connect(cfg.get("name", ""), cfg), timeout=_CONNECT_TIMEOUT)
+            except TimeoutError:
+                logger.error("MCP server %s 连接/初始化超过 %.0fs，跳过（站照常起）", name, _CONNECT_TIMEOUT)
             except Exception:  # noqa: BLE001 —— 单 server 失败不该拖垮 agent / app 启动
-                logger.exception("MCP server %s 连接失败，跳过", cfg.get("name", "?"))
+                logger.exception("MCP server %s 连接失败，跳过", name)
         await self.refresh_tools()
         logger.info("MCP 已连 %d 个 server，暴露 %d 个工具", len(self._sessions), len(self._tools))
 
@@ -73,7 +85,10 @@ class MCPManager:
         pairs = []
         for name, session in self._sessions.items():
             try:
-                resp = await session.list_tools()
+                resp = await asyncio.wait_for(session.list_tools(), timeout=_LIST_TIMEOUT)
+            except TimeoutError:
+                logger.error("MCP server %s list_tools 超过 %.0fs，跳过", name, _LIST_TIMEOUT)
+                continue
             except Exception:  # noqa: BLE001
                 logger.exception("MCP server %s list_tools 失败", name)
                 continue
@@ -102,7 +117,11 @@ class MCPManager:
 
     async def invoke(self, name: str, args: dict) -> str:
         srv, tool = self._route[name]
-        result = await self._sessions[srv].call_tool(tool, arguments=args)
+        try:  # 外部 server 卡住不能把 agent 这一轮永远吊死；超时收敛成工具结果，让模型继续
+            result = await asyncio.wait_for(self._sessions[srv].call_tool(tool, arguments=args), timeout=_CALL_TIMEOUT)
+        except TimeoutError:
+            logger.warning("MCP 工具 %s 超过 %.0fs 无响应", name, _CALL_TIMEOUT)
+            return f"（{name} 超过 {_CALL_TIMEOUT:.0f}s 无响应，已放弃。）"
         return content_to_text(
             result.content,
             is_error=bool(getattr(result, "isError", False)),

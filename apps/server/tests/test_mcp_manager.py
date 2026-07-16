@@ -3,6 +3,7 @@
 不起真 server：往 manager 注入 fake ClientSession（有 list_tools / call_tool）。
 """
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -147,3 +148,60 @@ async def test_inert_when_no_servers():
     assert m.tools() == [] and not m.has("anything")
     with pytest.raises(KeyError):
         await m.invoke("nope", {})  # 未注册直接 KeyError（上层用 has() 先判）
+
+
+# ---------- 超时兜底（启用真 server 的前置） ----------
+
+
+class _HangingSession:
+    """永远不返回的 server：真实场景是首次 uvx 要下载依赖、或 server 卡死。"""
+
+    def __init__(self):
+        self.called = False
+
+    async def list_tools(self):
+        self.called = True
+        await asyncio.sleep(3600)
+
+    async def call_tool(self, _name, arguments=None):
+        await asyncio.sleep(3600)
+
+
+async def test_hanging_list_tools_does_not_block_startup(monkeypatch):
+    """MCP 在 app lifespan 里连——list_tools 卡死绝不能让 FastAPI 起不来（整站挂）。"""
+    import modules.mcp.manager as m
+
+    monkeypatch.setattr(m, "_LIST_TIMEOUT", 0.05)
+    mgr = MCPManager()
+    mgr._sessions = {"slow": _HangingSession()}
+    mgr._server_auto = {"slow": False}
+    await asyncio.wait_for(mgr.refresh_tools(), timeout=2)  # 没超时=没被吊死
+    assert mgr.tools() == []  # 卡死的 server 被跳过，其余照常
+
+
+async def test_hanging_tool_call_returns_message_not_hang(monkeypatch):
+    """外部 server 卡住 → 收敛成工具结果让模型继续，别把 agent 这轮永远吊死。"""
+    import modules.mcp.manager as m
+
+    monkeypatch.setattr(m, "_CALL_TIMEOUT", 0.05)
+    mgr = MCPManager()
+    mgr._sessions = {"slow": _HangingSession()}
+    mgr._route = {"slow__x": ("slow", "x")}
+    out = await asyncio.wait_for(mgr.invoke("slow__x", {}), timeout=2)
+    assert "无响应" in out  # 有结果、不抛、不吊死
+
+
+async def test_connect_timeout_skips_server(monkeypatch):
+    """连接/initialize 卡死 → 跳过该 server，站照常起（宁可少几个工具）。"""
+    import modules.mcp.manager as m
+
+    monkeypatch.setattr(m, "_CONNECT_TIMEOUT", 0.05)
+    monkeypatch.setattr(m, "load_configs", lambda: [{"name": "hang", "command": "x"}])
+
+    async def _never(_self, _name, _cfg):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(MCPManager, "_connect", _never)
+    mgr = MCPManager()
+    await asyncio.wait_for(mgr.start(), timeout=2)  # start 正常返回 = 站能起来
+    assert mgr.tools() == []
