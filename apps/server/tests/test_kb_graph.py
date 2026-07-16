@@ -108,3 +108,36 @@ async def test_extract_returns_empty_when_unparsable(monkeypatch):
 async def test_extract_noop_without_key(monkeypatch):
     monkeypatch.setattr(g.chat_llm, "api_key", "")
     assert await g.extract("t", "b") == ([], [])
+
+
+async def test_preview_separates_model_silence_from_parse_drops(monkeypatch):
+    """preview 的意义：分清「模型没吐」和「吐了但被清洗丢光」——两种失败修法相反。"""
+
+    async def fake_complete(_messages, **_kw):
+        # 模型吐了 2 个实体 + 1 条悬空关系（端点不在实体里）→ 关系该被 _parse 丢掉
+        args = json.dumps(
+            {
+                "entities": [
+                    {"name": "Scaling Laws", "type": "概念", "description": "d"},
+                    {"name": "涌现", "type": "概念", "description": "d"},
+                ],
+                "relations": [{"source": "Scaling Laws", "target": "查无此物", "type": "导致", "description": "d"}],
+            }
+        )
+        return {"content": "", "tool_calls": [{"function": {"arguments": args}}]}
+
+    monkeypatch.setattr(g.chat_llm, "api_key", "test-key")
+    monkeypatch.setattr(g.chat_llm, "complete", fake_complete)
+    out = await g.preview("t", "b")
+    assert out["raw_entities"] == 2 and len(out["entities"]) == 2
+    assert out["raw_relations"] == 1 and out["dropped_relations"] == 1  # 吐了但被丢 → 一眼看出
+
+
+async def test_preview_reports_model_silence(monkeypatch):
+    async def fake_complete(_messages, **_kw):
+        return {"content": "抽不出来", "tool_calls": []}
+
+    monkeypatch.setattr(g.chat_llm, "api_key", "test-key")
+    monkeypatch.setattr(g.chat_llm, "complete", fake_complete)
+    out = await g.preview("t", "b")
+    assert out["raw"] is None and "没返回" in out["note"]

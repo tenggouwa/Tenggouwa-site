@@ -86,6 +86,13 @@ class KBRepository:
             q = q.where(or_(KBDocumentRow.graph_hash.is_(None), KBDocumentRow.graph_hash != KBDocumentRow.content_hash))
         return list((await self.session.execute(q)).scalars().all())
 
+    async def get_doc_by_external_id(self, external_id: str) -> KBDocumentRow | None:
+        return (
+            (await self.session.execute(select(KBDocumentRow).where(KBDocumentRow.external_id == external_id)))
+            .scalars()
+            .first()
+        )
+
     async def _upsert_entity(self, e: dict) -> int:
         """按 norm_key 合并——这是图谱能织成网的关键：同一概念在不同文章里落到同一个节点。"""
         row = (

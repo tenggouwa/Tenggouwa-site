@@ -88,6 +88,13 @@ class KBService:
             relations=stats["relations"],
         )
 
+    async def preview_graph(self, session: AsyncSession, external_id: str) -> dict:
+        """对某篇文章 dry-run 抽取（只回不写），用来调 prompt / 诊断为什么某篇抽不出东西。"""
+        doc = await KBRepository(session).get_doc_by_external_id(external_id)
+        if doc is None:
+            raise ValueError(f"没有这篇文档: {external_id}")
+        return await graph.preview(doc.title, doc.raw_md)
+
     async def retrieve(
         self, session: AsyncSession, q: str, sources: list[str] | None, *, limit: int = TOP_K
     ) -> list[dict]:

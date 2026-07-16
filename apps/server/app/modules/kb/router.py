@@ -76,6 +76,15 @@ async def reindex(
     return ResponseModel(data=result)
 
 
+@admin_router.get("/graph/preview", response_model=ResponseModel[dict])
+async def preview_graph(
+    external_id: str = Query(description="文档 slug，如 scaling-laws-and-emergence"),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """dry-run 抽取某篇文章（只回不写）：看模型原始输出 + 清洗后结果，用来调 prompt。"""
+    return ResponseModel(data=await kb_service.preview_graph(session, external_id))
+
+
 @admin_router.post("/graph/build", response_model=ResponseModel[GraphBuildResult])
 async def build_graph(
     force: bool = Query(default=False, description="忽略 graph_hash，全量重抽（会重新烧 LLM）"),
