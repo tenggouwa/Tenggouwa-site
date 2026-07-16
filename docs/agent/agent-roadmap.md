@@ -1,5 +1,24 @@
 # apps/agent → 「像 Claude/Codex」的分阶段 roadmap（细化版）
 
+> ## ✅ 收官状态（2026-07-15 复盘，PR #145–#178）
+>
+> **已落地**：A0 全五层测试地基（含夜间 live cron #178）· A1 重试 · A2 截断 · A3 取消清理(#177) · A4 用量 ·
+> B2 MCP 框架(默认关) · C1 分级 · C2 审批 · D0/D1/D2 沙箱+文件+shell · E1 子代理(#173) · E2 并发(#176)+深度/数量上限(#174) ·
+> F2 会话列表+续聊(#165) · F3 reasoner(#172) · F4 思维链露出(#172)。
+> 计划外补的：web_search(#170/#171) · citations 回引用(#169) · git skill(#175) · file_edit(#163) · 多会话 owner 隔离(#165)。
+>
+> **明确不做**（不是欠账，是决策）：
+> - **C3 execpolicy**：Codex 需要它是因为跑在你真机上；我们跑在一次性 bwrap 沙箱 + C2 审批，命令规范化收益不抵复杂度。
+> - **B1 skill 开关 / B3 管理页**：11 个 skill，改代码比做后台便宜。
+> - **F1 多模态**：探针确认 deepseek-chat 纯文本、现有 OpenRouter key 调视觉模型 404，需单独接可用视觉模型+key，不值当。
+> - **F2 fork(分叉)**：resume 已够用。
+> - **D0 原选项(FC/独立 VM)**：最终选了树莓派 + bwrap，原选型作废。
+>
+> **追不平**：模型质量(DeepSeek vs GPT-5-Codex/Opus)——F3 切 reasoner 只能缓解。
+> **与 CC/Codex 的根本差异**：它们在你真实 repo 上干活；我们在 Pi 的隔离 workspace 里。定位不同，不必强追。
+>
+> ---
+>
 > 目标(用户 2026-07-08 定):都要,慢慢做,分阶段来。
 > 前置:[agent-architecture-research.md](./agent-architecture-research.md)(两家逐层拆解)、
 > [agent-v2-design.md](./agent-v2-design.md)(已落地内核)。
