@@ -19,6 +19,9 @@ from .provider import chat_llm
 logger = logging.getLogger(__name__)
 
 MAX_INPUT_CHARS = 12_000  # 单篇喂给 LLM 的正文上限（控成本；博客正文基本都在这以内）
+# 输出上限：12 实体 + 10 关系带中文描述，2048 会把 tool_call 的 arguments 截断成半截 JSON →
+# 解析失败 → 整篇抽不出东西（scaling-laws-and-emergence 就是这么挂的）。留足余量。
+MAX_OUTPUT_TOKENS = 4096
 MAX_ENTITIES = 12
 MAX_RELATIONS = 10
 _TYPES = ["概念", "技术", "工具", "人物", "组织", "标准"]
@@ -113,8 +116,12 @@ def _parse(payload: dict) -> tuple[list[dict], list[dict]]:
     return list(ents.values()), rels
 
 
-async def _call(title: str, raw_md: str) -> dict | None:
-    """调一次 LLM 拿原始 payload（未清洗）。拿不到结构化结果返回 None。"""
+async def _call(title: str, raw_md: str) -> tuple[dict | None, dict]:
+    """调一次 LLM 拿原始 payload（未清洗）+ 诊断信息。拿不到结构化结果时 payload 为 None。
+
+    诊断存在的理由：「模型没吐 tool_call」和「吐了但 arguments 解析不了（=被 max_tokens 截断，
+    尾巴是半截 JSON）」症状一样、修法完全相反，光看失败计数分不清。
+    """
     body = (raw_md or "")[:MAX_INPUT_CHARS]
     messages = [
         {"role": "system", "content": _SYSTEM},
@@ -124,43 +131,45 @@ async def _call(title: str, raw_md: str) -> dict | None:
         messages,
         tools=[_TOOL],
         tool_choice={"type": "function", "function": {"name": "emit_graph"}},
-        max_tokens=2048,
+        max_tokens=MAX_OUTPUT_TOKENS,
     )
-    payload: dict | None = None
-    for tc in r.get("tool_calls") or []:
+    tcs = r.get("tool_calls") or []
+    diag: dict = {"tool_calls": len(tcs), "content_head": (r.get("content") or "")[:200]}
+    for tc in tcs:
+        args = tc.get("function", {}).get("arguments") or ""
+        diag["args_len"] = len(args)
         try:
-            payload = json.loads(tc.get("function", {}).get("arguments") or "{}")
-            break
-        except json.JSONDecodeError:
-            continue
-    if payload is None:  # 兜底：模型没走 tool_call，试着从正文里抠 JSON
-        text = (r.get("content") or "").strip().removeprefix("```json").removeprefix("```").removesuffix("```")
-        try:
-            payload = json.loads(text)
-        except json.JSONDecodeError:
-            logger.warning("概念抽取未拿到结构化结果: %s（content=%.120s）", title, r.get("content") or "")
-            return None
-    return payload
+            return json.loads(args), diag
+        except json.JSONDecodeError as e:
+            diag["args_error"] = str(e)
+            diag["args_tail"] = args[-160:]  # 被截断的话这里是半截 JSON，一眼认出
+    text = (r.get("content") or "").strip().removeprefix("```json").removeprefix("```").removesuffix("```")
+    try:  # 兜底：模型没走 tool_call，试着从正文里抠 JSON
+        return json.loads(text), diag
+    except json.JSONDecodeError:
+        logger.warning("概念抽取未拿到结构化结果: %s（diag=%s）", title, diag)
+        return None, diag
 
 
 async def extract(title: str, raw_md: str) -> tuple[list[dict], list[dict]]:
     """抽一篇文章的概念与关系。LLM 不配 / 抽失败 → 返回空，调用方跳过（不该炸整个构建）。"""
     if not chat_llm.api_key:
         return [], []
-    return _parse(await _call(title, raw_md) or {})
+    payload, _diag = await _call(title, raw_md)
+    return _parse(payload or {})
 
 
 async def preview(title: str, raw_md: str) -> dict:
-    """dry-run：同样跑一次抽取，但**只回不写**，且把清洗前的原始 payload 一并返回。
+    """dry-run：同样跑一次抽取，但**只回不写**，并带上诊断。
 
-    调 prompt 时的眼睛：能一眼分清「模型压根没吐东西」还是「吐了但被 _parse 全丢了」——
-    这两种失败的修法完全相反，靠 documents_failed 计数是看不出来的。
+    调 prompt 时的眼睛：一眼分清「模型压根没吐」「吐了但被 max_tokens 截断」「吐了但被 _parse 丢光」——
+    三种失败修法完全不同，靠 documents_failed 计数分不出来。
     """
     if not chat_llm.api_key:
         return {"error": "KB_LLM_API_KEY 未配置"}
-    raw = await _call(title, raw_md)
+    raw, diag = await _call(title, raw_md)
     if raw is None:
-        return {"raw": None, "entities": [], "relations": [], "note": "模型没返回可解析的结构化结果"}
+        return {"raw": None, "entities": [], "relations": [], "note": "模型没返回可解析的结构化结果", "diag": diag}
     ents, rels = _parse(raw)
     return {
         "raw_entities": len(raw.get("entities") or []),
@@ -169,5 +178,6 @@ async def preview(title: str, raw_md: str) -> dict:
         "relations": rels,
         "dropped_entities": len(raw.get("entities") or []) - len(ents),
         "dropped_relations": len(raw.get("relations") or []) - len(rels),
+        "diag": diag,
         "raw": raw,
     }

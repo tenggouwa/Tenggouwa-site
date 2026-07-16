@@ -133,6 +133,21 @@ async def test_preview_separates_model_silence_from_parse_drops(monkeypatch):
     assert out["raw_relations"] == 1 and out["dropped_relations"] == 1  # 吐了但被丢 → 一眼看出
 
 
+async def test_preview_exposes_truncated_tool_call(monkeypatch):
+    """被 max_tokens 截断的指纹：有 tool_call、但 arguments 是半截 JSON。这跟「模型没吐」修法完全不同。"""
+
+    async def fake_complete(_messages, **_kw):
+        half = '{"entities": [{"name": "Scaling Laws", "type": "概念", "desc'  # 截断
+        return {"content": "", "tool_calls": [{"function": {"arguments": half}}]}
+
+    monkeypatch.setattr(g.chat_llm, "api_key", "test-key")
+    monkeypatch.setattr(g.chat_llm, "complete", fake_complete)
+    out = await g.preview("t", "b")
+    assert out["raw"] is None  # 解析不出来
+    assert out["diag"]["tool_calls"] == 1  # 但模型确实吐了 → 不是「沉默」
+    assert "args_error" in out["diag"] and out["diag"]["args_tail"].endswith("desc")  # 半截 JSON
+
+
 async def test_preview_reports_model_silence(monkeypatch):
     async def fake_complete(_messages, **_kw):
         return {"content": "抽不出来", "tool_calls": []}
