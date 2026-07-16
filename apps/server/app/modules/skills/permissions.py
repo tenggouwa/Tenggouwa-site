@@ -23,3 +23,16 @@ def requires_approval(name: str) -> bool:
     if mcp_manager.has(name):
         return not mcp_manager.is_auto(name)  # MCP：非 auto 信任的 server 需批准
     return False  # 未知工具交给上层报错，不在此拦
+
+
+def is_parallel_safe(name: str) -> bool:
+    """能否与同批其它工具并发执行（E2）：只放行无副作用的原生 readonly / 控制类。
+
+    write 原生（file_write/file_edit/shell_exec/git）一律串行：它们都走 Pi 沙箱，而 Pi 侧 exec 循环本就
+    一次跑一条——并发提交只会互相排队、各自的超时却在空转，还可能对同一 workspace 竞态。
+    MCP 工具行为未知，保守串行。
+    """
+    if name in _CONTROL:
+        return True
+    skill = REGISTRY.get(name)
+    return skill is not None and skill.risk == "readonly"

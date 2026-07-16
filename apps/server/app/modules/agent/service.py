@@ -9,6 +9,7 @@
 终止 = 模型不再 tool_call（§5），MAX_STEPS / 预算只是兜底防死循环。
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -18,7 +19,7 @@ from db.models import AgentMessageRow
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..kb.provider import chat_llm
-from ..skills.permissions import requires_approval
+from ..skills.permissions import is_parallel_safe, requires_approval
 from ..skills.service import skills_service
 from ..skills.shell_exec import SHELL_SKILL, stream_exec
 from ..skills.subagent import SUBAGENT_SKILL
@@ -60,6 +61,7 @@ ASK_SKILL = "ask_user"  # 抛选择题给用户，触发后结束本轮、等用
 REASONER_MODEL = os.environ.get("KB_LLM_REASONER_MODEL") or "deepseek-reasoner"
 
 MAX_SUBAGENTS_PER_TURN = 2  # 每个用户轮最多派几个子代理，防主代理狂开（实测会一口气开 4 个）
+MAX_PARALLEL_TOOLS = 6  # 同一批 parallel-safe 工具的并发上限（对齐 Codex max_threads=6）
 _SEARCH_SKILLS = {"web_search", "kb_search"}  # 按 query 去重的检索类工具，挡反复换措辞搜同一件事
 
 LEAK_TOKEN = "｜"  # ｜ DeepSeek tool-call 特殊 token 分隔符；正常文本/代码不会出现，用作泄漏起点
@@ -292,6 +294,48 @@ class AgentService:
         messages.extend(window.messages)
         return messages
 
+    async def _exec_one(self, session, name, args, tid, approvals, privileged, turn_state, emit) -> str:
+        """跑一个 tool_call 拿结果字符串；流式增量经 emit 回调发出（并发时由队列汇总回主流）。
+
+        任何异常都收敛成结果文案——单个 skill 炸了不该毒化会话，更不能带崩同批并发的兄弟任务。
+        """
+        capped = _turn_cap(name, args, turn_state)  # 收敛闸：超限/重复检索直接给提示、不真执行
+        if capped is not None:
+            return capped
+        if approvals is not None and requires_approval(name) and not approvals.get(tid, False):
+            return "（用户拒绝执行此操作。）"
+        if name == SHELL_SKILL and privileged:
+            # shell 输出流式：chunk 实时发前端做终端实时输出，final 作工具结果回灌 LLM
+            result = "（无输出）"
+            try:
+                async for ev in stream_exec(args):
+                    if "chunk" in ev:
+                        emit({"type": "tool_output", "id": tid, "name": name, "delta": ev["chunk"]})
+                    else:
+                        result = ev["result"]
+            except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+                logger.exception("shell_exec stream failed")
+                result = f"（shell_exec 执行失败：{e}）"
+            return result
+        if name == SUBAGENT_SKILL:
+            # 子代理：把每步调的工具当 tool_output 流给前端（复用 shell 的实时框），结论回灌 LLM
+            result = "（子代理无输出）"
+            try:
+                async for ev in subagent_run(session, args.get("task", "")):
+                    if "progress" in ev:
+                        emit({"type": "tool_output", "id": tid, "name": name, "delta": ev["progress"] + "\n"})
+                    else:
+                        result = ev["result"]
+            except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+                logger.exception("run_subagent failed")
+                result = f"（子代理执行失败：{e}）"
+            return result
+        try:
+            return await skills_service.invoke(session, name, args, privileged=privileged)
+        except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
+            logger.exception("skill %s failed", name)
+            return f"（skill {name} 执行失败：{e}）"
+
     async def _execute_batch(
         self, session, repo, sid, start_seq, content, tool_calls, messages, approvals, privileged, turn_state
     ):
@@ -301,55 +345,56 @@ class AgentService:
         approvals=dict：resume 路径，被拒的需批准工具回"用户拒绝"，其余执行。
         privileged：透传给 skills_service.invoke，公开通道拒执行 write/MCP 工具（纵深兜底）。
         turn_state：本轮收敛闸（子代理计数 + 检索去重），挡主代理狂开子代理 / 反复搜同一件事。
-        每个 tool_call → 恰好一条 tool 结果（保 H1 配对）；seq 由上层按 len(tool_calls) 推进。
+
+        **并发（E2）**：整批都是 parallel-safe（原生 readonly/控制类）时并发跑，上限 MAX_PARALLEL_TOOLS；
+        含 write 工具则退回串行（limit=1）——见 is_parallel_safe。两条路共用同一套队列汇流，
+        串行只是 limit=1 的特例，流式事件实时性不变。
+        每个 tool_call → 恰好一条 tool 结果、按原下标顺序落库（保 H1 配对 + seq 对齐）。
         """
-        for i, tc in enumerate(tool_calls):
-            seq = start_seq + i
-            name, args, tid = _tc_name(tc), _tc_args(tc), tc.get("id")
+        calls = [(_tc_name(tc), _tc_args(tc), tc.get("id")) for tc in tool_calls]
+        # 先按序把「要调什么」announce 出去：并发时用户能一次看到全部工具行，输出随后各自流回
+        for name, args, tid in calls:
             if name == PLAN_SKILL:
                 yield {"type": "plan", "plan": args.get("plan", [])}
             elif name == ASK_SKILL:
                 yield {"type": "ask", "intro": content, "questions": args.get("questions", [])}
             else:
                 yield {"type": "tool", "name": name, "args": args, "id": tid}
-            capped = _turn_cap(name, args, turn_state)  # 收敛闸：超限/重复检索直接给提示、不真执行
-            if capped is not None:
-                result = capped
-            elif approvals is not None and requires_approval(name) and not approvals.get(tid, False):
-                result = "（用户拒绝执行此操作。）"
-            elif name == SHELL_SKILL and privileged:
-                # shell 输出流式：chunk 实时发前端做终端实时输出，final 作工具结果回灌 LLM
-                result = "（无输出）"
-                try:
-                    async for ev in stream_exec(args):
-                        if "chunk" in ev:
-                            yield {"type": "tool_output", "id": tid, "name": name, "delta": ev["chunk"]}
-                        else:
-                            result = ev["result"]
-                except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
-                    logger.exception("shell_exec stream failed")
-                    result = f"（shell_exec 执行失败：{e}）"
-            elif name == SUBAGENT_SKILL:
-                # 子代理：把每步调的工具当 tool_output 流给前端（复用 shell 的实时框），结论回灌 LLM
-                result = "（子代理无输出）"
-                try:
-                    async for ev in subagent_run(session, args.get("task", "")):
-                        if "progress" in ev:
-                            yield {"type": "tool_output", "id": tid, "name": name, "delta": ev["progress"] + "\n"}
-                        else:
-                            result = ev["result"]
-                except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
-                    logger.exception("run_subagent failed")
-                    result = f"（子代理执行失败：{e}）"
-            else:
-                try:
-                    result = await skills_service.invoke(session, name, args, privileged=privileged)
-                except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
-                    logger.exception("skill %s failed", name)
-                    result = f"（skill {name} 执行失败：{e}）"
-            result = _truncate_tool_result(result)
+
+        limit = MAX_PARALLEL_TOOLS if len(calls) > 1 and all(is_parallel_safe(n) for n, _, _ in calls) else 1
+        queue: asyncio.Queue = asyncio.Queue()
+        results: dict[int, str] = {}
+        sem = asyncio.Semaphore(limit)
+
+        async def _one(i: int, name: str, args: dict, tid) -> None:
+            async with sem:
+                results[i] = await self._exec_one(
+                    session, name, args, tid, approvals, privileged, turn_state, queue.put_nowait
+                )
+
+        runner = asyncio.gather(*(_one(i, n, a, t) for i, (n, a, t) in enumerate(calls)))
+        try:
+            while True:  # 汇流：任一子任务推来的流式事件实时转发，直到全部跑完
+                getter = asyncio.ensure_future(queue.get())
+                done, _ = await asyncio.wait({getter, runner}, return_when=asyncio.FIRST_COMPLETED)
+                if getter in done:
+                    yield getter.result()
+                else:
+                    getter.cancel()
+                if runner.done():
+                    while not queue.empty():  # 收尾把残余事件吐干净
+                        yield queue.get_nowait()
+                    break
+            await runner  # 传播 gather 自身异常（单 skill 异常已在 _exec_one 内收敛）
+        finally:
+            if not runner.done():
+                runner.cancel()
+
+        # 按原顺序回填：每个 tool_call 恰好一条 tool 结果（H1），seq 与下标对齐
+        for i, (_n, _a, tid) in enumerate(calls):
+            result = _truncate_tool_result(results.get(i, "（无结果）"))
             messages.append({"role": "tool", "tool_call_id": tid, "content": result})
-            await repo.append(sid, seq, "tool", result, tool_call_id=tid)
+            await repo.append(sid, start_seq + i, "tool", result, tool_call_id=tid)
 
     async def _maybe_compact(self, repo: AgentRepository, sid: str) -> None:
         """历史超阈值时，把最近 KEEP_TURNS 个 user 轮之前的消息摘要成一条 note（§4）。
