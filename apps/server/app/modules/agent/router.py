@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -73,6 +74,11 @@ def _chat_stream(
                 deep=payload.deep_think,
             ):
                 yield _sse(ev["type"], ev)
+        except asyncio.CancelledError:
+            # 客户端断连（用户按 Esc / 关页面）→ 干净退出：本轮 DB 写入随请求事务一起回滚，不留半条脏消息
+            # （H1：不会留下没配对 tool 结果的 assistant(tool_calls)）。已派发到 Pi 的命令会跑完但结果被丢弃。
+            logger.info("agent chat cancelled by client (session=%s)", payload.session_id)
+            raise
         except Exception as e:  # noqa: BLE001 —— 流内异常转 SSE error 事件回前端
             logger.exception("agent chat failed")
             yield _sse("error", {"message": str(e)})

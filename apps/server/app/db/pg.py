@@ -62,7 +62,10 @@ class AsyncPostgres:
             try:
                 yield session
                 await session.commit()
-            except Exception:
+            except BaseException:
+                # 必须 BaseException 而非 Exception：客户端断连时 asyncio.CancelledError 是 BaseException，
+                # 用 Exception 会漏掉它 —— 那样既不 commit 也不显式 rollback，只能靠 close() 隐式回滚。
+                # 显式回滚让「一次请求 = 一个事务」的语义在取消路径上也成立（A3：取消不留半条脏消息）。
                 await session.rollback()
                 raise
 
