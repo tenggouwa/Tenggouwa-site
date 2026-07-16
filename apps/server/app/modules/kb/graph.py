@@ -78,6 +78,20 @@ _TOOL = {
 }
 
 
+def _loads_first(s: str) -> dict | None:
+    """只取字符串里**第一个**完整 JSON 对象，忽略后面的多余内容。
+
+    DeepSeek 会偶发把两份 JSON 直接拼在 tool_call 的 arguments 里（`{...}{...}`），
+    json.loads 要求整串是单个 JSON → 报 "Extra data" → 整篇白抽（scaling-laws-and-emergence 就这么挂的）。
+    raw_decode 解到第一个对象结束就停，正好对症。
+    """
+    try:
+        obj, _end = json.JSONDecoder().raw_decode(s.strip())
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
 def norm_key(name: str) -> str:
     """归一化实体名 → 合并键。去空白 + 转小写 + 去首尾标点；中文不受 lower 影响但无妨。"""
     k = re.sub(r"\s+", "", str(name)).strip().lower()
@@ -138,17 +152,16 @@ async def _call(title: str, raw_md: str) -> tuple[dict | None, dict]:
     for tc in tcs:
         args = tc.get("function", {}).get("arguments") or ""
         diag["args_len"] = len(args)
-        try:
-            return json.loads(args), diag
-        except json.JSONDecodeError as e:
-            diag["args_error"] = str(e)
-            diag["args_tail"] = args[-160:]  # 被截断的话这里是半截 JSON，一眼认出
+        payload = _loads_first(args)  # 容忍模型把两份 JSON 拼一起
+        if payload is not None:
+            return payload, diag
+        diag["args_tail"] = args[-160:]  # 连第一份都解不出 → 大概率真被 max_tokens 截断了
     text = (r.get("content") or "").strip().removeprefix("```json").removeprefix("```").removesuffix("```")
-    try:  # 兜底：模型没走 tool_call，试着从正文里抠 JSON
-        return json.loads(text), diag
-    except json.JSONDecodeError:
-        logger.warning("概念抽取未拿到结构化结果: %s（diag=%s）", title, diag)
-        return None, diag
+    payload = _loads_first(text)  # 兜底：模型没走 tool_call，试着从正文里抠 JSON
+    if payload is not None:
+        return payload, diag
+    logger.warning("概念抽取未拿到结构化结果: %s（diag=%s）", title, diag)
+    return None, diag
 
 
 async def extract(title: str, raw_md: str) -> tuple[list[dict], list[dict]]:
