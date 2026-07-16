@@ -113,10 +113,8 @@ def _parse(payload: dict) -> tuple[list[dict], list[dict]]:
     return list(ents.values()), rels
 
 
-async def extract(title: str, raw_md: str) -> tuple[list[dict], list[dict]]:
-    """抽一篇文章的概念与关系。LLM 不配 / 抽失败 → 返回空，调用方跳过（不该炸整个构建）。"""
-    if not chat_llm.api_key:
-        return [], []
+async def _call(title: str, raw_md: str) -> dict | None:
+    """调一次 LLM 拿原始 payload（未清洗）。拿不到结构化结果返回 None。"""
     body = (raw_md or "")[:MAX_INPUT_CHARS]
     messages = [
         {"role": "system", "content": _SYSTEM},
@@ -140,6 +138,36 @@ async def extract(title: str, raw_md: str) -> tuple[list[dict], list[dict]]:
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
-            logger.warning("概念抽取未拿到结构化结果: %s", title)
-            return [], []
-    return _parse(payload or {})
+            logger.warning("概念抽取未拿到结构化结果: %s（content=%.120s）", title, r.get("content") or "")
+            return None
+    return payload
+
+
+async def extract(title: str, raw_md: str) -> tuple[list[dict], list[dict]]:
+    """抽一篇文章的概念与关系。LLM 不配 / 抽失败 → 返回空，调用方跳过（不该炸整个构建）。"""
+    if not chat_llm.api_key:
+        return [], []
+    return _parse(await _call(title, raw_md) or {})
+
+
+async def preview(title: str, raw_md: str) -> dict:
+    """dry-run：同样跑一次抽取，但**只回不写**，且把清洗前的原始 payload 一并返回。
+
+    调 prompt 时的眼睛：能一眼分清「模型压根没吐东西」还是「吐了但被 _parse 全丢了」——
+    这两种失败的修法完全相反，靠 documents_failed 计数是看不出来的。
+    """
+    if not chat_llm.api_key:
+        return {"error": "KB_LLM_API_KEY 未配置"}
+    raw = await _call(title, raw_md)
+    if raw is None:
+        return {"raw": None, "entities": [], "relations": [], "note": "模型没返回可解析的结构化结果"}
+    ents, rels = _parse(raw)
+    return {
+        "raw_entities": len(raw.get("entities") or []),
+        "raw_relations": len(raw.get("relations") or []),
+        "entities": ents,
+        "relations": rels,
+        "dropped_entities": len(raw.get("entities") or []) - len(ents),
+        "dropped_relations": len(raw.get("relations") or []) - len(rels),
+        "raw": raw,
+    }
