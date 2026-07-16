@@ -108,6 +108,20 @@ class MCPManager:
     def tools(self) -> list[dict]:
         return list(self._tools)
 
+    def status(self) -> dict:
+        """连了哪些 server、暴露了哪些工具、哪些免审批。
+
+        MCP 工具只在私有通道暴露、启动日志又是 INFO（prod 过滤掉了）——不给个说法就完全是黑盒，
+        「到底连上没、桥了几个工具」只能靠猜。运维/排障入口。
+        """
+        return {
+            "configured": len(load_configs()),
+            "connected": sorted(self._sessions),
+            "tools": [
+                {"name": n, "server": srv, "auto": n in self._auto} for n, (srv, _t) in sorted(self._route.items())
+            ],
+        }
+
     def has(self, name: str) -> bool:
         return name in self._route
 

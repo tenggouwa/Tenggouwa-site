@@ -4,11 +4,13 @@ import logging
 
 from common.rate_limit import client_ip, unlock_limiter
 from db import get_session
+from dependencies import current_admin
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
+from ..mcp.manager import mcp_manager
 from ..terminal.service import terminal_service
 from ..totp.repository import AdminTotpRepository
 from .auth import current_agent_owner, make_agent_token
@@ -28,6 +30,17 @@ logger = logging.getLogger(__name__)
 # 公开通道（免鉴权）：只暴露 readonly skill；私有通道（TOTP → agent_token）：额外给 write / MCP 高危工具。
 public_router = APIRouter(prefix="/public/agent", tags=["public.agent"])
 private_router = APIRouter(prefix="/agent", tags=["agent"], dependencies=[Depends(current_agent_owner)])
+# MCP 状态属运维视角（不是 agent 会话），走 admin JWT，与 kb 的 admin 端点一致。
+admin_router = APIRouter(prefix="/admin/agent", tags=["admin.agent"], dependencies=[Depends(current_admin)])
+
+
+@admin_router.get("/mcp", response_model=ResponseModel[dict])
+async def mcp_status() -> ResponseModel[dict]:
+    """MCP 连了哪些 server、桥了哪些工具、哪些免审批。
+
+    MCP 工具只在私有通道暴露、启动日志又是 INFO（prod 过滤掉）——没这个端点就完全是黑盒。
+    """
+    return ResponseModel(data=mcp_manager.status())
 
 
 def _sse(event: str, data: dict) -> str:

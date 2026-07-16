@@ -205,3 +205,14 @@ async def test_connect_timeout_skips_server(monkeypatch):
     mgr = MCPManager()
     await asyncio.wait_for(mgr.start(), timeout=2)  # start 正常返回 = 站能起来
     assert mgr.tools() == []
+
+
+async def test_status_reports_servers_and_tools():
+    """status 是 MCP 唯一的可观测入口（工具只在私有通道、启动日志被 prod 过滤）。"""
+    mgr = MCPManager()
+    mgr._sessions = {"time": object()}
+    mgr._route = {"time__get_current_time": ("time", "get_current_time")}
+    mgr._auto = set()
+    st = mgr.status()
+    assert st["connected"] == ["time"]
+    assert st["tools"] == [{"name": "time__get_current_time", "server": "time", "auto": False}]
