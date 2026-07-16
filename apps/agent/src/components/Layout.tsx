@@ -2,7 +2,6 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 const NAV = [
   { to: '/', label: 'ask', end: true },
-  { to: '/knowledge-base', label: 'knowledge-base' },
   { to: '/graph', label: 'graph' },
   { to: '/skills', label: 'skills' },
 ];

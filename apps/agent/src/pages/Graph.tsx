@@ -34,6 +34,21 @@ interface Neighborhood {
   docs: { title: string; url: string | null }[];
 }
 
+interface Landing {
+  hubs: Hub[];
+  stats: { entities: number; relations: number; docs_total: number; docs_graphed: number };
+}
+
+interface SourceOverview {
+  kind: string;
+  documents: number;
+  chunks: number;
+  embedded: number;
+  last_synced_at: string | null;
+}
+
+const fmtWhen = (s: string | null) => (s ? s.slice(0, 16).replace('T', ' ') : '—');
+
 const SITE = 'https://tenggouwa.com';
 const abs = (u?: string | null) => (u ? (u.startsWith('http') ? u : SITE + u) : undefined);
 
@@ -62,16 +77,23 @@ function layout(nb: Neighborhood, w: number, h: number) {
 
 export default function Graph() {
   const [hubs, setHubs] = useState<Hub[] | null>(null);
+  const [stats, setStats] = useState<Landing['stats'] | null>(null);
+  const [sources, setSources] = useState<SourceOverview[] | null>(null);
   const [nb, setNb] = useState<Neighborhood | null>(null);
   const [curId, setCurId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiGet<Hub[]>('/api/public/kb/graph/hubs?limit=40')
-      .then((h) => {
-        setHubs(h);
-        if (h[0]) open(h[0].id);
+    Promise.all([
+      apiGet<Landing>('/api/public/kb/graph/hubs?limit=40'),
+      apiGet<SourceOverview[]>('/api/public/kb/overview'),
+    ])
+      .then(([land, ov]) => {
+        setHubs(land.hubs);
+        setStats(land.stats);
+        setSources(ov);
+        if (land.hubs[0]) open(land.hubs[0].id);
       })
       .catch((e) => setError(e instanceof Error ? e.message : '加载失败'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,6 +122,31 @@ export default function Graph() {
         <p className="text-sm text-terminal-gray/70">
           站内知识的概念图谱。点左侧枢纽概念，看它跟哪些概念有什么关系、哪几篇文章讲过。
         </p>
+        {(stats || sources) && (
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-terminal-gray/60 pt-1">
+            {sources?.map((s) => (
+              <span key={s.kind}>
+                <span className="text-terminal-green">{s.kind}</span> 源：文档{' '}
+                <span className="text-terminal-cyan">{s.documents}</span> · 分块{' '}
+                <span className="text-terminal-cyan">{s.chunks}</span> · 已嵌入{' '}
+                <span className={s.embedded === s.chunks ? 'text-terminal-green' : 'text-terminal-yellow'}>
+                  {s.embedded}
+                </span>
+                <span className="text-terminal-gray/40"> · 同步 {fmtWhen(s.last_synced_at)}</span>
+              </span>
+            ))}
+            {stats && (
+              <span>
+                图谱：实体 <span className="text-terminal-cyan">{stats.entities}</span> · 关系{' '}
+                <span className="text-terminal-cyan">{stats.relations}</span> · 已抽取{' '}
+                <span className={stats.docs_graphed === stats.docs_total ? 'text-terminal-green' : 'text-terminal-yellow'}>
+                  {stats.docs_graphed}/{stats.docs_total}
+                </span>{' '}
+                篇
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {error && <div className="text-sm text-terminal-red">加载失败：{error}</div>}

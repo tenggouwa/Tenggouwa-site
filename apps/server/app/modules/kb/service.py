@@ -121,9 +121,13 @@ class KBService:
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
 
-    async def graph_hubs(self, session: AsyncSession, *, limit: int = 40) -> list[dict]:
-        """图谱页着陆入口：枢纽概念（按出现文章数排）。"""
-        return await KBRepository(session).graph_hubs(limit=limit)
+    async def graph_hubs(self, session: AsyncSession, *, limit: int = 40) -> dict:
+        """图谱页着陆数据：枢纽概念 + 图谱统计（实体/关系总数、已抽文档 / 总文档）。
+
+        knowledge-base 页删了后，这里顺带把它值钱的那部分（覆盖度统计）并过来，图谱页一次拿全。
+        """
+        repo = KBRepository(session)
+        return {"hubs": await repo.graph_hubs(limit=limit), "stats": await repo.graph_coverage()}
 
     async def graph_neighborhood(self, session: AsyncSession, entity_id: int) -> dict:
         """一个概念的邻域（中心 + 邻居 + 边 + 佐证文章）。不存在 → 抛，由 router 转 404。"""

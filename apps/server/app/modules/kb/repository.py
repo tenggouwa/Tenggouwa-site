@@ -296,6 +296,15 @@ class KBRepository:
         relations = (await self.session.execute(select(func.count(KBRelationRow.id)))).scalar() or 0
         return {"entities": entities, "relations": relations}
 
+    async def graph_coverage(self) -> dict:
+        """图谱覆盖度：实体/关系总数 + 已抽文档 / 总文档（顶部小字用，也是抽取健康的唯一可见处）。"""
+        stats = await self.graph_stats()
+        docs_total = (await self.session.execute(select(func.count(KBDocumentRow.id)))).scalar() or 0
+        docs_graphed = (
+            await self.session.execute(select(func.count(KBDocumentRow.id)).where(KBDocumentRow.graph_hash.isnot(None)))
+        ).scalar() or 0
+        return {**stats, "docs_total": docs_total, "docs_graphed": docs_graphed}
+
     @staticmethod
     def _rows_to_hits(rows) -> list[dict]:
         return [

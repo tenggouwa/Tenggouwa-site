@@ -26,12 +26,16 @@ const NB = (center: number, centerName: string) =>
     docs: [{ title: 'GPT 家族', url: '/posts/gpt/' }],
   });
 
+const STATS = { entities: 529, relations: 499, docs_total: 57, docs_graphed: 57 };
+const OVERVIEW = [{ kind: 'blog', documents: 57, chunks: 572, embedded: 572, last_synced_at: '2026-07-16T02:00:00' }];
+
 function stub() {
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
       let body: unknown = env([]);
-      if (url.includes('/graph/hubs')) body = env(HUBS);
+      if (url.includes('/graph/hubs')) body = env({ hubs: HUBS, stats: STATS });
+      else if (url.includes('/kb/overview')) body = env(OVERVIEW);
       else if (url.includes('/graph/entity/285')) body = NB(285, 'Docker');
       else if (url.includes('/graph/entity/')) body = NB(67, 'Transformer');
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
@@ -50,6 +54,9 @@ describe('Graph 概念图谱页', () => {
     // 佐证文章成可点链接
     const a = screen.getByText('《GPT 家族》').closest('a');
     expect(a?.getAttribute('href')).toBe('https://tenggouwa.com/posts/gpt/');
+    // knowledge-base 并进来的统计条：源 + 图谱覆盖度
+    expect(screen.getByText(/529/)).toBeTruthy(); // 实体数
+    expect(screen.getByText('57/57')).toBeTruthy(); // 已抽取 / 总文档
   });
 
   it('点侧栏另一个枢纽 → 切换到它的邻域', async () => {
