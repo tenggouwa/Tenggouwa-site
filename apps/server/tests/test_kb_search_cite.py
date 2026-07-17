@@ -22,4 +22,6 @@ async def test_kb_search_empty(monkeypatch):
         return []
 
     monkeypatch.setattr(ks.kb_service, "retrieve", fake_retrieve)
-    assert "没有相关内容" in await ks._handler(None, {"query": "x"})
+    out = await ks._handler(None, {"query": "x"})
+    assert "没有相关内容" in out
+    assert out.startswith("[无结果]")  # 空结果打标签，模型别当「该重试」反复换措辞搜

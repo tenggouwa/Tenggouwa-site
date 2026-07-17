@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..kb.service import kb_service
 from .base import Skill
+from .results import empty
 
 
 async def _handler(session: AsyncSession, args: dict) -> str:
@@ -12,7 +13,7 @@ async def _handler(session: AsyncSession, args: dict) -> str:
         return "（未提供查询）"
     hits = await kb_service.retrieve(session, query, None, limit=6)
     if not hits:
-        return "知识库里没有相关内容。"
+        return empty("知识库里没有相关内容。")
     # 每条给出**可直接粘贴的 markdown 引用链接**（有 url 才成链接），方便模型在答案里回引来源。
     blocks = []
     for i, h in enumerate(hits, 1):
