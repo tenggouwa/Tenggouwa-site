@@ -399,9 +399,9 @@ class KBRepository:
             ),
             fused AS (
                 SELECT id, SUM(score) AS rrf FROM (
-                    SELECT id, 1.0 / (:k + rank) AS score FROM vec
+                    SELECT id, :w_vec * 1.0 / (:k + rank) AS score FROM vec
                     UNION ALL
-                    SELECT id, 1.0 / (:k + rank) AS score FROM fts
+                    SELECT id, :w_fts * 1.0 / (:k + rank) AS score FROM fts
                 ) u GROUP BY id
             )
             SELECT c.id, c.content, d.title, d.url, s.kind AS source_kind, f.rrf AS score
@@ -412,7 +412,12 @@ class KBRepository:
             ORDER BY f.rrf DESC
             LIMIT :limit
         """)
-        params = {**base, "qvec": vec_literal, "pool": 40, "k": 60}
+        # RRF 融合权重：向量 2×、trigram 1×。诊断（2026-07-18，生产 57 篇实测）：中文口语 query
+        # 走 trigram 只命中「大模型/模型」这类公共词、拿 0.333 噪声分，等权融合会让泛文两票相加
+        # 反超「只有向量一票」的正确文档（如问「大模型怎么省显存」压根捞不到 FP4/vLLM 那几篇）。
+        # 实测 2:1 是甜点：向量托起纯语义命中，trigram 仍够加固同域词（容器/iptables 不被跨域噪声污染）；
+        # 再重（4:1）或给 trigram 加阈值静音，反而让向量的跨域长尾漏进来。别退回等权。
+        params = {**base, "qvec": vec_literal, "pool": 40, "k": 60, "w_vec": 2.0, "w_fts": 1.0}
         rows = (await self.session.execute(sql, params)).all()
         return self._rows_to_hits(rows)
 
