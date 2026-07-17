@@ -163,6 +163,14 @@ def of_type(events, typ) -> list:
     return [e for e in events if e["type"] == typ]
 
 
+def first_tool_calls(rows) -> list[str]:
+    """按时间顺序，第一个发起工具调用的 assistant 轮里所有 tool_call 的名字（技能路由信号）。"""
+    for r in rows:
+        if r.role == "assistant" and r.tool_calls:
+            return [tc["function"]["name"] for tc in r.tool_calls]
+    return []
+
+
 # ---------- 不变量断言（每个场景都该调）----------
 
 
