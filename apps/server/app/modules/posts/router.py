@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
+from ..kb.auto import schedule_kb_refresh
 from .schema import Post, PostAdminListPage, PostCreate, PostListPage, PostSummary, PostUpdate
 from .service import post_service
 
@@ -69,6 +70,7 @@ async def create_post(
     session: AsyncSession = Depends(get_session),
 ) -> ResponseModel[Post]:
     item = await post_service.create(session, payload)
+    schedule_kb_refresh()  # 新文自动进知识库 + 图谱（后台合并刷新）
     return ResponseModel(data=item)
 
 
@@ -79,6 +81,7 @@ async def update_post(
     session: AsyncSession = Depends(get_session),
 ) -> ResponseModel[Post]:
     item = await post_service.update(session, item_id, payload)
+    schedule_kb_refresh()  # 改文自动追平知识库 + 图谱（内容 hash 没变则空跑，不烧 LLM）
     return ResponseModel(data=item)
 
 
