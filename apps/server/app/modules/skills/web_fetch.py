@@ -16,6 +16,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .base import Skill
+from .results import empty, error
 
 _MAX_BYTES = 200_000  # 读取上限，超出截断
 _MAX_CHARS = 8_000  # 回给 LLM 的正文上限（对齐 Codex 工具输出截断）
@@ -59,9 +60,9 @@ async def _handler(_session: AsyncSession, args: dict) -> str:
             resp.raise_for_status()
             raw = resp.content[:_MAX_BYTES].decode(resp.encoding or "utf-8", errors="replace")
     except httpx.HTTPError as e:
-        return f"（抓取失败：{e}）"
+        return error(f"抓取失败：{e}")
     text = _to_text(raw)
-    return text or "（页面无可读正文）"
+    return text or empty("页面无可读正文。")
 
 
 WEB_FETCH = Skill(

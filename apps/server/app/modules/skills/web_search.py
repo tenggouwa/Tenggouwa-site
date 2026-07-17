@@ -16,6 +16,7 @@ import socket
 import httpx
 
 from .base import Skill
+from .results import empty, error
 
 _HOST = "www.bing.com"
 _MAX_RESULTS = 6
@@ -69,7 +70,7 @@ async def _handler(_session, args: dict) -> str:
     try:
         ipv4 = socket.getaddrinfo(_HOST, 443, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
     except OSError as e:
-        return f"（搜索失败：无法解析 {_HOST}（{e.strerror or e}））"
+        return error(f"搜索失败：无法解析 {_HOST}（{e.strerror or e}）")
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=6.0), follow_redirects=True) as client:
             resp = await client.get(
@@ -81,10 +82,10 @@ async def _handler(_session, args: dict) -> str:
             resp.raise_for_status()
             body = resp.text
     except httpx.HTTPError as e:
-        return f"（搜索失败：{e}）"
+        return error(f"搜索失败：{e}")
     results = _parse(body)
     if not results:
-        return "（没搜到结果，换个关键词或改用 web_fetch 直接抓已知链接。）"
+        return empty("没搜到结果，换个关键词或改用 web_fetch 直接抓已知链接。")
     # 给出可粘贴的 markdown 链接，模型综合时可直接回引来源。
     blocks = [f"[{i}] [{r['title']}]({r['url']})\n{r['snippet']}" for i, r in enumerate(results, 1)]
     return "\n\n".join(blocks)
