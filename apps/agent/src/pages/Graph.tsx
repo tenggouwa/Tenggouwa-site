@@ -66,6 +66,7 @@ export default function Graph() {
   const [detail, setDetail] = useState<Neighborhood | null>(null);
   const [selId, setSelId] = useState<number | null>(null);
   const [query, setQuery] = useState('');
+  const [hidden, setHidden] = useState<Set<Series>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
 
   const fgRef = useRef<ForceGraphMethods<NodeObject<GNode>, LinkObject<GNode, GLink>>>(undefined);
@@ -113,15 +114,50 @@ export default function Graph() {
     return m;
   }, [full]);
 
-  // 关键词列表：所有有边节点按重要度排（出现文章数 → 度数）。搜索时就地过滤。
+  const nodeSeries = useMemo(() => {
+    const m = new Map<number, Series>();
+    full?.nodes.forEach((n) => m.set(n.id, n.series));
+    return m;
+  }, [full]);
+  const seriesOf = useCallback(
+    (end: LinkObject<GNode, GLink>['source']) =>
+      typeof end === 'object' ? ((end as GNode).series ?? 'other') : (nodeSeries.get(end as number) ?? 'other'),
+    [nodeSeries],
+  );
+
+  // 关键词列表：所有有边节点按重要度排（出现文章数 → 度数）。搜索 + 系列过滤就地生效。
   const keywords = useMemo(() => {
     if (!full) return [];
     return [...full.nodes].sort((a, b) => b.docs - a.docs || b.deg - a.deg);
   }, [full]);
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? keywords.filter((n) => n.name.toLowerCase().includes(q)) : keywords;
-  }, [keywords, query]);
+    return keywords.filter(
+      (n) => !hidden.has(n.series) && (!q || n.name.toLowerCase().includes(q)),
+    );
+  }, [keywords, query, hidden]);
+
+  const toggleSeries = useCallback(
+    (s: Series) =>
+      setHidden((h) => {
+        const next = new Set(h);
+        if (next.has(s)) next.delete(s);
+        else next.add(s);
+        return next;
+      }),
+    [],
+  );
+
+  // 重置布局：松开所有拖拽固定（清 fx/fy）+ 重新加热力模拟 + 复位镜头。
+  const resetLayout = useCallback(() => {
+    data.nodes.forEach((n) => {
+      const node = n as NodeObject<GNode>;
+      node.fx = undefined;
+      node.fy = undefined;
+    });
+    fgRef.current?.d3ReheatSimulation();
+    fitted.current = false;
+  }, [data]);
 
   const focus = useCallback(
     (id: number) => {
@@ -283,13 +319,34 @@ export default function Graph() {
               <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
               <span className="w-3 h-3 rounded-full bg-[#28c840]" />
               <span className="text-[11px] ml-2 text-terminal-gray/60">~/graph</span>
-              <div className="ml-auto flex items-center gap-3 text-[11px] text-terminal-gray/50">
-                {(['ai', 'linux', 'other'] as const).map((s) => (
-                  <span key={s} className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full" style={{ background: SERIES_COLOR[s] }} />
-                    {SERIES_LABEL[s]}
-                  </span>
-                ))}
+              <button
+                type="button"
+                onClick={resetLayout}
+                className="text-[11px] ml-2 text-terminal-gray/40 hover:text-terminal-green"
+                title="松开拖拽固定 + 重新布局"
+              >
+                重置
+              </button>
+              {/* 图例即开关：点一下隐藏/点亮该系列 */}
+              <div className="ml-auto flex items-center gap-2.5 text-[11px]">
+                {(['ai', 'linux', 'other'] as const).map((s) => {
+                  const off = hidden.has(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => toggleSeries(s)}
+                      className={
+                        'flex items-center gap-1 transition-opacity ' +
+                        (off ? 'opacity-30 line-through' : 'text-terminal-gray/60 hover:text-terminal-gray')
+                      }
+                      title={off ? '点亮' : '隐藏'}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ background: SERIES_COLOR[s] }} />
+                      {SERIES_LABEL[s]}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -305,7 +362,9 @@ export default function Graph() {
               nodeCanvasObject={paintNode}
               nodePointerAreaPaint={paintPointer}
               nodeLabel={(n) => (n as NodeObject<GNode>).name}
+              nodeVisibility={(n) => !hidden.has((n as NodeObject<GNode>).series)}
               linkColor={linkColor}
+              linkVisibility={(l) => !hidden.has(seriesOf(l.source)) && !hidden.has(seriesOf(l.target))}
               linkWidth={(l) =>
                 selId != null && (linkEnd(l.source) === selId || linkEnd(l.target) === selId) ? 1.6 : 0.6
               }
@@ -314,6 +373,11 @@ export default function Graph() {
               d3VelocityDecay={0.32}
               warmupTicks={24}
               onNodeClick={(n) => focus(n.id as number)}
+              onNodeDragEnd={(n) => {
+                // 拖到哪固定在哪：fx/fy 锁住位置，力模拟不再把它拽回去。「重置」清除。
+                n.fx = n.x;
+                n.fy = n.y;
+              }}
               onBackgroundClick={() => {
                 setSelId(null);
                 setDetail(null);

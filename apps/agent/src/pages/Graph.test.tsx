@@ -93,4 +93,15 @@ describe('Graph 概念图谱页（力导向全图）', () => {
     fireEvent.click(screen.getByText('Docker'));
     await waitFor(() => expect(screen.getByText('《GPT 家族》')).toBeTruthy());
   });
+
+  it('点图例系列开关 → 该系列从列表里过滤掉', async () => {
+    stub();
+    render(<Graph />, { wrapper: MemoryRouter });
+    // Docker 是 linux 系列，初始在列表里
+    await waitFor(() => expect(screen.getByText('Docker')).toBeTruthy());
+    fireEvent.click(screen.getByText('linux 系列')); // 隐藏 linux
+    await waitFor(() => expect(screen.queryByText('Docker')).toBeNull());
+    // Transformer 是 ai 系列，仍在（node:Transformer 是 mock 图节点，列表项是纯 Transformer）
+    expect(screen.getByText('Transformer')).toBeTruthy();
+  });
 });
