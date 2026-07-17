@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from collections.abc import AsyncIterator
 
 from db.models import AgentMessageRow
@@ -69,6 +70,7 @@ REASONER_MODEL = os.environ.get("KB_LLM_REASONER_MODEL") or "deepseek-reasoner"
 MAX_SUBAGENTS_PER_TURN = 2  # 每个用户轮最多派几个子代理，防主代理狂开（实测会一口气开 4 个）
 MAX_PARALLEL_TOOLS = 6  # 同一批 parallel-safe 工具的并发上限（对齐 Codex max_threads=6）
 _SEARCH_SKILLS = {"web_search", "kb_search"}  # 按 query 去重的检索类工具，挡反复换措辞搜同一件事
+MAX_SEARCHES_PER_TURN = 6  # 每轮不同检索的硬上限——归一化去重挡不住的换角度重搜，靠它兜底（实测能搜 13 次）
 
 LEAK_TOKEN = "｜"  # ｜ DeepSeek tool-call 特殊 token 分隔符；正常文本/代码不会出现，用作泄漏起点
 
@@ -129,19 +131,30 @@ def _load_tools(args: dict, state: dict) -> str:
     return msg + (f"（忽略未知：{'、'.join(bad)}）" if bad else "")
 
 
+def _norm_query(q: str) -> str:
+    """归一化检索 query：小写 + 去标点/空白，让「大模型省显存?」和「大模型 省显存」算同一个。
+
+    \\W 在 str 上默认按 Unicode 判定，CJK 属 word 字符会保留，被删的只是标点和空白。
+    """
+    return re.sub(r"[\W_]+", "", q.lower())
+
+
 def _turn_cap(name: str, args: dict, state: dict) -> str | None:
-    """本轮收敛闸：返回非 None 表示这次工具调用被拦（子代理超限 / 检索重复），用返回文案当结果、不真执行。"""
+    """本轮收敛闸：返回非 None 表示这次工具调用被拦（子代理超限 / 检索重复或超量），用返回文案当结果、不真执行。"""
     if name == SUBAGENT_SKILL:
         if state["subagents"] >= MAX_SUBAGENTS_PER_TURN:
             return f"（本轮子代理已达上限 {MAX_SUBAGENTS_PER_TURN} 个，别再派了，用现有信息直接作答。）"
         state["subagents"] += 1
         return None
     if name in _SEARCH_SKILLS:
-        q = str(args.get("query", "")).strip().lower()
-        if q and q in state["searched"]:
+        q = _norm_query(str(args.get("query", "")))
+        if not q:
+            return None
+        if q in state["searched"]:
             return "（这个查询本轮已经搜过了，别重复搜同一件事；用已有结果，或换一个实质不同的角度。）"
-        if q:
-            state["searched"].add(q)
+        if len(state["searched"]) >= MAX_SEARCHES_PER_TURN:
+            return f"（本轮检索已达上限 {MAX_SEARCHES_PER_TURN} 次，别再搜了，用已经拿到的结果作答。）"
+        state["searched"].add(q)
     return None
 
 
