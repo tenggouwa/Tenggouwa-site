@@ -10,6 +10,7 @@ from .file_ops import FILE_EDIT, FILE_LIST, FILE_READ, FILE_WRITE
 from .git_ops import GIT
 from .kb_graph import KB_GRAPH
 from .kb_search import KB_SEARCH
+from .memory_skill import FORGET, REMEMBER
 from .shell_exec import SHELL_EXEC
 from .subagent import SUBAGENT
 from .update_plan import UPDATE_PLAN
@@ -38,4 +39,7 @@ REGISTRY: dict[str, Skill] = {
     GIT.name: GIT,
     # kb_graph（readonly + 公开，概念图谱：结构/关系，与 kb_search 的块检索互补）
     KB_GRAPH.name: KB_GRAPH,
+    # remember / forget（private + write 但免批，agent 的 owner 维度长期记忆）
+    REMEMBER.name: REMEMBER,
+    FORGET.name: FORGET,
 }

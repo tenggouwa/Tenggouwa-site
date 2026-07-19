@@ -576,6 +576,28 @@ class AgentSessionRow(Base):
     __table_args__ = (Index("ix_agent_session_owner_updated", "owner", "updated_at"),)
 
 
+class AgentMemoryRow(Base):
+    """agent 的长期记忆：owner 维度、跨会话——让它越用越懂 owner。
+
+    content 存一条自足的事实（「用户偏好 X」「项目约定 Y」）；embedding 供按相关度召回。
+    owner 非空：记忆只属私有通道该 owner，公开通道无 owner、拿不到也写不了（复用会话 owner 隔离）。
+    """
+
+    __tablename__ = "agent_memory"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    # 同 kb_chunk：nullable 让未配嵌入（缺 KB_EMBED_API_KEY）时也能存，召回降级为最近 N 条
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (Index("ix_agent_memory_owner", "owner", "created_at"),)
+
+
 class AgentMessageRow(Base):
     """会话内一条消息，append-only。role ∈ user | assistant | tool。"""
 

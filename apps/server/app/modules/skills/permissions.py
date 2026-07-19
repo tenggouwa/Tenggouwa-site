@@ -10,12 +10,14 @@ from ..mcp.manager import mcp_manager
 from .registry import REGISTRY
 
 _CONTROL = {"update_plan", "ask_user"}  # 控制流，无外部副作用
+# 写自己的记忆：owner 内部、无外部副作用 → 免批；但仍是 write，不进 is_parallel_safe（dedup 读改写要串行）。
+_AUTO_WRITE = {"remember", "forget"}
 
 
 def requires_approval(name: str) -> bool:
     # 顺序（先原生后 MCP）与 skills_service.invoke（先 MCP）相反，但不冲突：MCP 工具名恒含 `__`
     # （<server>__<tool>），原生名均无 `__`，两集合不相交。将来若加含 `__` 的原生名需对齐两处。
-    if name in _CONTROL:
+    if name in _CONTROL or name in _AUTO_WRITE:
         return False
     skill = REGISTRY.get(name)
     if skill is not None:
