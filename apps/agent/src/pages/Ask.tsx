@@ -6,6 +6,7 @@ import AskPanel, { type AskQuestion } from '../components/AskPanel';
 import ApprovalCard, { type ApprovalRequest } from '../components/ApprovalCard';
 import UnlockPanel from '../components/UnlockPanel';
 import SessionList from '../components/SessionList';
+import MemoryList from '../components/MemoryList';
 
 // agent 对话：公开走 POST /api/public/agent/chat；私有模式（TOTP 解锁）走 /api/agent/chat + Bearer，
 // 额外拿到文件读写等高危工具，write 操作触发 C2 审批卡。SSE 事件 tool/token/plan/ask/approval/done。
@@ -389,10 +390,11 @@ export default function Ask() {
       </div>
 
       <div className="relative">
-        {/* 私有模式常驻会话侧栏：绝对定位进左侧留白，不占聊天区宽度；窄屏无留白则收起 */}
+        {/* 私有模式常驻侧栏：会话 + 记忆。绝对定位进左侧留白，不占聊天区宽度；窄屏无留白则收起 */}
         {agentToken && (
-          <aside className="hidden min-[1360px]:block absolute top-0 right-full mr-4 w-52 z-10">
+          <aside className="hidden min-[1360px]:flex flex-col gap-3 absolute top-0 right-full mr-4 w-52 z-10">
             <SessionList token={agentToken} currentId={sessionId.current} onOpen={loadSession} busy={busy} />
+            <MemoryList token={agentToken} />
           </aside>
         )}
 

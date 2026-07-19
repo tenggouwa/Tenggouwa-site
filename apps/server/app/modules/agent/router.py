@@ -11,12 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
 from ..mcp.manager import mcp_manager
+from ..memory.store import MemoryStore
 from ..terminal.service import terminal_service
 from ..totp.repository import AdminTotpRepository
 from .auth import current_agent_owner, make_agent_token
 from .repository import AgentRepository
 from .schema import (
     AgentChatRequest,
+    AgentMemoryItem,
     AgentSessionInfo,
     AgentTranscript,
     AgentTranscriptTurn,
@@ -159,4 +161,26 @@ async def delete_session(
     """删除该 owner 名下的一个会话（连带消息）。"""
     repo = await _owned_session(sid, owner, session)
     await repo.delete_session(sid)
+    return ResponseModel(data={"deleted": True})
+
+
+@private_router.get("/memories", response_model=ResponseModel[list[AgentMemoryItem]])
+async def list_memories(
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[AgentMemoryItem]]:
+    """列出该 owner 的长期记忆（最近在前），供前端「记忆」面板查看 / 手动删。"""
+    rows = await MemoryStore(session).list_all(owner)
+    return ResponseModel(data=[AgentMemoryItem(**r) for r in rows])
+
+
+@private_router.delete("/memories/{mid}", response_model=ResponseModel[dict])
+async def delete_memory(
+    mid: int,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """删该 owner 名下一条记忆。owner 圈定，删不到（不存在 / 不属于你）→ 404。"""
+    if not await MemoryStore(session).delete_by_id(owner, mid):
+        raise HTTPException(status_code=404, detail="记忆不存在")
     return ResponseModel(data={"deleted": True})
