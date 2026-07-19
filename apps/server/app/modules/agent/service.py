@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..kb.provider import chat_llm
 from ..mcp.manager import mcp_manager
+from ..memory.store import MemoryStore, current_owner
 from ..skills.permissions import is_parallel_safe, requires_approval
 from ..skills.service import LOAD_TOOLS, skills_service
 from ..skills.shell_exec import SHELL_SKILL, stream_exec
@@ -183,6 +184,7 @@ class AgentService:
         deep: bool = False,
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
+        current_owner.set(owner)  # 让 remember/forget 拿到本轮 owner（skill handler 签名不带 owner，走 ContextVar）
         model = REASONER_MODEL if deep else None  # 深度思考 → 换推理模型（带 reasoning_content 思维链）
         existing = await repo.get_session(session_id) if session_id else None
         # owner 隔离：只续自己名下的会话；owner 不匹配（公开想读私有 / 跨 owner / 陈旧 id）→ 当作新会话，绝不泄漏历史。
@@ -230,6 +232,7 @@ class AgentService:
             await repo.append(sid, seq, "user", q)
             seq += 1
             messages = self._seed(window, privileged)
+            await self._inject_memories(session, messages, privileged, owner, q)
             messages.append({"role": "user", "content": q})
 
         # 统一流式循环：每轮都带 tools 流式跑——正文实时显示、tool_calls 从结构化 delta 解析执行。
@@ -331,6 +334,29 @@ class AgentService:
             messages.append({"role": "system", "content": f"[早前对话摘要]\n{window.summary}"})
         messages.extend(window.messages)
         return messages
+
+    @staticmethod
+    async def _inject_memories(session, messages: list[dict], privileged: bool, owner: str | None, q: str) -> None:
+        """私有会话：召回该 owner 与本轮问题相关的长期记忆，作为一条 system 备注注入。
+
+        位置在稳定缓存前缀（SYSTEM+tools）之后、与 summary/历史同属动态区，不破 prompt cache。
+        召回失败不该拖垮回答——记忆是加分项，吞掉异常继续。
+        """
+        if not (privileged and owner):
+            return
+        try:
+            mems = await MemoryStore(session).recall(owner, q)
+        except Exception:  # noqa: BLE001 —— 记忆召回失败只记日志，正常作答
+            logger.exception("记忆召回失败，跳过注入")
+            return
+        if not mems:
+            return
+        note = (
+            "[关于当前用户，你此前记住的]\n"
+            + "\n".join(f"- {m}" for m in mems)
+            + "\n（这些是你的长期记忆，仅供参考、可能过时；与当前对话冲突时以对话为准。）"
+        )
+        messages.append({"role": "system", "content": note})
 
     async def _exec_one(self, session, name, args, tid, approvals, privileged, turn_state, emit) -> str:
         """跑一个 tool_call 拿结果字符串；流式增量经 emit 回调发出（并发时由队列汇总回主流）。
