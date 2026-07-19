@@ -21,8 +21,9 @@ class _Row:
 
 
 class _Result:
-    def __init__(self, rows):
+    def __init__(self, rows, rowcount=0):
         self._rows = rows
+        self.rowcount = rowcount
 
     def first(self):
         return self._rows[0] if self._rows else None
@@ -119,3 +120,9 @@ def test_registered_private_write():
     for name in ("remember", "forget"):
         s = REGISTRY[name]
         assert s.private is True and s.risk == "write"
+
+
+async def test_delete_by_id_reports_hit():
+    """删到（rowcount>0）→ True；删不到（不存在/不属于该 owner）→ False。"""
+    assert await MemoryStore(_Session([_Result([], rowcount=1)])).delete_by_id("u", 3) is True
+    assert await MemoryStore(_Session([_Result([], rowcount=0)])).delete_by_id("u", 3) is False

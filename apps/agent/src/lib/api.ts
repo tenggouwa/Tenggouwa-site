@@ -77,6 +77,17 @@ export const getTranscript = (token: string, sid: string) => agentApi<Transcript
 export const deleteSession = (token: string, sid: string) =>
   agentApi<{ deleted: boolean }>(`/sessions/${sid}`, token, { method: 'DELETE' });
 
+// 长期记忆（记忆面板）：列 / 删。仅私有通道。
+export interface MemoryItem {
+  id: number;
+  content: string;
+  created_at: string;
+}
+
+export const listMemories = (token: string) => agentApi<MemoryItem[]>('/memories', token);
+export const deleteMemory = (token: string, mid: number) =>
+  agentApi<{ deleted: boolean }>(`/memories/${mid}`, token, { method: 'DELETE' });
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

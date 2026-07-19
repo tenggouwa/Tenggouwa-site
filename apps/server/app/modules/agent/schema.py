@@ -28,6 +28,14 @@ class AgentSessionInfo(BaseModel):
     updated_at: str
 
 
+class AgentMemoryItem(BaseModel):
+    """长期记忆列表里的一条（记忆面板用）。"""
+
+    id: int
+    content: str
+    created_at: str
+
+
 class AgentTranscriptTurn(BaseModel):
     q: str
     tools: list[dict] = Field(default_factory=list)  # [{name, args}]

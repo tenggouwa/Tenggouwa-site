@@ -133,6 +133,14 @@ class MemoryStore:
         ).all()
         return [{"id": r.id, "content": r.content, "created_at": r.created_at.isoformat()} for r in rows]
 
+    async def delete_by_id(self, owner: str, mid: int) -> bool:
+        """删某 owner 名下一条记忆（面板手动删）。owner 圈定，删不到不泄漏「存在但不属于你」。"""
+        res = await self.session.execute(
+            delete(AgentMemoryRow).where(AgentMemoryRow.id == mid, AgentMemoryRow.owner == owner)
+        )
+        await self.session.flush()
+        return (res.rowcount or 0) > 0
+
     async def count(self, owner: str) -> int:
         return (
             await self.session.execute(select(func.count(AgentMemoryRow.id)).where(AgentMemoryRow.owner == owner))
