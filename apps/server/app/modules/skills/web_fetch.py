@@ -10,7 +10,7 @@
 import ipaddress
 import re
 import socket
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunsplit
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,17 +25,33 @@ _ANY_TAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"\n{3,}")
 
 
-def _host_is_public(host: str) -> bool:
-    """host 解析到的所有 IP 都必须是全局可路由地址，否则判为 SSRF 拒绝。"""
+def _public_ips(host: str) -> list[str]:
+    """Resolve once and return public IPs only; an empty list means reject."""
     try:
         infos = socket.getaddrinfo(host, None)
     except OSError:
-        return False
+        return []
+    ips: list[str] = []
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            return False
-    return True
+        if not ip.is_global:
+            return []
+        value = str(ip)
+        if value not in ips:
+            ips.append(value)
+    return sorted(ips, key=lambda value: ipaddress.ip_address(value).version)  # IPv4 first; prod has no IPv6 route
+
+
+def _host_is_public(host: str) -> bool:
+    """Compatibility helper used by tests and diagnostics."""
+    return bool(_public_ips(host))
+
+
+def _pinned_url(parsed, ip: str) -> str:
+    """Build a URL that connects to the already-validated IP, avoiding a second DNS lookup."""
+    address = f"[{ip}]" if ":" in ip else ip
+    netloc = f"{address}:{parsed.port}" if parsed.port else address
+    return urlunsplit((parsed.scheme, netloc, parsed.path or "/", parsed.query, ""))
 
 
 def _to_text(body: str) -> str:
@@ -50,11 +66,20 @@ async def _handler(_session: AsyncSession, args: dict) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return "（只支持 http/https URL）"
-    if not _host_is_public(parsed.hostname):
+    ips = _public_ips(parsed.hostname)
+    if not ips:
         return "（拒绝：目标不是公网地址）"
+    host_header = parsed.hostname
+    if parsed.port:
+        host_header = f"{host_header}:{parsed.port}"
+    target = _pinned_url(parsed, ips[0])
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0), follow_redirects=False) as client:
-            resp = await client.get(url, headers={"User-Agent": "tenggouwa-agent/1.0"})
+            resp = await client.get(
+                target,
+                headers={"User-Agent": "tenggouwa-agent/1.0", "Host": host_header},
+                extensions={"sni_hostname": parsed.hostname},
+            )
             if resp.is_redirect:
                 return f"（目标发生重定向到 {resp.headers.get('location', '?')}，未跟随）"
             resp.raise_for_status()
@@ -78,4 +103,5 @@ WEB_FETCH = Skill(
         "required": ["url"],
     },
     handler=_handler,
+    parallel_safe=True,
 )

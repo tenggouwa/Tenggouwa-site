@@ -28,8 +28,9 @@ def requires_approval(name: str) -> bool:
 
 
 def is_parallel_safe(name: str) -> bool:
-    """能否与同批其它工具并发执行（E2）：只放行无副作用的原生 readonly / 控制类。
+    """能否与同批其它工具并发执行（E2）：只放行显式声明安全的 readonly / 控制类。
 
+    共享请求 AsyncSession 的 KB / 子代理工具也必须串行；AsyncSession 不能被多个 task 并发使用。
     write 原生（file_write/file_edit/shell_exec/git）一律串行：它们都走 Pi 沙箱，而 Pi 侧 exec 循环本就
     一次跑一条——并发提交只会互相排队、各自的超时却在空转，还可能对同一 workspace 竞态。
     MCP 工具行为未知，保守串行。
@@ -37,4 +38,4 @@ def is_parallel_safe(name: str) -> bool:
     if name in _CONTROL:
         return True
     skill = REGISTRY.get(name)
-    return skill is not None and skill.risk == "readonly"
+    return skill is not None and skill.risk == "readonly" and skill.parallel_safe

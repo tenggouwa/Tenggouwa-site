@@ -5,6 +5,7 @@ summarized_upto_seq 之后的窗口，配合 sessions.summary 重建 LLM message
 """
 
 import json
+from datetime import datetime
 from uuid import uuid4
 
 from db.models import AgentMessageRow, AgentSessionRow
@@ -88,6 +89,14 @@ class AgentRepository:
         """删除会话及其消息（message 表有 ON DELETE CASCADE，删 session 即连带清）。"""
         await self.session.execute(delete(AgentSessionRow).where(AgentSessionRow.id == sid))
         await self.session.flush()
+
+    async def delete_anonymous_before(self, cutoff: datetime) -> int:
+        """Delete expired public sessions; private owner data is never included."""
+        result = await self.session.execute(
+            delete(AgentSessionRow).where(AgentSessionRow.owner.is_(None), AgentSessionRow.updated_at < cutoff)
+        )
+        await self.session.flush()
+        return result.rowcount or 0
 
     async def load_window(self, sid: str) -> AgentWindow:
         """取 summarized_upto_seq 之后的消息 + summary，组装成 LLM messages。"""

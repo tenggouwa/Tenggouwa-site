@@ -4,13 +4,15 @@
 web_fetch 的拒绝分支在任何请求之前就返回。
 """
 
+from urllib.parse import urlparse
+
 import pytest
 from modules.agent.service import _est_tokens, _strip_leak
 from modules.kb.provider import _merge_tool_call_deltas
 from modules.skills.ask_user import _handler as ask_handler
 from modules.skills.update_plan import _handler as plan_handler
 from modules.skills.web_fetch import _handler as fetch_handler
-from modules.skills.web_fetch import _host_is_public, _to_text
+from modules.skills.web_fetch import _host_is_public, _pinned_url, _to_text
 
 # ---------- stream_step 的 tool_calls 分片累积 ----------
 
@@ -125,13 +127,26 @@ async def test_plan_bad_status_falls_back_to_pending():
 # ---------- web_fetch SSRF 守卫 ----------
 
 
-@pytest.mark.parametrize("host", ["127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.1.1", "0.0.0.0"])
+@pytest.mark.parametrize(
+    "host",
+    ["127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.1.1", "100.64.0.1", "0.0.0.0"],
+)
 def test_host_private_rejected(host):
     assert _host_is_public(host) is False
 
 
 def test_host_public_ok():
     assert _host_is_public("8.8.8.8") is True
+
+
+def test_pinned_url_uses_validated_ip_and_keeps_path_query():
+    parsed = urlparse("https://example.com:8443/a/b?q=1#fragment")
+    assert _pinned_url(parsed, "8.8.8.8") == "https://8.8.8.8:8443/a/b?q=1"
+
+
+def test_pinned_url_brackets_ipv6():
+    parsed = urlparse("https://example.com/a")
+    assert _pinned_url(parsed, "2001:4860:4860::8888") == "https://[2001:4860:4860::8888]/a"
 
 
 async def test_fetch_rejects_non_http():

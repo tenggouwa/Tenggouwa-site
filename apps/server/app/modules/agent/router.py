@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 
-from common.rate_limit import client_ip, unlock_limiter
+from common.rate_limit import client_ip, public_agent_limiter, unlock_limiter
 from db import get_session
 from dependencies import current_admin
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -104,8 +104,10 @@ def _chat_stream(
 @public_router.post("/chat")
 async def chat(
     payload: AgentChatRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
+    public_agent_limiter.hit(client_ip(request))
     return _chat_stream(session, payload, privileged=False)  # owner=None：公开会话不归属，也不进「我的会话」
 
 

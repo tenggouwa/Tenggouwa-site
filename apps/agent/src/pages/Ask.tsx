@@ -116,6 +116,7 @@ export default function Ask() {
   const [unlockError, setUnlockError] = useState<string | undefined>();
   const [autoRun, setAutoRun] = useState(false); // auto 模式：私有沙箱内自动执行、免逐条审批
   const [deepThink, setDeepThink] = useState(false); // 深度思考：换 deepseek-reasoner，显示思维链
+  const [sessionRevision, setSessionRevision] = useState(0); // 新建/更新会话后刷新私有侧栏
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -223,7 +224,11 @@ export default function Ask() {
     } catch {
       return;
     }
-    if (event === 'session') sessionId.current = obj.session_id ?? sessionId.current;
+    if (event === 'session') {
+      const next = obj.session_id ?? sessionId.current;
+      if (next !== sessionId.current) setSessionRevision((v) => v + 1);
+      sessionId.current = next;
+    }
     else if (event === 'usage') updateTurn(idx, (t) => ({ ...t, usage: obj }));
     else if (event === 'plan') updateTurn(idx, (t) => ({ ...t, plan: obj.plan ?? [] }));
     else if (event === 'approval') updateTurn(idx, (t) => ({ ...t, approval: obj.requests ?? [] }));
@@ -242,7 +247,10 @@ export default function Ask() {
     else if (event === 'reasoning')
       updateTurn(idx, (t) => ({ ...t, reasoning: (t.reasoning ?? '') + (obj.delta ?? '') }));
     else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
-    else if (event === 'done') updateTurn(idx, (t) => ({ ...t, done: true }));
+    else if (event === 'done') {
+      updateTurn(idx, (t) => ({ ...t, done: true }));
+      if (agentToken) setSessionRevision((v) => v + 1);
+    }
     else if (event === 'error') updateTurn(idx, (t) => ({ ...t, error: obj.message ?? '出错了', done: true }));
   }
 
@@ -393,7 +401,13 @@ export default function Ask() {
         {/* 私有模式常驻侧栏：会话 + 记忆。绝对定位进左侧留白，不占聊天区宽度；窄屏无留白则收起 */}
         {agentToken && (
           <aside className="hidden min-[1360px]:flex flex-col gap-3 absolute top-0 right-full mr-4 w-52 z-10">
-            <SessionList token={agentToken} currentId={sessionId.current} onOpen={loadSession} busy={busy} />
+            <SessionList
+              token={agentToken}
+              currentId={sessionId.current}
+              onOpen={loadSession}
+              busy={busy}
+              refreshKey={sessionRevision}
+            />
             <MemoryList token={agentToken} />
           </aside>
         )}
