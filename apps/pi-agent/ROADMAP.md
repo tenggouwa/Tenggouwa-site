@@ -11,20 +11,25 @@
 - **部署链路加固**：健康校验 + sha 回滚 + BuildKit cache + frozen-only + .dockerignore。
 - **快照保留**：ingest 时删 >14 天旧行，表不无限涨。
 - **Day A 遥测收尾**：`/pi` history 按 hostname 过滤（#81），测试行被动消失（过滤 + prune）。
+- **Agent 沙箱执行节点**：HTTP 长轮询取得批准后的命令，在默认无网的 bwrap workspace 执行；
+  支持 shell 流式输出、文件工具和 git 白名单操作（PR #156–#163、#175）。
 
 ## ⬜ 待办（按天）
 
 ### Day A — 遥测收尾（小）✅ 完成
+
 - [x] `/pi` history 按 hostname 过滤（#81）。
 - [x] 测试行：过滤后不显示 + 保留策略 14 天内 prune（不强删 prod DB）。
 - [ ] （可选，未做）/pi 面板加网络吞吐 / 进程数等指标。
 
 ### Day B — Phase 2：Pi 接进 `/console` 终端 fleet
+
 - [ ] 复用 mac-agent 的 outbound WSS PTY 协议，让 Pi 注册成一个 terminal agent。
 - [ ] admin 发 agent token，Pi 上加一个 PTY module（或直接复用 mac-agent 跑在 Pi 上）。
 - [ ] 验证从网站 `/console` / 手机能开 Pi 的终端。
 
 ### Day C-D — Phase 3：HID 远程打字机（签名玩法）
+
 - [ ] 这台 Pi 本就是 USB HID gadget；研究现有 gadget 配置（`/dev/hidg0`、键盘 report descriptor）。
 - [ ] 后端加指令队列：网页提交文本/脚本 → 队列；Pi 在线时拉取。
 - [ ] pi-agent 加 HID module：把指令写进 `/dev/hidg0`，回执状态。
@@ -32,16 +37,19 @@
 - [ ] 安全：只对自己的机器、明确授权场景。
 
 ### 监控探针 ✅ 完成
+
 - [x] Pi 每 60s 探测：你的服务 HTTP 延迟/可用性（api/site）+ Cloudflare speed 端点下行吞吐。
 - [x] 后端 `pi_probe` 表 + ingest/public 端点；`/pi` 每目标一行：状态点 + 当前值 + sparkline。
 
 ### Phase 4 + 5 — "Pi 每日产物" ✅ 完成（合并实现）
+
 - [x] Pi 每天自己算一张 ASCII 曼德博集合（区域随日期变）+ 真实渲染耗时（Phase 4 "live on a Pi"）。
 - [x] 每日生成 + POST，`/pi` 展示 + "🍓 由 ops-pi 实时计算 · Xms" 徽章 + 每日一句（Phase 5）。
 - [x] 后端 `pi_artifact` 表 + ingest/public 端点；走已验证的 stdlib-HTTP-经代理路。
 - 后续可加更多 kind（fortune / git 活动图）。
 
 ### ⬜ 仍未做
+
 - **Phase 2 /console PTY**：这网最难（WSS 穿代理 + 装 websockets + Pi 无 pip/venv），暂缓。
 - **Phase 3 HID 远程打字机**：签名玩法；传输走 HTTP 易，难点是把 `/dev/hidg0` gadget 跑起来。
 
@@ -50,8 +58,7 @@
 - [ ] `google-api-python-client`(14.6MB) 挪成可选依赖，给后端镜像/构建瘦身。
 - [ ] Tailwind v4 升级（#30）仍 hold：typography/prose 在 v4 不生成，会破文章页。
 
-## 环境备忘（ops-pi）
+## 环境备忘
 
-`ssh pi`（key `~/.ssh/id_pi`，sudo 密码在 `~/.ssh/pi-credentials.txt`）。在公司网需代理
-`http://192.168.30.55:7890` 出公网；无 RTC 靠 `synctime.sh` 开机校时；CF 默认拦
-`Python-urllib` UA，agent 已设自定义 UA。
+Pi 可能处在需要代理才能出公网的网络；代理和凭据只放 systemd env/本机 secret，不在仓库记录具体地址。
+无 RTC 时由 `synctime.sh` 开机校时；Cloudflare 对默认 `Python-urllib` UA 的兼容问题已通过自定义 UA 处理。

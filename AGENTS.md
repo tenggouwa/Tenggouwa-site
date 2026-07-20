@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 Tenggouwa-site 是一个 monorepo：
 

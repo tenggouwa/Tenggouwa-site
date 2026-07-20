@@ -1,4 +1,8 @@
-# PostgreSQL 部署 / 运维
+# PostgreSQL 部署 / 运维（legacy 宿主机方案）
+
+> 当前生产使用 `apps/server/docker-compose.prod.yml` 中的 `pgvector/pgvector:pg16` 与 named volume，
+> 日常部署见 [deploy/README.md](README.md)。本文保留早期宿主机 PostgreSQL + systemd 方案，除非明确
+> 放弃 Docker Compose，否则不要照此操作生产环境。
 
 ## 本地开发
 

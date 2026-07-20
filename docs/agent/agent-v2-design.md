@@ -1,5 +1,9 @@
 # apps/agent v2 设计:把内核对齐 Codex / Claude Code
 
+> **历史设计（2026-07-08）**：P1–P4 已落地，之后又完成审批、Pi 沙箱、MCP、子代理、图谱与长期记忆。
+> 下文的“现状/非目标”是开工时快照，并非当前限制。当前实现见
+> [apps/agent README](../../apps/agent/README.md) 和 [当前架构](../architecture.md)。
+
 > 前置调研:[docs/agent/agent-architecture-research.md](./agent-architecture-research.md)(两家逐层拆解 + 对比)。
 > 本文档是那份调研的**落地版**——只挑对个人 KB agent 真正有用的 harness 模式,钉在本仓库真实代码上,给出表结构、消息装配、工具 schema、compaction 阈值与 PR 切分。
 >

@@ -5,7 +5,7 @@
 
 ## 怎么工作
 
-```
+```text
 Mac (本机)
   ├── ~/.tenggouwa-agent/.venv/bin/python -m agent.main
   ├── 持续 outbound WSS 到 wss://api.tenggouwa.com/api/agent/ws

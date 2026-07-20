@@ -1,5 +1,9 @@
 # KB — 个人知识库问答系统 · 设计文档 (v1 draft)
 
+> **历史设计**：blog ingestion、混合检索和引用已上线；后续还加入了 GraphRAG、概念图谱和发文即时追平，
+> 因此下文把 GraphRAG 列为非目标只代表 v1 边界。当前状态见 [kb-todo.md](kb-todo.md) 和
+> [当前架构](../architecture.md)。
+
 > 目标：在现有 `apps/server`（FastAPI + PostgreSQL）里落一套**源无关（source-agnostic）的可插拔知识库**，
 > blog 只是接进来的第一个数据源，未来接笔记 / 代码 / web / 外部资料。站内提供一个终端风的 AI 问答，
 > 答案带**引用回链**。工程由本仓库实现；用到 LLM 的地方走可配置的 OpenAI 兼容端点（生成用 DeepSeek）。

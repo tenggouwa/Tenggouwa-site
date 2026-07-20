@@ -1,15 +1,18 @@
 # apps/agent → 「像 Claude/Codex」的分阶段 roadmap（细化版）
 
-> ## ✅ 收官状态（2026-07-15 复盘，PR #145–#178）
+> ## ✅ 收官状态（2026-07-20 复盘，PR #139–#208）
 >
-> **已落地**：A0 全五层测试地基（含夜间 live cron #178）· A1 重试 · A2 截断 · A3 取消清理(#177) · A4 用量 ·
-> B2 MCP 框架(默认关) · C1 分级 · C2 审批 · D0/D1/D2 沙箱+文件+shell · E1 子代理(#173) · E2 并发(#176)+深度/数量上限(#174) ·
-> F2 会话列表+续聊(#165) · F3 reasoner(#172) · F4 思维链露出(#172)。
-> 计划外补的：web_search(#170/#171) · citations 回引用(#169) · git skill(#175) · file_edit(#163) · 多会话 owner 隔离(#165)。
+> **A–F 主线已落地**：五层测试地基与 nightly live eval、重试/截断/取消/用量、MCP 客户端、
+> 权限分级与审批、Pi + bwrap 沙箱、文件/shell/git、子代理与 readonly 并发、会话续聊、reasoner 和思维过程。
+>
+> **收官后的增强**：MCP 超时/状态端点/真实 server/渐进披露（#189–#193）；GraphRAG、概念图谱 API 与
+> Obsidian 风交互（#181–#202）；发文后自动追平 KB/图谱、混合检索调优、技能路由 live eval（#203–#205）；
+> owner 维度长期记忆与管理面板（#207–#208）。当前能力总览见 [当前架构](../architecture.md) 和
+> [apps/agent README](../../apps/agent/README.md)。
 >
 > **明确不做**（不是欠账，是决策）：
 > - **C3 execpolicy**：Codex 需要它是因为跑在你真机上；我们跑在一次性 bwrap 沙箱 + C2 审批，命令规范化收益不抵复杂度。
-> - **B1 skill 开关 / B3 管理页**：11 个 skill，改代码比做后台便宜。
+> - **B1 skill 开关 / B3 完整管理页**：原生 skill 仍由代码 registry 管理；现有 skills 页和 MCP 状态端点只读。
 > - **F1 多模态**：探针确认 deepseek-chat 纯文本、现有 OpenRouter key 调视觉模型 404，需单独接可用视觉模型+key，不值当。
 > - **F2 fork(分叉)**：resume 已够用。
 > - **D0 原选项(FC/独立 VM)**：最终选了树莓派 + bwrap，原选型作废。
@@ -23,15 +26,13 @@
 > 前置:[agent-architecture-research.md](./agent-architecture-research.md)(两家逐层拆解)、
 > [agent-v2-design.md](./agent-v2-design.md)(已落地内核)。
 >
-> **现状(已具备)**:统一流式 tool-calling 循环(`stream_step`)、多轮记忆 + append-only 会话、
-> prompt cache、极简 compaction、4 skill(kb_search / update_plan / web_fetch / ask_user)、
-> SSRF 守卫、前端流式 + plan checklist + ask 选项卡 + markdown(表格/代码/链接)。
-> code review 关卡已加(见 [[feedback_verify_local_before_deploy]])。
+> **阅读提示**：以下正文是 2026-07-08 开工时的实施计划，里面的“现状”“待做”和数量保留当时语境，
+> 不再代表当前系统。它用于解释 A–F 为什么按这个顺序落地；查现状请看上面的收官块。
 >
 > **缺的不是架构,是能力面 + 工程硬度。** 排序铁律:
 > **A 地基 → B 扩展性 → C 安全闸 → D 强能力 → E 规模 → F 打磨**。D 之前必须先有 C。
 
-每个 sub-phase = 一个 PR,走「本地验证 → code review → 部署」。下面每项给:**做什么 / 改哪 / 怎么做 / 验收 / 工作量·风险**。
+每个 sub-phase = 一个 PR,走「本地验证 → code review → 部署」。下面保留原始计划：**做什么 / 改哪 / 怎么做 / 验收 / 工作量·风险**。
 
 ---
 

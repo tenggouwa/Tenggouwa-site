@@ -13,12 +13,12 @@ GitHub Pages 一个 repo 只能挂一个域名（custom domain 一旦设置，gi
 
 ## 一份代码，两套构建
 
-[scripts/build-pages.sh](../scripts/build-pages.sh) 已经参数化：
+[scripts/build-pages.sh](../../scripts/build-pages.sh) 已经参数化：
 
 | 命令 | `PAGES_TARGET` | base | 产物目录 |
 |---|---|---|---|
-| `pnpm build:pages` | `ghpages`（默认） | `/Tenggouwa-site/` + `/Tenggouwa-site/admin/` | `pages-dist/` |
-| `pnpm build:cf` | `root` | `/` + `/admin/` | `cf-dist/` |
+| `pnpm build:pages` | `ghpages`（默认） | `/Tenggouwa-site/` + admin/agent/casino 子路径 | `pages-dist/` |
+| `pnpm build:cf` | `root` | `/` + `/admin/` + `/agent/` + `/casino/` | `cf-dist/` |
 
 两份产物互不影响，可以共存。
 
@@ -56,8 +56,10 @@ DNS 已经在 Cloudflare，接 Cloudflare Pages 最干净。
 ### 之后的日常
 
 - push `main` → CF Pages 自动构建 `pnpm build:cf` → 上 `tenggouwa.com`。
-- 同一次 push → GitHub Actions 跑 [deploy-pages.yml](../.github/workflows/deploy-pages.yml) → 上 `tenggouwa.github.io/Tenggouwa-site/`。
+- 同一次 push → GitHub Actions 跑 [deploy-pages.yml](../../.github/workflows/deploy-pages.yml) → 上 `tenggouwa.github.io/Tenggouwa-site/`。
 - 两边并行，互不阻塞。
+- 数据库里的计划发布不会产生 git push；workflow 每 6 小时重建 GitHub Pages，并通过
+  `CLOUDFLARE_DEPLOY_HOOK` 触发 Cloudflare Pages 同步重建。
 
 ## 备选方案：阿里云 nginx（走 openclaw）
 
@@ -90,6 +92,14 @@ DNS 已经在 Cloudflare，接 Cloudflare Pages 最干净。
            try_files $uri $uri/ /admin/index.html;
        }
 
+       location /agent/ {
+           try_files $uri $uri/ /agent/index.html;
+       }
+
+       location /casino/ {
+           try_files $uri $uri/ /casino/index.html;
+       }
+
        # ssl_certificate / ssl_certificate_key 走你现有的 CF Tunnel 或 Let's Encrypt
    }
    ```
@@ -101,10 +111,10 @@ DNS 已经在 Cloudflare，接 Cloudflare Pages 最干净。
 
 ## 已经联动改的事
 
-- [apps/server/app/config/config-prod.yml](../apps/server/app/config/config-prod.yml) —— CORS 白名单已加 `https://tenggouwa.com` 和 `https://www.tenggouwa.com`。改完后端需要重新部署：`pnpm deploy:server`。
+- [apps/server/app/config/config-prod.yml](../../apps/server/app/config/config-prod.yml) —— CORS 白名单已加 `https://tenggouwa.com` 和 `https://www.tenggouwa.com`。改完后端需要重新部署：`pnpm deploy:server`。
 
 ## 还需要手动确认的事
 
-- **TOTP cookie 跨站**：[apps/server/app/modules/totp/router.py](../apps/server/app/modules/totp/router.py) 当前的 SameSite=None+Secure 设置在 tenggouwa.com 域下其实更稳了（同站访问 api.tenggouwa.com 算 same-site 的 sibling），但如果你想用 `Domain=.tenggouwa.com` 让 api / web 共享 cookie，得显式改一下。先不动，跑起来验证。
-- **SEO 重复内容**：两个域名提供一样的页面，搜索引擎会择一索引。如果在意，可以在 web `index.html` 里加 `<link rel="canonical" href="https://tenggouwa.com/...">` 把 tenggouwa.com 设为正规版本。这个等真有 SEO 需求再说。
+- **TOTP cookie 跨站**：[apps/server/app/modules/totp/router.py](../../apps/server/app/modules/totp/router.py) 的 cookie 设置要在改域名时重新实测。
+- **SEO 重复内容**：GitHub Pages 构建已经统一加 `noindex`，canonical 根域由预渲染产物指向 `SITE_ORIGIN`。
 - **GitHub Pages 不要设 custom domain**：进 repo Settings → Pages，确认 "Custom domain" 一栏是空的。一旦填上 tenggouwa.com，github.io URL 会强制 301 跳走，独立访问就废了。

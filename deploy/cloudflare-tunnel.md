@@ -1,5 +1,8 @@
 # Cloudflare Tunnel 接入
 
+> 当前生产由 `apps/server/docker-compose.prod.yml` 启动 cloudflared，并强制 HTTP/2 transport；
+> 本文用于首次创建 Tunnel 和排障，日常发布见 [deploy/README.md](README.md)。
+
 把后端通过 Cloudflare Tunnel 暴露到 `https://api.<你的域名>`，**不开服务器任何入站端口**，
 TLS 完全由 Cloudflare 边缘处理。
 

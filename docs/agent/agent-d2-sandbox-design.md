@@ -1,6 +1,8 @@
-# D2 · Shell 工具与沙箱方案（可执行设计）
+# D2 · Shell 工具与沙箱方案（已落地的历史设计）
 
-> 状态：设计定稿，待排期实现。本文 refine 并**取代** [agent-roadmap.md](./agent-roadmap.md) §D0 里
+> 状态：已通过 PR #156–#163 落地，最终执行节点为 `apps/pi-agent` 的 HTTP 长轮询 + bwrap，
+> 而不是文中早期沿用的 Mac Agent WSS 设想。当前链路见 [当前架构](../architecture.md) 和
+> [Pi Agent README](../../apps/pi-agent/README.md)。本文保留方案推导，并**取代** [agent-roadmap.md](./agent-roadmap.md) §D0 里
 > 「FC AIO Sandbox + Redis 句柄」那版设想 —— 那版基于两个和现状不符的假设（详见 §7）。
 
 ## 0. 一句话结论
