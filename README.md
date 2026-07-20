@@ -1,6 +1,6 @@
 <div align="center">
 
-```
+```text
  _
 | |_ ___ _ __   __ _  __ _  ___  _   ___      ____ _
 | __/ _ \ '_ \ / _` |/ _` |/ _ \| | | \ \ /\ / / _` |
@@ -9,213 +9,157 @@
                |___/ |___/
 ```
 
-**Tenggouwa的极客小站 · monorepo**
+**Tenggouwa 的个人网站与 AI Agent 实验平台**
 
 [![Deploy Pages](https://github.com/tenggouwa/Tenggouwa-site/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/tenggouwa/Tenggouwa-site/actions/workflows/deploy-pages.yml)
-[![Site](https://img.shields.io/website?url=https%3A%2F%2Ftenggouwa.github.io%2FTenggouwa-site%2F&label=web&style=flat-square)](https://tenggouwa.github.io/Tenggouwa-site/)
+[![Site](https://img.shields.io/website?url=https%3A%2F%2Ftenggouwa.com&label=web&style=flat-square)](https://tenggouwa.com/)
 [![API](https://img.shields.io/website?url=https%3A%2F%2Fapi.tenggouwa.com%2Fhealth%2Fcheck&label=api&style=flat-square)](https://api.tenggouwa.com/health/check)
-[![Last commit](https://img.shields.io/github/last-commit/tenggouwa/Tenggouwa-site?style=flat-square)](https://github.com/tenggouwa/Tenggouwa-site/commits/main)
 
-[**🌐 web**](https://tenggouwa.github.io/Tenggouwa-site/) ·
-[**📝 posts**](https://tenggouwa.github.io/Tenggouwa-site/posts) ·
-[**💡 inspirations**](https://tenggouwa.github.io/Tenggouwa-site/inspirations) ·
-[**🧪 lab**](https://tenggouwa.github.io/Tenggouwa-site/lab)
+[**web**](https://tenggouwa.com/) · [**agent**](https://tenggouwa.com/agent/) ·
+[**casino**](https://tenggouwa.com/casino/) · [**admin**](https://tenggouwa.com/admin/)
 
 </div>
 
 ---
 
-一个**真·全栈** monorepo：前端挂 GitHub Pages、后端 FastAPI/Postgres
-跑在阿里云 + Cloudflare Tunnel。整站终端绿配色 + CRT 扫描线，
-重要：~~没有~~ 只有一点点鸡汤。
+这是一个 pnpm + uv 管理的全栈 monorepo。公开网站、管理后台、Agent 平台和 Casino
+构建为静态 SPA；FastAPI 后端与 pgvector PostgreSQL 部署在阿里云，通过 Cloudflare
+Tunnel 暴露 API。Agent 的高危文件、shell 和 git 操作在树莓派的 `bwrap` 沙箱中执行。
 
-## ✨ 看点
+## 现在有什么
 
-- 📦 **单仓多端** —— `web` `admin` `server` 一个仓搞定，pnpm workspace + uv 各管一摊
-- 🎨 **极客终端风** —— Tailwind + Arco 双武器，自调 `@tailwindcss/typography` 主题
-- ⚡ **Cloudflare Tunnel 暴露 API** —— 服务器不开一个入站口，免 ICP 备案
-- 🔐 **JWT + bcrypt + TOTP + 声纹** —— admin 双因素登录，凭据走 env，不入仓
-- 📊 **自研埋点 + SEO** —— PG + Recharts dashboard 看 PV / UV / 地理 / 设备；Web Vitals + Google Search Console 接入
-- 🛡 **PR 门禁 CI** —— `ci.yml` 每个 PR 自动 `tsc --noEmit` + `vite build` + `ruff` + `pytest`
-- 🪝 **lefthook 本地 hooks** —— pre-commit 自动 `ruff fix .py`，pre-push 跑全 monorepo typecheck
-- 🔄 **OpenAPI → TS 类型** —— `packages/api-types` 由 FastAPI `app.openapi()` 自动生成，前端 `import type { Schemas } from '@/lib/apiTypes'` 直接用
-- 🤖 **Dependabot 周更** —— npm / pip / github-actions 三 ecosystem，dev-deps minor 自动 group，major 单独 PR
-- 🚀 **一行命令部署** —— `pnpm deploy:server` 完成 rsync + docker build + 迁移 + 重启
-- 🧬 **极简 docker stack** —— `postgres + app + cloudflared` 三个容器，全 `compose up`
+- **个人网站**：Markdown 文章、系列、灵感、全文搜索、实验室、Pi 状态页、SEO 静态预渲染。
+- **管理后台**：文章与灵感管理、访问分析、Web Vitals、Search Console、远程终端和站点设置。
+- **AI Agent**：流式多轮对话、公开/私有通道、TOTP 解锁、会话续聊、长期记忆、工具审批、深度思考。
+- **知识系统**：博客自动入库、pgvector + pg_trgm 混合检索、RRF、引用、概念抽取、GraphRAG 和力导向图谱。
+- **执行能力**：网页搜索/抓取、文件读写与编辑、shell、git、只读子代理、并行工具调用和 MCP 扩展。
+- **隔离节点**：Pi Agent 主动轮询任务，在默认无网的 `bwrap` workspace 内执行命令；Mac Agent 提供远程 PTY。
+- **工程保障**：前后端确定性测试、provider golden、nightly 真模型 smoke、PR CI、Lighthouse、Dependabot 和 lefthook。
 
-## 🏗 架构
+## Workspace
 
-```
-                   ┌─────────────────────────────────────────────┐
-                   │              GitHub Pages (CDN)              │
-                   │                                              │
-                   │  /Tenggouwa-site/       ← apps/web    SPA   │
-                   │  /Tenggouwa-site/admin/ ← apps/admin  SPA   │
-                   └────────────────┬─────────────────────────────┘
-                                    │ https
-                                    ▼
-                   ┌─────────────────────────────────────────────┐
-                   │   Cloudflare 边缘 (TLS + WAF + Tunnel)       │
-                   │     api.tenggouwa.com  ──→  Tunnel           │
-                   └────────────────┬─────────────────────────────┘
-                                    │ (outbound QUIC)
-            ┌───────────────────────┴──────────────────────────┐
-            │           阿里云 ubuntu / docker compose          │
-            │                                                  │
-            │   ┌──────────┐   ┌─────────┐   ┌────────────┐    │
-            │   │cloudflared│──→│  app   │──→│ postgres   │    │
-            │   │  tunnel   │   │FastAPI │   │  16-alpine │    │
-            │   └──────────┘   │  10095 │   │   5432     │    │
-            │                  └─────────┘   └────────────┘    │
-            └──────────────────────────────────────────────────┘
-```
+| 路径 | 用途 | 部署路径 |
+| --- | --- | --- |
+| `apps/web` | 公开网站 | `/` |
+| `apps/admin` | 管理后台 | `/admin/` |
+| `apps/agent` | 独立 Agent UI | `/agent/` |
+| `apps/casino` | 概率与赌场游戏实验 | `/casino/` |
+| `apps/server` | FastAPI API、Agent/KB/终端网关 | `api.tenggouwa.com` |
+| `apps/pi-agent` | Pi 遥测、探针、产物与沙箱执行 daemon | Raspberry Pi systemd |
+| `apps/mac-agent` | Mac 远程 PTY daemon | macOS launchd |
+| `packages/api-types` | OpenAPI 自动生成的共享 TS 类型 | workspace package |
+| `content` | 文章和 About 内容 | 构建时预渲染 |
 
-## 🧰 技术栈
+当前架构、信任边界和请求链路见 [docs/architecture.md](docs/architecture.md)。
 
-|        |   web / admin                    |    server                          |
-| ------ | -------------------------------- | ---------------------------------- |
-| 语言   | TypeScript                       | Python 3.12                        |
-| 框架   | React 18 + React Router          | FastAPI + Starlette                |
-| 构建   | Vite                             | uv + uvicorn / gunicorn            |
-| UI     | Arco Design + Tailwind + typography | —                              |
-| 状态   | Zustand (admin) / 无 (web)       | —                                  |
-| 图表   | Recharts (admin /analytics)      | —                                  |
-| MD 编辑| @uiw/react-md-editor             | —                                  |
-| 数据库 | —                                | PostgreSQL 16 + SQLAlchemy 2 async |
-| 迁移   | —                                | Alembic                            |
-| 鉴权   | —                                | PyJWT + bcrypt                     |
-| 部署   | GitHub Actions → Pages           | Docker Compose + Cloudflare Tunnel |
+## 技术栈
 
-## 📁 目录
+| 层 | 技术 |
+| --- | --- |
+| Web | React 19、React Router 7、TypeScript 5.9、Vite 5 |
+| UI | Tailwind CSS 3、Arco Design；Casino 使用 Three.js / React Three Fiber |
+| API | Python 3.12、FastAPI、SQLAlchemy async、Alembic |
+| 数据 | PostgreSQL 16、pgvector、pg_trgm |
+| Agent | DeepSeek chat/reasoner、OpenAI-compatible provider、MCP 1.x |
+| 节点 | Python daemon、WSS/HTTPS outbound、Bubblewrap |
+| 发布 | GitHub Actions、GitHub Pages、Cloudflare Pages/Tunnel、Docker Compose |
 
-```
-.
-├── apps
-│   ├── web/        # 前台（极客终端风）
-│   ├── admin/      # 后台（文章 / 灵感 / 站点分析）
-│   ├── server/     # FastAPI + Postgres + Alembic + agent 网关
-│   └── mac-agent/  # 本机 PTY daemon，配合 /console 拉远程终端
-├── packages/
-│   └── api-types/  # OpenAPI → TS（pnpm gen:api-types 生成）
-├── scripts/
-│   ├── build-pages.sh
-│   ├── deploy-server.sh
-│   ├── gen-api-types.sh
-│   ├── prerender.mjs / generate-og.mjs / seo-notify.mjs
-│   └── ...
-├── deploy/         # nginx / systemd / cloudflare 模板与说明
-├── .github/
-│   ├── workflows/
-│   │   ├── ci.yml            # PR 门禁：typecheck + build + ruff + pytest
-│   │   └── deploy-pages.yml  # main 触发，部署 Pages + Lighthouse + IndexNow
-│   └── dependabot.yml        # 每周 npm / pip / github-actions 升级 PR
-├── lefthook.yml    # 本机 git hooks（pre-commit ruff、pre-push typecheck）
-├── CLAUDE.md       # 协作约定 + 工作流（中文优先、PR、ruff、设计规范）
-├── TODO.md         # 路线图
-└── README.md       # 你正在看
-```
+## 本地开发
 
-## 🚀 起手
+前置：Node.js 20+、pnpm 9.12、Python 3.12、uv、Git 2.31+。
 
 ```bash
-# 装依赖（顺带 lefthook install 注册 git hooks，需要 git >= 2.31 + uv 在 PATH）
 pnpm install
 
-# 起前端
-pnpm dev:web      # http://localhost:5173
-pnpm dev:admin    # http://localhost:5174
+# 前端
+pnpm dev:web       # Vite 默认端口 5173
+pnpm dev:admin     # 5174
+pnpm dev:agent     # 5176
 
-# 起后端（首次会自动建 .venv 并 uv sync）
-cd apps/server
-docker compose up -d postgres        # 本地 PG
-cp -n .env.sample .env               # 含 dev 密钥
-cd ..
-pnpm dev:server                      # http://localhost:10095
-
-# 改了 FastAPI schema 后同步前端类型
-pnpm gen:api-types                   # 重写 packages/api-types/src/openapi.ts
+# 后端：先启动本地 PostgreSQL；首次运行会创建 venv、同步依赖
+docker compose -f apps/server/docker-compose.yml up -d postgres
+pnpm dev:server    # http://127.0.0.1:10095
 ```
 
-默认后台账号：`dev / dev123`（生产用 bcrypt 哈希 + TOTP，走环境变量，见 `apps/server/.env.prod.sample`）。
-
-### 工作流
-
-所有改动都走 **feature branch + PR + squash merge**，不直接推 `main`：
+Casino 暂无根级快捷命令：
 
 ```bash
-git checkout -b feat/<topic> origin/main
-# ...改完...
-git commit -m "feat: ..."             # pre-commit 自动 ruff fix .py
-git push -u origin HEAD               # pre-push 跑全 monorepo typecheck + ruff
-gh pr create                          # 触发 ci.yml；CI 绿才能合
-gh pr merge <pr> --squash --delete-branch
+pnpm --filter @tenggouwa/casino dev
 ```
 
-合并到 `main` 后 `deploy-pages.yml` 自动重发 Pages。
+开发环境变量从各应用的 `.env.sample` 开始；生产变量见
+[apps/server/.env.prod.sample](apps/server/.env.prod.sample)。
 
-## 📦 部署 / 流水线
+## 验证
 
-| 链路 | 方式 | 触发 |
-| ---- | ---- | ---- |
-| PR 门禁 | `.github/workflows/ci.yml` | 每个 `pull_request` + `push` 到 `main` |
-| 前端 → GitHub Pages | `.github/workflows/deploy-pages.yml` | `main` 命中 `apps/web/**` / `apps/admin/**` / `package.json` 等 |
-| 前端 → Cloudflare Pages | GitHub App 默认行为 | 每个 PR 自动 preview |
-| 后端 → 阿里云 docker | `scripts/deploy-server.sh` | 本地 `pnpm deploy:server` |
-| 依赖升级 | `.github/dependabot.yml` | 每周自动开 PR（npm / pip / actions） |
+```bash
+# 全 workspace TypeScript typecheck
+pnpm lint
 
-需要在 GitHub repo Settings → Secrets and variables → Actions → Variables 加：
+# 普通 PR CI 的前端测试
+pnpm --filter @tenggouwa/web test
+pnpm --filter @tenggouwa/agent test
 
-- `VITE_API_BASE` = `https://api.tenggouwa.com`
+# 后端门禁
+cd apps/server
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
+```
 
-服务器侧 `.env` 需要：
+涉及模型行为的改动还应运行受 `RUN_LIVE_TESTS=1` 和 `KB_LLM_API_KEY` 控制的 live tests；
+GitHub Actions 每晚也会执行同一套 smoke/eval。
 
-- `POSTGRES_DEFAULT_PASSWORD` / `AUTH_JWT_SECRET` / `ADMIN_*_PASSWORD_HASH` / `CLOUDFLARE_TUNNEL_TOKEN`
+## 构建与部署
 
-详细步骤：
+```bash
+# GitHub Pages 子路径产物 pages-dist/，并给镜像站加 noindex
+pnpm build:pages
 
-- [deploy/README.md](./deploy/README.md)
-- [deploy/cloudflare-tunnel.md](./deploy/cloudflare-tunnel.md)
-- [deploy/postgres.md](./deploy/postgres.md)
+# 根域名产物 cf-dist/
+pnpm build:cf
 
-## 🗺 路线图
+# 后端 rsync + Docker Compose build + health check
+pnpm deploy:server
+```
 
-进度 / 计划见 [TODO.md](./TODO.md)。当前节奏：
+`build-pages.sh` 一次构建 web/admin/agent/casino，并生成文章静态 HTML、sitemap、robots、feed、
+Casino SEO 页面和 OG 图片。`main` 的相关改动由 `deploy-pages.yml` 自动发布；后端仍需手动部署。
 
-- [x] monorepo 骨架
-- [x] web / admin / server 全部上线
-- [x] PostgreSQL 接入 + Alembic 迁移
-- [x] Markdown 编辑器 + 终端配色 prose
-- [x] 自研埋点 + admin /analytics dashboard
-- [x] 双因素登录（TOTP + 声纹）+ 7d 信任 cookie
-- [x] `/console` 远程 PTY（FastAPI WSS 网关 + mac-agent）
-- [x] SEO（robots / llms.txt / Web Vitals / GSC 接入 / IndexNow / Baidu / Google indexing）
-- [x] PR 门禁 CI（`ci.yml`）
-- [x] `packages/api-types` 共享类型（OpenAPI → TS）
-- [x] lefthook 本地预检 + Dependabot 周更
-- [ ] admin 改 admin 密码 UI
-- [ ] 文件 / 图片上传（OSS 或自建）
-- [ ] 评论 / RSS / sitemap
-- [ ] Playwright e2e smoke flow
-- [ ] 后端 Redis 缓存层（posts list / detail / related）
+完整步骤见 [deploy/README.md](deploy/README.md) 和
+[docs/ops/deploy-tenggouwa-com.md](docs/ops/deploy-tenggouwa-com.md)。
 
-## 🤝 协作约定
+## OpenAPI 类型
 
-详见 [CLAUDE.md](./CLAUDE.md) ——给 AI / 给我自己半年后看的备忘录：
+修改 FastAPI schema 后运行：
 
-- 中文回复 + 英文专有名词
-- Python: ruff、Google 风 docstring、`X | Y` 类型、`from collections.abc import Callable`
-- 不引入未要求的功能 / 抽象 / 回退逻辑
-- 不写废注释
-- 不预防"未来"
-- **所有改动走 feature branch + PR + squash merge**；不直接推 `main`
-- API 响应类型从 `apps/web/src/lib/apiTypes.ts` 取，不要手抄 schema
+```bash
+pnpm gen:api-types
+```
 
-## 🪪 致谢
+生成结果位于 `packages/api-types/src/openapi.ts`，需要与 schema 改动一起提交。前端优先通过
+`apps/web/src/lib/apiTypes.ts` 使用这些类型，不手抄响应模型。
 
-- 终端绿配色灵感 ≈ Snazzy theme
-- ASCII logo 用 `figlet -f standard tenggouwa` 生成
-- 一杯一杯 flat white ☕
+## 协作流程
 
----
+所有改动走 feature branch + PR + squash merge，不直接 push `main`：
 
-<sub>© 2026 · tenggouwa · made with caffeine</sub>
+1. 在工作区完成修改和本地验证，先让用户查看 diff。
+2. 从 `origin/main` 创建 feature branch。
+3. commit、push，创建包含 Summary / Why / Test plan 的 PR。
+4. 等 `ci.yml` 通过后 squash merge，并同步本地 `main`。
+
+完整代码规范和视觉约束见 [AGENTS.md](AGENTS.md)。
+
+## 文档导航
+
+- [当前系统架构](docs/architecture.md)
+- [Agent 当前能力与使用](apps/agent/README.md)
+- [Agent 分阶段实现记录](docs/agent/agent-roadmap.md)
+- [知识库现状与待办](docs/agent/kb-todo.md)
+- [后端开发说明](apps/server/README.md)
+- [Pi Agent](apps/pi-agent/README.md) / [Mac Agent](apps/mac-agent/README.md)
+- [生产部署](deploy/README.md)
+
+`docs/agent/*-design.md` 和 `agent-architecture-research.md` 记录的是设计发生时的研究与取舍；
+查看当前实现时，以 `docs/architecture.md`、应用 README 和代码为准。

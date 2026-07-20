@@ -6,7 +6,7 @@
 
 ## 怎么工作
 
-```
+```text
 Raspberry Pi
   ├── systemd 起 python3 -m agent.main
   ├── 每 30s 读 /proc、/sys、os.statvfs 采一份遥测
@@ -58,6 +58,7 @@ PI_AGENT_SERVER_URL=http://localhost:8000 PI_AGENT_TOKEN=dev-token \
 `docs/agent/agent-d2-sandbox-design.md`），Pi 这边再套一层 namespace 隔离。**默认关闭。**
 
 **开启（Pi 侧）：**
+
 ```bash
 sudo apt install -y bubblewrap          # 装 bwrap（隔离必需；没有它会拒绝执行）
 # 确认非特权 userns 可用（多数 RPi OS 默认开；若报错再设）：
@@ -72,9 +73,12 @@ sudo systemctl restart tenggouwa-pi-agent
 **开启（服务器侧）：** prod `.env` 设 `AGENT_PI_SANDBOX=1`（未设则 `shell_exec` skill 整组拒用），
 然后 `pnpm deploy:server`。
 
-**隔离要点**（`agent/executor.py`）：`--clearenv`（命令读不到 daemon 的 `PI_AGENT_TOKEN` 等 env）
-+ 系统只读、仅 workspace 可写、`--chdir` workspace + 默认 `--unshare-net`（无网）+ 单命令 120s 硬超时
-+ 输出 64KB 上限。没装 bwrap 会**拒绝执行**（除非显式 `PI_AGENT_EXEC_ALLOW_UNSANDBOXED=1`，仅限你信得过的机器裸跑）。
+**隔离要点**（`agent/executor.py`）：
+
+- `--clearenv`，命令读不到 daemon 的 `PI_AGENT_TOKEN` 等环境变量。
+- 系统只读、仅 workspace 可写、`--chdir` workspace，默认 `--unshare-net`（无网）。
+- 单命令 120 秒硬超时、输出 64 KB 上限。
+- 没装 bwrap 会拒绝执行；只有显式设置 `PI_AGENT_EXEC_ALLOW_UNSANDBOXED=1` 才允许裸跑。
 
 > ⚠️ Pi 在你家 LAN 上：`PI_AGENT_EXEC_ALLOW_NET=0`（默认）很重要，否则命令能碰内网。
 > Pi 非 throwaway 但可重刷，当「半可弃」——别在 workspace 外放你不愿被读的东西。

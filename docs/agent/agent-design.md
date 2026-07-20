@@ -1,5 +1,9 @@
 # agent 平台 · 设计文档 (draft)
 
+> **历史设计（2026-07-07）**：M1–M4 已落地，Knowledge Base 独立页后来被概念图谱页取代，
+> 主站 `/ask` 已指向独立 Agent。当前能力见 [apps/agent README](../../apps/agent/README.md)；
+> 当前系统架构见 [docs/architecture.md](../architecture.md)。下文保留最初立项语境。
+
 > 把现在挤在 web `/ask` 里的知识库问答拆开，做成 `apps/agent` 独立前端项目，复用
 > `apps/server` 后端。远期：整个项目 = 一个 agent（ask 是对话面，skills 是工具，
 > 知识库是其中一个 skill）。方向背景见记忆 [[project_agent_app]]。
