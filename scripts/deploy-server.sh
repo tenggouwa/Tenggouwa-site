@@ -36,7 +36,7 @@ rsync -avz --delete \
   --exclude '.env.umami' \
   "$ROOT/apps/server/" "$REMOTE:$REMOTE_PATH/"
 
-echo "==> 远端构建 + 健康校验（GITSHA=$GITSHA）"
+echo "==> 远端构建 + 健康校验（GITSHA=${GITSHA}）"
 ssh "$REMOTE" bash -l -s -- "$REMOTE_PATH" "$COMPOSE_FILE" "$GITSHA" <<'REMOTE_SCRIPT'
 set -euo pipefail
 REMOTE_PATH="$1"; COMPOSE_FILE="$2"; GITSHA="$3"
