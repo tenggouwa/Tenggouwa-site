@@ -26,6 +26,9 @@ class Skill:
     # private=True 的 skill 只在鉴权的私有通道暴露（即便 readonly 也不进公开端点）。
     # 与 risk 正交：risk 管「要不要审批」，private 管「哪条通道能看到」。文件工具即便只读也须私有。
     private: bool = False
+    # 只有不共享 AsyncSession 等可变资源的 readonly skill 才能同批并发。
+    # 默认保守串行；纯网络/纯计算 skill 再显式 opt-in。
+    parallel_safe: bool = False
 
 
 def tool_schema(skill: Skill) -> dict:

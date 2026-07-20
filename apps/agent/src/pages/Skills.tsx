@@ -24,7 +24,7 @@ export default function Skills() {
           <span className="text-terminal-pink">$ </span>skills
         </h1>
         <p className="text-sm text-terminal-gray/70">
-          agent 能调用的工具。「查知识库」就是其中一个 skill；未来 agent 会自己决定调哪个（tool-calling）。
+          agent 能调用的公开工具。它会根据任务自主选择 skill，必要时组合多个工具完成回答。
         </p>
       </div>
 
@@ -61,9 +61,7 @@ export default function Skills() {
         </div>
       )}
 
-      <p className="text-xs text-terminal-gray/40">
-        更多 skill 计划中（kb_reindex / web_fetch …）。M4 会让 ask 页的 agent 自主调用这些工具。
-      </p>
+      <p className="text-xs text-terminal-gray/40">私有文件、Shell、Git 和 MCP 工具仅在 TOTP 解锁后可用。</p>
     </div>
   );
 }

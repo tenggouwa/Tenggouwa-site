@@ -53,3 +53,7 @@ class AttemptLimiter:
 
 # TOTP 解锁共用一把闸：每 IP 6 次/分钟；全局 20 次/分钟。合法用户偶尔手滑够用，暴破无门。
 unlock_limiter = AttemptLimiter(per_ip=6, ip_window=60, total=20, total_window=60)
+
+# 公开 Agent 会触发付费 LLM / Web / 子代理，单容器用进程内双层闸先挡住明显滥用。
+# 不影响私有通道；更精细的 token 预算可后续接 usage 计量。
+public_agent_limiter = AttemptLimiter(per_ip=20, ip_window=60, total=200, total_window=60)

@@ -614,4 +614,4 @@ class AgentMessageRow(Base):
     tool_call_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # tool 轮回填对应 call id
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    __table_args__ = (Index("ix_agent_message_session_seq", "session_id", "seq"),)
+    __table_args__ = (Index("ix_agent_message_session_seq", "session_id", "seq", unique=True),)

@@ -105,4 +105,5 @@ WEB_SEARCH = Skill(
         "required": ["query"],
     },
     handler=_handler,
+    parallel_safe=True,
 )

@@ -30,15 +30,22 @@ def _probe():
     return fake_invoke, stats
 
 
-async def test_readonly_batch_runs_concurrently(monkeypatch):
+async def test_explicit_parallel_safe_batch_runs_concurrently(monkeypatch):
     invoke, stats = _probe()
-    rounds = [_round("kb_search", "web_search", "web_fetch"), [{"type": "content", "delta": "done"}]]
+    rounds = [_round("web_search", "web_fetch"), [{"type": "content", "delta": "done"}]]
     _events, repo = await run_agent(monkeypatch, rounds, invoke=invoke)
     assert stats["peak"] >= 2, "整批只读工具应并发跑"
     # 完成顺序按耗时（web_fetch 最快先完成），但落库仍按 tool_calls 原顺序
-    assert stats["order"] == ["web_fetch", "web_search", "kb_search"]
+    assert stats["order"] == ["web_fetch", "web_search"]
     tool_rows = [r.content for r in repo.rows if r.role == "tool"]
-    assert tool_rows == ["[kb_search]", "[web_search]", "[web_fetch]"]  # H1：顺序与 tool_calls 对齐
+    assert tool_rows == ["[web_search]", "[web_fetch]"]  # H1：顺序与 tool_calls 对齐
+
+
+async def test_database_readonly_batch_is_serial(monkeypatch):
+    invoke, stats = _probe()
+    rounds = [_round("kb_search", "kb_graph"), [{"type": "content", "delta": "done"}]]
+    await run_agent(monkeypatch, rounds, invoke=invoke)
+    assert stats["peak"] == 1, "共享 AsyncSession 的 DB skill 不得并发"
 
 
 async def test_write_in_batch_forces_serial(monkeypatch):
@@ -65,7 +72,9 @@ async def test_h1_one_result_per_tool_call(monkeypatch):
 
 
 def test_is_parallel_safe():
-    assert is_parallel_safe("kb_search") and is_parallel_safe("web_search") and is_parallel_safe("run_subagent")
+    assert is_parallel_safe("web_search") and is_parallel_safe("web_fetch")
+    assert not is_parallel_safe("kb_search") and not is_parallel_safe("kb_graph")
+    assert not is_parallel_safe("run_subagent")
     assert is_parallel_safe("update_plan") and is_parallel_safe("ask_user")  # 控制类无副作用
     assert not is_parallel_safe("file_write") and not is_parallel_safe("shell_exec") and not is_parallel_safe("git")
     assert not is_parallel_safe("mcp__srv__tool")  # 未知/MCP 保守串行

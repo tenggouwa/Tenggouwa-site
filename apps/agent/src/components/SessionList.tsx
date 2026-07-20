@@ -22,11 +22,13 @@ export default function SessionList({
   currentId,
   onOpen,
   busy,
+  refreshKey,
 }: {
   token: string;
   currentId: string | null;
   onOpen: (sid: string) => void;
   busy: boolean;
+  refreshKey: number;
 }) {
   const [items, setItems] = useState<SessionInfo[] | null>(null);
   const [error, setError] = useState<string | undefined>();
@@ -39,7 +41,7 @@ export default function SessionList({
     return () => {
       alive = false;
     };
-  }, [token]);
+  }, [token, refreshKey]);
 
   async function del(e: React.MouseEvent, sid: string) {
     e.stopPropagation();

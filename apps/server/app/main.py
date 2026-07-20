@@ -49,6 +49,10 @@ def create_app() -> FastAPI:
         from modules.kb.scheduler import start_kb_scheduler, stop_kb_scheduler
 
         start_kb_scheduler()
+        # Agent 调度器：清理超过 retention 的匿名会话；私有 owner 会话不受影响。
+        from modules.agent.scheduler import start_agent_scheduler, stop_agent_scheduler
+
+        start_agent_scheduler()
         # MCP 客户端：连 MCP_SERVERS 白名单里的 server（未配置则 inert）。必须在 lifespan 同一 task
         # 里 start/stop（mcp SDK 基于 anyio task group）。
         from modules.mcp.manager import mcp_manager
@@ -59,6 +63,7 @@ def create_app() -> FastAPI:
         logger.info("Stopping tenggouwa-server...")
         stop_seo_scheduler()
         stop_kb_scheduler()
+        stop_agent_scheduler()
         await mcp_manager.stop()
         logger.info("tenggouwa-server stopped.")
 
