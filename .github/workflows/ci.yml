@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # 需要历史来算「相对 base 改了哪些包」
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v6
 
@@ -29,23 +32,39 @@ jobs:
       # CI 用 --frozen-lockfile：lockfile 由 dependabot / 本地 commit 保证同步。
       - run: pnpm install --frozen-lockfile
 
-      - name: Test web (vitest)
-        run: pnpm --filter @tenggouwa/web test
+      # diff 基线 + build 范围决策：
+      #  - 默认只挑「相对 base 有改动的包 + 依赖它们的包」（改 api-types 会带上 web）
+      #  - 但根级全局文件（lockfile / 工作区 / 根 package.json / 共享 tsconfig / 本 CI）
+      #    不属于任何包，pnpm changed-filter 抓不到，改了它们能一次搞坏所有 app，
+      #    所以这类改动回落到全量 build ./apps/*
+      - name: Decide build scope
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+          else
+            base='${{ github.event.before }}'
+            case "$base" in
+              '' | 0000000000000000000000000000000000000000)
+                base="$(git rev-parse HEAD^ 2>/dev/null || git rev-parse HEAD)" ;;
+            esac
+          fi
+          echo "diff base = $base"
+          if git diff --quiet "$base" HEAD -- \
+              pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json .github/workflows/ci.yml; then
+            echo "filter=...[$base]" >> "$GITHUB_OUTPUT"
+            echo "scope = changed packages since base"
+          else
+            echo "filter=./apps/*" >> "$GITHUB_OUTPUT"
+            echo "scope = all apps (global file changed)"
+          fi
 
-      - name: Test agent (vitest)
-        run: pnpm --filter @tenggouwa/agent test
+      # 前端毫无改动时 pnpm 直接 no-op 秒过
+      - name: Test changed (vitest)
+        run: pnpm --filter "${{ steps.scope.outputs.filter }}" -r --if-present run test
 
-      - name: Build web (tsc --noEmit && vite build)
-        run: pnpm --filter @tenggouwa/web build
-
-      - name: Build admin (tsc --noEmit && vite build)
-        run: pnpm --filter @tenggouwa/admin build
-
-      - name: Build casino (tsc --noEmit && vite build)
-        run: pnpm --filter @tenggouwa/casino build
-
-      - name: Build agent (tsc --noEmit && vite build)
-        run: pnpm --filter @tenggouwa/agent build
+      - name: Build changed (tsc --noEmit && vite build)
+        run: pnpm --filter "${{ steps.scope.outputs.filter }}" -r run build
 
   backend:
     name: Backend (ruff + pytest)
