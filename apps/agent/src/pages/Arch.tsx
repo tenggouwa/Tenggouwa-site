@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ARCH, type ArchNode, type Layer } from '../lib/arch';
-import { renderMarkdown } from '../lib/markdown';
+import { renderInline, renderMarkdown } from '../lib/markdown';
 
 // Agent 架构解剖器：原地下钻。点节点 = 钻进它 → 顶部它的概念/我的实现 + 下面它的二级架构
 // （和一层一样的方块图，可继续点）。面包屑回退。骨架用通用 taxonomy，血肉是本站真实实现（代码直达 GitHub）。
@@ -180,6 +180,41 @@ export default function Arch() {
               <pre className="overflow-x-auto rounded-lg border border-terminal-line/60 bg-terminal-panel/40 p-3 text-[12px] leading-[1.5] text-terminal-gray/85 font-mono">
                 <code>{cur.code.body}</code>
               </pre>
+            </div>
+          )}
+
+          {cur.flow && cur.flow.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-xs" style={{ color: curColor }}>
+                <span className="text-terminal-pink">$</span> 数据流走查
+              </div>
+              <ol className="space-y-0">
+                {cur.flow.map((step, i) => (
+                  <li key={i}>
+                    <div className="flex gap-2.5 items-start">
+                      <span
+                        className="shrink-0 mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center text-[11px]"
+                        style={{ borderColor: curColor, color: curColor }}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="text-sm text-terminal-gray/85 leading-relaxed pb-2 [&_code]:text-terminal-yellow">
+                        {renderInline(step)}
+                      </span>
+                    </div>
+                    {i < cur.flow!.length - 1 && <div className="ml-2.5 w-px h-2 -mt-2 mb-0 bg-terminal-line/50" />}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {cur.pitfall && (
+            <div className="rounded-lg border border-terminal-yellow/40 bg-terminal-yellow/[0.06] px-4 py-3 space-y-1.5">
+              <div className="text-xs text-terminal-yellow">⚠ 坑 · 教训</div>
+              <div className="text-sm text-terminal-gray/85 leading-relaxed [&_a]:text-terminal-cyan [&_a]:underline [&_a]:decoration-dotted [&_code]:text-terminal-yellow">
+                {renderMarkdown(cur.pitfall)}
+              </div>
             </div>
           )}
 

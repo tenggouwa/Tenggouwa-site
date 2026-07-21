@@ -30,8 +30,8 @@ describe('Arch 架构解剖器（原地下钻）', () => {
     fireEvent.click(screen.getByText('记忆 Memory'));
     await waitFor(() => expect(screen.getByText('召回 recall + 注入')).toBeTruthy());
     fireEvent.click(screen.getByText('召回 recall + 注入'));
-    // recall 的内容替换进来
-    await waitFor(() => expect(screen.getByText(/阈值过滤/)).toBeTruthy());
+    // recall 的内容替换进来（RECALL_MAX_DISTANCE 只在 recall 里出现）
+    await waitFor(() => expect(screen.getAllByText(/RECALL_MAX_DISTANCE/).length).toBeGreaterThan(0));
     // 记忆自己的 summary 已被替换掉
     expect(screen.queryByText(/越用越懂你/)).toBeNull();
   });
@@ -49,6 +49,14 @@ describe('Arch 架构解剖器（原地下钻）', () => {
     // Skill dataclass 真代码
     await waitFor(() => expect(screen.getByText(/代码 · base\.py/)).toBeTruthy());
     expect(screen.getByText(/risk: Literal\["readonly", "write"\]/)).toBeTruthy();
+  });
+
+  it('节点展示数据流走查 + 坑/教训', async () => {
+    render(<Arch />);
+    fireEvent.click(screen.getByText('编排循环 Agent Loop'));
+    await waitFor(() => expect(screen.getByText('数据流走查')).toBeTruthy());
+    expect(screen.getByText('⚠ 坑 · 教训')).toBeTruthy();
+    expect(screen.getAllByText(/会话毒化/).length).toBeGreaterThan(0);
   });
 
   it('面包屑 ~/arch 回到根总图', async () => {
