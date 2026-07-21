@@ -36,6 +36,13 @@ describe('Arch 架构解剖器（原地下钻）', () => {
     expect(screen.queryByText(/越用越懂你/)).toBeNull();
   });
 
+  it('P2 节点(RAG)也能钻进去看二级', async () => {
+    render(<Arch />);
+    fireEvent.click(screen.getByText('RAG / 知识'));
+    await waitFor(() => expect(screen.getByText('混合检索 RRF 2:1')).toBeTruthy());
+    expect(screen.getByText('GraphRAG 概念图谱')).toBeTruthy();
+  });
+
   it('面包屑 ~/arch 回到根总图', async () => {
     render(<Arch />);
     fireEvent.click(screen.getByText('安全 / 权限 / 沙箱'));
