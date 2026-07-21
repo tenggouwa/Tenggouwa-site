@@ -33,6 +33,8 @@ export interface ArchNode {
   concept: string; // md：概念 + 2026 最新技术
   implementation?: string; // md：我的实现（带真实文件链接）
   code?: { caption?: string; body: string }; // 真实代码片段（从仓库摘的，非示意）
+  flow?: string[]; // 数据流走查：一个请求/查询实际怎么一步步流动（有序步骤）
+  pitfall?: string; // md：坑 / 教训——naive 做法会怎么坏 + 真实战例
   tech?: string[]; // 技术要点 chips
   children?: ArchNode[]; // 二级架构
   sources?: Source[]; // 延伸阅读
@@ -144,6 +146,19 @@ token = jwt.encode({"sub": owner, "type": "agent", "ep": epoch, ...}, _secret(),
     async for ev in self._execute_batch(...):     # 执行工具 → 结果回灌 messages
         yield ev                                  # 下一轮 stream_step 带着结果再决策`,
         },
+        flow: [
+          '用户发一句话 → 建/续会话，落库这条 user 消息（append-only，带 seq）。',
+          '`_seed` 装配 messages：`SYSTEM`(+私有 `PRIVATE_SYSTEM`) + tools 恒在前 → 早前摘要 → 历史 → 召回的长期记忆 → 这条 user。',
+          '`stream_step` 带着 tools 流式调 LLM：正文 delta 实时推给前端，`tool_calls` 从结构化 delta 攒齐。',
+          '**没有 tool_call？** → 这段正文就是最终答案，落库、发 `done`，本轮结束。',
+          '**有 tool_call？** → 落 assistant(tool_calls) → `_execute_batch` 执行(并发/审批/沙箱) → 每个结果作为 tool 消息回灌 messages。',
+          '回到第 3 步：带着工具结果再调 LLM。如此循环，直到某轮不再 tool_call（或撞 MAX_STEPS/预算兜底）。',
+        ],
+        pitfall:
+          '**最阴险的坑是"会话毒化"（H1）**：DeepSeek 要求带 `tool_calls` 的 assistant 消息后面必须紧跟等量的 tool 结果，' +
+          '否则下次 resume 逐字节重建 messages 时直接 **400**，整个会话作废。\n\n' +
+          '所以任何"中途停下"的时刻都危险：C2 审批暂停、并发只跑完一半、异常。解法是**暂停时干脆不落 assistant(tool_calls)**' +
+          '（存进 `pending`，批准续跑才落），并发结果**按原 tool_call 下标**回填。测试 `assert_paired` 专门守这条。',
         tech: ['ReAct 循环', 'MAX_STEPS=16 兜底', 'token 预算', 'H1 配对不变量', '流式 tool_call 解析'],
         children: [
           {
@@ -235,6 +250,11 @@ if need:
             summary: '历史超 24K token，把最近 3 轮之前摘要成一条 note。',
             concept: 'Claude 五层压缩里只做最顶层：不是每层都压，而是"太老的对话"整体蒸馏成摘要，省 token 又不丢主线。',
             implementation: '`COMPACT_TOKENS=24_000` / `KEEP_TURNS=3`；边界钉在 user 消息（防切在 assistant(tool_calls) 和 tool 之间产生孤儿）。',
+            pitfall:
+              '**摘要的"切点"不能随便选。** 如果切在一个 assistant(tool_calls) 和它的 tool 结果**之间**，摘要之后的历史里就出现了' +
+              '一个没有配对结果的孤儿 tool_call → 又是 H1 那个 400。\n\n' +
+              '**教训**：compaction 边界必须钉在 **user 消息**上(一个完整回合的起点)，保证摘要切口两侧都是配对完整的消息序列。' +
+              '压缩省 token 是好事，但不能以破坏消息不变量为代价。',
           },
           {
             id: 'context-strategy',
@@ -283,6 +303,12 @@ class Skill:
     # risk 管"要不要审批"，private 管"哪条通道能看到"。
     private: bool = False`,
         },
+        pitfall:
+          '**别在 SYSTEM 里点名工具。** 曾经 SYSTEM 写死"先用 kb_search"，后果三连：① 每加一个 skill 就得改提示词' +
+          '(O(n) 膨胀 + 打断 prompt cache 前缀)；② **description 形同虚设被覆盖**——新上线的 `kb_graph` 死活选不中，就是被那句' +
+          '"先用 kb_search"压的；③ 提示词和注册表两处真相迟早不同步。\n\n' +
+          '**教训**：SYSTEM 只讲策略("涉及本站内容先查知识库")，"何时用我"还给各 skill 的 description。' +
+          '改完实测 kb_graph 一字未改描述就立刻被选中。加新 skill = 1 文件 + 1 行注册 + **0 行提示词**。',
         tech: ['Skill dataclass', 'risk 分级', '结果状态前缀', '并发 MAX=6', '归一化去重', 'SYSTEM 不点名'],
         children: [
           {
@@ -325,6 +351,11 @@ def _turn_cap(name, args, state):          # 返回非 None = 拦下、用文案
         state["searched"].add(q)
     return None`,
             },
+            pitfall:
+              '**实测一个回合能搜 13 次高度重复的 query。** 模型换个措辞就以为是"新搜索"——"大模型省显存?"、' +
+              '"大模型 显存 优化"、"如何减少显存占用"，本质同一件事，白烧 token 又拖慢响应。\n\n' +
+              '**教训**：光做精确去重不够(抓不住换措辞)。要 ① 归一化(去标点空白，让近似 query 归并) + ② 每轮**总次数硬上限**' +
+              '兜底那些归一化也挡不住的"换角度重搜"。两道一起才收得住。',
           },
           {
             id: 'tools-parallel',
@@ -384,6 +415,11 @@ def _turn_cap(name, args, state):          # 返回非 None = 拦下、用文案
     self.session.add(AgentMemoryRow(owner=owner, content=content, embedding=vec))
     await self._evict_over_cap(owner)            # 超 200 淘汰最旧`,
             },
+            pitfall:
+              '**不去重的记忆会越用越烂。** 用户说三次"我喜欢暗色"，naive 实现就存三条几乎一样的——召回时全挤进上下文当噪声，' +
+              '还挤掉真正有用的记忆。\n\n' +
+              '**教训**：写入是"upsert 语义"不是"append"。写前拿新内容的 embedding 找最近一条，够近(余弦<0.12)就**更新**那条、' +
+              '不新插；再配每 owner 上限 + 淘汰最旧。记忆层的价值一半在检索、一半在**克制**。',
           },
           {
             id: 'memory-recall',
@@ -409,6 +445,13 @@ if mems:
     messages.append({"role": "system",
         "content": "[关于当前用户，你此前记住的]\\n" + "\\n".join(f"- {m}" for m in mems)})`,
             },
+            flow: [
+              '私有会话每轮开始：拿这轮用户问题 `q` 做 embedding。',
+              '在该 owner 的记忆里按余弦距离 `<=>` 排序，取最近 `k=6` 条。',
+              '**按距离筛**：只留距离 `< 0.6` 的——不相关的宁可不给，别当噪声塞进上下文。',
+              '把留下的几条拼成一条 system 备注，`append` 到 messages——**位置在稳定缓存前缀之后**（同 summary/历史动态区），不破 prompt cache。',
+              '召回**失败被 try/except 吞掉**：记忆是加分项，挂了也要正常作答，不能拖垮回答。',
+            ],
           },
           {
             id: 'memory-owner',
@@ -437,6 +480,12 @@ if mems:
           '- **C2 审批**：write 工具暂停本轮、发 approval 事件、前端逐项批/拒后续跑。\n' +
           '- **Pi bwrap 沙箱**：file/shell/git 全在树莓派上 `bwrap --unshare-net --clearenv` 无特权隔离执行，系统只读、仅 workspace 可写、默认断网。\n' +
           '- **SSRF 守卫**：web_fetch 拒环回/私网/保留段。',
+        pitfall:
+          '**公开无鉴权端点一旦挂上 write/shell/MCP 工具，就是"谁都能 RCE"。** 而且 C2 浏览器点批准对公开端点等于' +
+          '**攻击者自批自**——审批形同虚设。\n\n' +
+          '**教训**：安全不能靠"审批弹窗"补，得从**能力暴露**根上切。所以拆两条通道：公开永远只看得到 readonly 非 private 工具，' +
+          '写/沙箱/MCP 只在 TOTP 私有通道。`tools()` 是唯一暴露点、`invoke()` 再纵深兜底(幻觉出高危名也拒)。' +
+          '还有个隐蔽坑：agent_token 若用**主密钥**签，`current_admin` 会把它当 admin token 放行 = 公开 TOTP 直接换全 admin 权限——所以用派生密钥。',
         tech: ['结构化 risk 分级', 'C2 人在环审批', 'bwrap 强隔离', 'SSRF 守卫', 'owner 隔离', '_AUTO_WRITE 免批例外'],
         children: [
           {
@@ -472,6 +521,13 @@ def is_parallel_safe(name):                 # 能否与同批并发
             summary: '高危工具暂停 → approval 事件 → 用户批/拒 → 续跑。',
             concept: '暂停时绝不能落 assistant(tool_calls)（会成孤儿毒化会话 H1），要暂存到 pending。',
             implementation: `pending(JSONB) 存 {content, tool_calls}，批准续跑才落库；拒的回"用户拒绝"结果。见 [service.py](${REPO}/apps/server/app/modules/agent/service.py)。`,
+            flow: [
+              '某轮模型发起 tool_calls，其中有 write 类(`requires_approval` 为真)。',
+              '**暂停**：把 {content, tool_calls} 存进 `session.pending`(JSONB)，**不落 assistant 消息**(否则孤儿 tool_call 毒化会话)。',
+              '发 `approval` 事件带 requests，本轮结束。前端渲染 ApprovalCard，用户逐项批/拒。',
+              '前端带 `{approvals: {tool_call_id: bool}}` + session_id 重新 POST 续跑。',
+              '此时才落 assistant(tool_calls)：拒的回"用户拒绝"结果、批的真执行，清 `pending`，续跑事件回填**同一轮**。',
+            ],
           },
           {
             id: 'sec-sandbox',
@@ -529,6 +585,13 @@ def is_parallel_safe(name):                 # 能否与同批并发
 # tools()：原生常驻在前；MCP 只给 load_tools + 已 loaded 的
 return native + [_load_tools_schema(catalog)] + mcp_manager.tools_by_names(loaded)`,
             },
+            flow: [
+              '默认这轮 tools = 原生工具(全 schema，常驻) + 一个 `load_tools` 元工具(description 里带 MCP 的"名字+一句话"轻目录)。',
+              '模型想用某个 MCP 工具 → 先调 `load_tools(names=[...])`(names 被 enum 钉死，编不出不存在的名)。',
+              '把选中的名字记进 `turn_state["loaded"]`；`load_tools` 只是"翻开说明书"、不执行外部动作 → 免审批。',
+              '**下一步循环重算 tools**：这次 `tools_by_names(loaded)` 把那几个 MCP 的完整 schema 加进来，模型可直接调。',
+              '原生工具全程常驻在最前 → **核心缓存前缀不被打断**，只有真用到 MCP 的那一轮才破缓存。',
+            ],
           },
           {
             id: 'mcp-timeout',
@@ -536,6 +599,11 @@ return native + [_load_tools_schema(catalog)] + mcp_manager.tools_by_names(loade
             summary: 'MCP server 在 app lifespan 里连，一个 hang 住能让整站起不来。',
             concept: '接别人的进程要设边界：连接、列工具、调用各自超时，超时跳过该 server 而不是吊死整个应用。',
             implementation: '`_CONNECT_TIMEOUT=20s`(超时跳过、站照常起) / `_LIST_TIMEOUT=10s` / `_CALL_TIMEOUT=30s`，均可 env 覆盖。容器里没 node/npx，只能跑 Python 系 server 且需烘进镜像。',
+            pitfall:
+              '**MCP 在 app lifespan 里连，一个 hang 住(或首次要下依赖)的 server 就能让 FastAPI 永远起不来 = 整站挂。** ' +
+              '接别人的进程，边界感必须拉满。\n\n' +
+              '**教训**：连接/列工具/调用各自设超时，**超时跳过该 server 而不是吊死整个应用**。还踩过：容器是 Python uv 镜像没 node/npx→' +
+              '官方 npx 系 server 根本跑不了；且 uvx 现拉依赖会因容器 FS 临时、PyPI 一慢就撞超时→**依赖必须烘进镜像**。',
           },
         ],
         sources: [
@@ -639,6 +707,17 @@ fused AS (
   ) u GROUP BY id)                                             -- k = 60
 SELECT ... FROM fused f JOIN kb_chunk c ... ORDER BY f.rrf DESC LIMIT :limit`,
             },
+            flow: [
+              '一个 query 同时走两路：**向量路**(query embedding 找 cosine 最近 40 块) + **trigram 路**(`word_similarity` 最高 40 块)。',
+              '每路给命中的块一个**排名**(ROW_NUMBER)，不是原始分数——RRF 融合的是"名次"不是"分数"，避免两路量纲不可比。',
+              '融合：每块得分 = `w_vec/(k+向量名次)` + `w_fts/(k+trigram名次)`，`k=60`。**向量权重 2×**。',
+              '两路都命中的块拿两份分相加；只一路命中的拿一份。按融合分排序取 top-N 喂给 LLM。',
+            ],
+            pitfall:
+              '**等权融合会让泛文淹没正确文档。** 中文口语 query 走 trigram 只命中"大模型/模型"这类公共词、拿 0.333 噪声分，' +
+              '于是一堆泛泛的 AI 入门文两路都沾、**两票相加**反超"只有向量一票"的正确文档。\n\n' +
+              '**实测**：问"大模型怎么省显存"，等权时根本捞不到 FP4/vLLM/推理优化那几篇——而向量单路其实把它们排在 4-6 位！' +
+              '是 trigram 噪声把它们挤出了 top-8。**教训**：两路不是平等的，向量是主信号、trigram 是补充→给向量 2× 权重(实测的甜点，再重会漏跨域噪声)。',
           },
           {
             id: 'rag-graph',
@@ -716,6 +795,12 @@ SELECT ... FROM fused f JOIN kb_chunk c ... ORDER BY f.rrf DESC LIMIT :limit`,
             summary: '断言无 tool 结果含"执行失败"——防 mock 签名不匹配导致工具从没真跑。',
             concept: '最阴险的 bug 是"用例绿着但功能没跑"。曾因 harness 少收 privileged 参数，每次工具调用 TypeError 被吞成"执行失败"、不变量照样成立、假绿三个月。',
             implementation: '`_base_invariants` 断言 `not [r for r in rows if "执行失败" in r.content]`；工具优雅报错是"抓取失败/搜索失败"不含此标记、不误伤。建 cron 当晚就挖出来。',
+            pitfall:
+              '**最阴险的 bug 是"用例绿着但功能从没跑过"，假绿了三个月。** live 测试的 harness 把 fake invoke 直接 setattr，' +
+              '但真签名是 `invoke(session, name, args, *, privileged)`——每次工具调用都 `TypeError`，被 `except Exception` 吞成' +
+              '"skill 执行失败"喂回模型；模型照样答得出、不变量(no_leak/paired/done)全成立 → **绿灯，工具却一次没真跑**。\n\n' +
+              '**教训**：① mock 签名必须和真实签名对齐，否则 except 会把 TypeError 吞成"功能正常降级"。② 加**哨兵断言**专门抓这种：' +
+              '断言没有 tool 结果含"执行失败"。③ 洞是"套件从没人跑"才藏三个月的——建了夜间 cron 当晚就回本(18s→35s 证明工具真打网络了)。',
           },
           {
             id: 'obs-routing',
