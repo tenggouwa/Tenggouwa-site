@@ -63,6 +63,29 @@ export const ARCH: ArchRow[] = [
           `两条共用同一段 prompt cache 前缀（SYSTEM 逐字不变），私有多追加一条 PRIVATE_SYSTEM。SSE 事件：\`token/tool/tool_output/plan/ask/approval/reasoning/usage/done\`。\n\n` +
           `代码：[router.py](${REPO}/apps/server/app/modules/agent/router.py) · [auth.py](${REPO}/apps/server/app/modules/agent/auth.py)`,
         tech: ['SSE 流式', 'TOTP → 派生密钥 token', '双通道能力隔离', 'A2A(前沿)'],
+        children: [
+          {
+            id: 'entry-channels',
+            title: '双通道能力隔离',
+            summary: '公开只读 / 私有(可写+MCP+沙箱)，一套代码两种能力面。',
+            concept: '安全边界的第一原则：匿名身份永远拿不到写/高危工具。把"暴露什么"做成通道属性，而不是靠 prompt 劝模型别乱来。',
+            implementation: `\`skills_service.tools(privileged)\` 是唯一能力暴露点：公开只给 readonly 非 private；私有额外给 write/MCP。\`invoke\` 再纵深拦一层（幻觉出高危名也拒）。[permissions.py](${REPO}/apps/server/app/modules/skills/permissions.py)`,
+          },
+          {
+            id: 'entry-totp',
+            title: 'TOTP → 派生密钥 token',
+            summary: '6 位 TOTP 解锁换长 TTL agent_token，用派生密钥签而非主密钥。',
+            concept: '私有通道要能"记住已授权"又不长期暴露主密钥——短码解锁换一个作用域受限的 token。',
+            implementation: `token 用 \`sha256(AUTH_JWT_SECRET:agent-token-v1)\` 派生密钥签（若用主密钥，current_admin 会把它当 admin token 放行 = 公开 TOTP 换全 admin 权限）。TTL 默认 4h。[auth.py](${REPO}/apps/server/app/modules/agent/auth.py)`,
+          },
+          {
+            id: 'entry-sse',
+            title: 'SSE 事件协议',
+            summary: 'token/tool/tool_output/plan/ask/approval/reasoning/usage/done。',
+            concept: '流式不只是打字机效果：不同事件类型让前端边跑边渲染工具行、审批卡、思维链、进度计划。',
+            implementation: '服务端 yield 结构化事件，前端按 type 分发到对应 UI。工具实时输出(shell/子代理)走 tool_output 复用同一终端框。',
+          },
+        ],
         sources: [
           {
             title: 'Writing effective tools for AI agents — Anthropic',
@@ -148,6 +171,29 @@ export const ARCH: ArchRow[] = [
           '- **记忆注入**：把召回的长期记忆作为一条 system 备注塞在缓存前缀**之后**（见"记忆"节点）。\n\n' +
           `代码：[service.py](${REPO}/apps/server/app/modules/agent/service.py)`,
         tech: ['prompt cache 前缀', 'compaction', '结果截断', '记忆注入', 'SYSTEM 只讲策略'],
+        children: [
+          {
+            id: 'context-cache',
+            title: '稳定缓存前缀',
+            summary: 'SYSTEM + tools 恒定在前、变动在后，缓存命中便宜一个数量级。',
+            concept: 'DeepSeek 上下文缓存对"逐字节相同的前缀"才命中。所以一切固定内容排最前、一切变动排最后——连工具注册表顺序都锁死。',
+            implementation: '`_seed` 把 SYSTEM 放第一块逐字不变；私有多追加一条独立的 PRIVATE_SYSTEM（不改 SYSTEM）；REGISTRY append-only。前缀命中率实测 87~98%。',
+          },
+          {
+            id: 'context-compact',
+            title: 'compaction 压缩',
+            summary: '历史超 24K token，把最近 3 轮之前摘要成一条 note。',
+            concept: 'Claude 五层压缩里只做最顶层：不是每层都压，而是"太老的对话"整体蒸馏成摘要，省 token 又不丢主线。',
+            implementation: '`COMPACT_TOKENS=24_000` / `KEEP_TURNS=3`；边界钉在 user 消息（防切在 assistant(tool_calls) 和 tool 之间产生孤儿）。',
+          },
+          {
+            id: 'context-strategy',
+            title: 'SYSTEM 只讲策略',
+            summary: 'SYSTEM 永不点名工具，"何时用我"交给各 skill 的 description。',
+            concept: '在 system 里点名工具有三宗罪：每加 skill 就改提示词(打断缓存)、覆盖 description(工具选不中)、两处真相不同步。',
+            implementation: `写"涉及本站内容先查知识库"而非"先用 kb_search"。守卫测试 \`test_system_prompt_names_no_tools\` 防长回来。加新 skill = 1 文件 + 1 行注册 + 0 行提示词。`,
+          },
+        ],
         sources: [
           { title: 'Context Engineering for AI Agents 2026 — mem0', url: 'https://mem0.ai/blog/context-engineering-ai-agents-guide' },
         ],
@@ -311,6 +357,29 @@ export const ARCH: ArchRow[] = [
         implementation:
           `本站 [REGISTRY](${REPO}/apps/server/app/modules/skills/registry.py) 顺序 = tools 顺序 = 缓存前缀（append-only）。MCP 走**渐进披露**：默认只给一个 \`load_tools\` 元工具（description 带轻目录、names 用 enum 钉死），模型 load 后完整 schema 才进本轮。实测完整 schema 均摊 276 tok/个 vs 目录项 97 tok/个 = 2.8 倍。**只对 MCP 不对原生**（原生 13 个全在缓存前缀里、成本≈0）。`,
         tech: ['MCP 协议', '渐进披露', 'load_tools + enum', 'append-only 注册'],
+        children: [
+          {
+            id: 'mcp-registry',
+            title: '注册表 = 缓存前缀',
+            summary: 'REGISTRY 顺序 = tools 顺序 = prompt cache 前缀，只增不重排。',
+            concept: '工具列表是缓存前缀的一部分——随机化/动态重排(如 MCP list_changed)会打断缓存。Codex 踩过这个坑。',
+            implementation: `新 skill 一律追加到 [registry.py](${REPO}/apps/server/app/modules/skills/registry.py) 末尾，绝不插中间；MCP 工具按 (server,tool) 字典序确定性排序追加在原生之后。`,
+          },
+          {
+            id: 'mcp-progressive',
+            title: 'load_tools 渐进披露',
+            summary: '常驻的只是"名字+一句话"目录，完整 schema 用到才加载。',
+            concept: '工具一多，光 schema 就撑爆上下文。学 CC Skills：目录常驻、正文按需。只对 MCP 做(别人写的、数量不可控)，原生常驻(成本≈0、拆开反而更选不中)。',
+            implementation: `默认只给 \`load_tools\` 元工具(description 带轻目录、names 用 enum 钉死防幻觉)，模型 load 后 schema 才进本轮 tools(每步重算)。实测 276 vs 97 tok/个 = 2.8 倍。[service.py](${REPO}/apps/server/app/modules/skills/service.py)`,
+          },
+          {
+            id: 'mcp-timeout',
+            title: '连接/调用超时',
+            summary: 'MCP server 在 app lifespan 里连，一个 hang 住能让整站起不来。',
+            concept: '接别人的进程要设边界：连接、列工具、调用各自超时，超时跳过该 server 而不是吊死整个应用。',
+            implementation: '`_CONNECT_TIMEOUT=20s`(超时跳过、站照常起) / `_LIST_TIMEOUT=10s` / `_CALL_TIMEOUT=30s`，均可 env 覆盖。容器里没 node/npx，只能跑 Python 系 server 且需烘进镜像。',
+          },
+        ],
         sources: [
           { title: 'awesome-harness-engineering — Skills & MCP', url: 'https://github.com/ai-boost/awesome-harness-engineering' },
         ],
@@ -325,6 +394,29 @@ export const ARCH: ArchRow[] = [
           '关键收益是**上下文隔离**：子任务的中间检索噪音不塞进主线。',
         implementation: `本站 [subagent.py](${REPO}/apps/server/app/modules/skills/subagent.py)：只读子代理（kb/web 检索），工具集**排除 run_subagent 自身**防递归、独立上下文不继承主对话、\`_SUB_MAX_STEPS=4\`、每轮上限 2 个。主代理侧把子代理每步当 tool_output 流给前端。`,
         tech: ['orchestrator-workers', '递归防护', '上下文隔离', '子代理上限'],
+        children: [
+          {
+            id: 'orch-isolation',
+            title: '递归防护 + 上下文隔离',
+            summary: '子代理工具集排除自身防递归，独立上下文不继承主对话。',
+            concept: 'orchestrator-workers 的核心收益是隔离——子任务的中间检索噪音不塞进主线。但要防子代理再开子代理无限套娃。',
+            implementation: `子代理 \`stream_run\` 的工具集**排除 run_subagent 自身**，且只读(不碰 file/shell、免审批)、独立 messages 不继承主对话。[subagent.py](${REPO}/apps/server/app/modules/skills/subagent.py)`,
+          },
+          {
+            id: 'orch-converge',
+            title: '收敛闸',
+            summary: '实测主代理会一口气开 4 个子代理、每个反复搜同一件事。',
+            concept: '模型"过度勤奋"是真问题：不加闸会烧 token + 拖慢。要在编排层设上限。',
+            implementation: '每用户轮 `MAX_SUBAGENTS_PER_TURN=2`、`_SUB_MAX_STEPS=4`、子代理内部 query 去重；超限的 tool_call 给提示不真执行。',
+          },
+          {
+            id: 'orch-parallel',
+            title: '并发汇流',
+            summary: '同批 parallel-safe 工具并发跑，结果按原下标落库保 H1。',
+            concept: '子代理/检索并发能省墙钟时间，但结果落库顺序必须和 tool_calls 对齐，否则 H1 配对断裂。',
+            implementation: '`_execute_batch` 拆 `_exec_one`，并发/串行共用队列汇流(串行=limit 1)，`MAX_PARALLEL_TOOLS=6`；write 一律串行。',
+          },
+        ],
         sources: [
           { title: 'How we built our multi-agent research system — Anthropic', url: 'https://www.anthropic.com/engineering/multi-agent-research-system' },
         ],
@@ -337,6 +429,22 @@ export const ARCH: ArchRow[] = [
         concept: '**Plan-then-Execute**：先出计划再逐步执行，配可见的进度产物（planning artifact），长程任务不迷路。简单任务不该滥用。',
         implementation: `[update_plan.py](${REPO}/apps/server/app/modules/skills/update_plan.py)：event: plan 渲染终端 checklist，同时至多一个步骤 in_progress。`,
         tech: ['plan-then-execute', '进度产物', '控制类免批'],
+        children: [
+          {
+            id: 'plan-checklist',
+            title: '计划产物 event:plan',
+            summary: '把步骤拆解流成前端可见的终端 checklist，同时至多一个 in_progress。',
+            concept: 'planning artifact 让长程任务的进度对用户可见、对模型可追踪——不是内部黑箱。',
+            implementation: `[update_plan.py](${REPO}/apps/server/app/modules/skills/update_plan.py)：steps[{content,status}]，service 拦成 event:plan。`,
+          },
+          {
+            id: 'plan-restraint',
+            title: '克制使用',
+            summary: '简单单步问题不该滥用 plan。',
+            concept: '规划有开销：给它明确"何时用"的边界，否则模型会给"1+1"也列个三步计划。',
+            implementation: 'description 直接写"简单单步问题不要用"；它是控制类、免审批。',
+          },
+        ],
       },
       {
         id: 'rag',
@@ -350,6 +458,29 @@ export const ARCH: ArchRow[] = [
           `- \`kb_search\`：向量(bge-m3) + pg_trgm 双路 **RRF 融合，向量 2× 加权**（中文口语 query trigram 全是公共词噪声，等权会淹没正确文档）。\n` +
           `- \`kb_graph\`：LLM 抽的概念图谱，给"X 和 Y 什么关系"这类结构问题。\n\n代码：[kb/repository.py](${REPO}/apps/server/app/modules/kb/repository.py)`,
         tech: ['agentic RAG', '混合检索 RRF', 'GraphRAG', 'bge-m3 嵌入'],
+        children: [
+          {
+            id: 'rag-hybrid',
+            title: '混合检索 RRF 2:1',
+            summary: '向量 + trigram 双路 RRF 融合，向量 2× 加权。',
+            concept: '中文口语 query 走 trigram 只命中"大模型/模型"这类公共词、拿噪声分；等权融合会让泛文两票相加淹没正确文档。',
+            implementation: `生产 57 篇实测：等权时"大模型怎么省显存"根本捞不到 FP4/vLLM 那几篇(向量单路其实排 4-6 位)。改 w_vec=2/w_fts=1 是甜点(再重会漏跨域噪声)。[repository.py](${REPO}/apps/server/app/modules/kb/repository.py)`,
+          },
+          {
+            id: 'rag-graph',
+            title: 'GraphRAG 概念图谱',
+            summary: 'LLM 抽实体+关系织成图，给"X 和 Y 什么关系"这类结构问题。',
+            concept: '文档级相似度织不出网(什么都跟什么像=毛球)；概念级才成立——同一概念跨文档合并成一个节点。',
+            implementation: `两趟 JSON-mode 抽取(先实体、再把清单喂回问关系)，529 实体/499 关系。\`kb_graph\` skill 与 \`kb_search\`(块检索) 互补。发文后台自动增量抽。`,
+          },
+          {
+            id: 'rag-embed',
+            title: '嵌入与降级',
+            summary: 'bge-m3(1024) 向量；未配 key 自动降级纯 trigram。',
+            concept: '嵌入是外部依赖，要能优雅降级：没 key 时检索退到 pg_trgm(对中文友好)，功能不崩只是召回弱些。',
+            implementation: 'OpenRouter bge-m3(走 Parasail 稳定)；`embedder.configured` 为假则 embedding 列留空、检索纯 trigram。记忆层复用同一 Embedder。',
+          },
+        ],
         sources: [
           { title: 'Context Engineering — RAG & Memory 2026', url: 'https://www.meta-intelligence.tech/en/insight-context-engineering' },
         ],
@@ -367,6 +498,22 @@ export const ARCH: ArchRow[] = [
         concept: '**Reasoning models**（o1/R1 一类）把"想"显式化。工程上可按需切换：普通问题用快模型，难题切推理模型，并把 reasoning trace 展示出来（可解释）。',
         implementation: `顶栏"深度思考"开关 → 换 \`deepseek-reasoner\`，把 \`reasoning_content\` 实时流成可折叠"思考过程"块（不进正文/不落库）。实测 reasoner 仍支持 tools。见 [service.py](${REPO}/apps/server/app/modules/agent/service.py)。`,
         tech: ['reasoning model', '思维链流式', '按需切换'],
+        children: [
+          {
+            id: 'reason-switch',
+            title: '按需换推理模型',
+            summary: '顶栏"深度思考"开关 → 换 deepseek-reasoner，普通问题仍用快模型。',
+            concept: 'reasoning model 更强但更慢更贵——不该默认全开，做成用户可切的挡位，难题才上。',
+            implementation: '`answer_stream(deep=True)` → `REASONER_MODEL`(env `KB_LLM_REASONER_MODEL` 可覆盖)；provider.stream_step 加 model 覆盖参。实测 reasoner 仍支持 tools，工具循环照常。',
+          },
+          {
+            id: 'reason-trace',
+            title: '思维链流式',
+            summary: '把 reasoning_content 实时流成可折叠"思考过程"块，不进正文/不落库。',
+            concept: '推理轨迹是可解释性资产：展示但隔离——它是"想"不是"答"，不该混进正文、也不该污染会话历史。',
+            implementation: '解析 `delta.reasoning_content` → `reasoning` 事件；前端渲染可折叠块。鸡兔同笼实测 154 段思维链 + 干净答案。',
+          },
+        ],
       },
       {
         id: 'observability',
@@ -381,6 +528,29 @@ export const ARCH: ArchRow[] = [
           '- **哨兵**：断言无 tool 结果含"执行失败"——曾因 mock 签名不匹配导致工具从没真跑、用例假绿三个月。\n' +
           `- **usage 事件**：每轮报输入/输出 token + 缓存命中率。代码 [tests/](${REPO}/apps/server/tests/)`,
         tech: ['分层回归网', 'live 冒烟', '路由 eval', '假绿哨兵', 'usage 遥测'],
+        children: [
+          {
+            id: 'obs-layers',
+            title: '分层回归网',
+            summary: '纯函数单测 + agent 循环 harness(脚本化 LLM) + 夜跑真模型冒烟。',
+            concept: '三层各司其职：单测毫秒级、harness 不联网测循环逻辑、live 守真模型行为漂移(不进 PR 门禁)。',
+            implementation: `harness 用 ScriptedLLM 喂固定 rounds、断言 SSE 事件/消息配对/落库；live-smoke 每晚 UTC18:00 跑真 DeepSeek。[tests/](${REPO}/apps/server/tests/)`,
+          },
+          {
+            id: 'obs-sentinel',
+            title: '假绿哨兵',
+            summary: '断言无 tool 结果含"执行失败"——防 mock 签名不匹配导致工具从没真跑。',
+            concept: '最阴险的 bug 是"用例绿着但功能没跑"。曾因 harness 少收 privileged 参数，每次工具调用 TypeError 被吞成"执行失败"、不变量照样成立、假绿三个月。',
+            implementation: '`_base_invariants` 断言 `not [r for r in rows if "执行失败" in r.content]`；工具优雅报错是"抓取失败/搜索失败"不含此标记、不误伤。建 cron 当晚就挖出来。',
+          },
+          {
+            id: 'obs-routing',
+            title: '路由金标准 eval',
+            summary: '夜跑断言"给定 query 首个工具选对没"，防 SYSTEM 去枚举后路由退化。',
+            concept: '描述就是路由逻辑，但没东西盯着它——web_search 一轮搜 13 次那种退化是肉眼撞见的。要把它变成网兜。',
+            implementation: `[test_live_skill_routing.py](${REPO}/apps/server/tests/test_live_skill_routing.py)：判定用"首轮工具集 ∩ 预期 非空"(模型爱批量搜，交集不误杀)。`,
+          },
+        ],
         sources: [
           { title: 'awesome-harness-engineering — Evals & Observability', url: 'https://github.com/ai-boost/awesome-harness-engineering' },
         ],
@@ -397,6 +567,29 @@ export const ARCH: ArchRow[] = [
           '- FastAPI async + gunicorn(workers=1) + Docker Compose + Cloudflare Tunnel，部署阿里云小机（1.6G，有 OOM 前科，加东西都要量内存）。\n' +
           '- 树莓派当 bwrap 沙箱执行节点。',
         tech: ['DeepSeek', 'bge-m3', 'pgvector', 'FastAPI async', 'Cloudflare Tunnel', 'Raspberry Pi'],
+        children: [
+          {
+            id: 'infra-model',
+            title: '模型与嵌入',
+            summary: 'DeepSeek(chat/reasoner) 直连生成 + OpenRouter bge-m3 嵌入。',
+            concept: '生成和嵌入分开选型、各走 env 配置：都 OpenAI 兼容，换供应商不改代码。',
+            implementation: 'CI 用一把独立的 KB_LLM_API_KEY(非生产那把)。关键事实：DeepSeek/OpenRouter 都无好用的通用 embedding 直连，故嵌入走 OpenRouter 的 bge-m3。',
+          },
+          {
+            id: 'infra-store',
+            title: 'pgvector 向量库',
+            summary: 'pg16 + pgvector 存 kb_chunk / kb_entity / agent_memory 向量。',
+            concept: '一个 pg 实例同时当关系库 + 向量库,省一套依赖。小语料精确扫描够用,hnsw 供规模变大再提速。',
+            implementation: 'kb_chunk 建 hnsw 余弦索引;agent_memory 按 owner 过滤后量极小、不建 hnsw。检索用 `<=>` 余弦距离。',
+          },
+          {
+            id: 'infra-deploy',
+            title: '部署与隔离节点',
+            summary: 'FastAPI async + Docker Compose + Cloudflare Tunnel;树莓派当沙箱。',
+            concept: '小机(1.6G,有 OOM 前科)上加任何东西都要量内存;执行不可信代码放独立隔离节点(Pi bwrap),不放主机。',
+            implementation: 'gunicorn workers=1、`pnpm deploy:server` rsync+docker 上阿里云;Pi 走 HTTP 长轮询回传(装不上 wss)。生产 530+SSH banner 超时+journald crash-loop = 内存不是磁盘。',
+          },
+        ],
       },
     ],
   },
