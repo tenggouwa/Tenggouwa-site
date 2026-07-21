@@ -172,6 +172,17 @@ export default function Arch() {
             </Section>
           )}
 
+          {cur.code && (
+            <div className="space-y-1.5">
+              <div className="text-xs" style={{ color: curColor }}>
+                <span className="text-terminal-pink">$</span> 代码{cur.code.caption ? ` · ${cur.code.caption}` : ''}
+              </div>
+              <pre className="overflow-x-auto rounded-lg border border-terminal-line/60 bg-terminal-panel/40 p-3 text-[12px] leading-[1.5] text-terminal-gray/85 font-mono">
+                <code>{cur.code.body}</code>
+              </pre>
+            </div>
+          )}
+
           {cur.children && cur.children.length > 0 && (
             <div className="space-y-2">
               <div className="text-xs" style={{ color: curColor }}>

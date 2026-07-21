@@ -43,6 +43,14 @@ describe('Arch 架构解剖器（原地下钻）', () => {
     expect(screen.getByText('GraphRAG 概念图谱')).toBeTruthy();
   });
 
+  it('节点展示真实代码块', async () => {
+    render(<Arch />);
+    fireEvent.click(screen.getByText('能力层 Tools / Skills'));
+    // Skill dataclass 真代码
+    await waitFor(() => expect(screen.getByText(/代码 · base\.py/)).toBeTruthy());
+    expect(screen.getByText(/risk: Literal\["readonly", "write"\]/)).toBeTruthy();
+  });
+
   it('面包屑 ~/arch 回到根总图', async () => {
     render(<Arch />);
     fireEvent.click(screen.getByText('安全 / 权限 / 沙箱'));
