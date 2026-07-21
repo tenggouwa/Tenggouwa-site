@@ -32,6 +32,7 @@ export interface ArchNode {
   summary: string; // 抽屉头部一句话
   concept: string; // md：概念 + 2026 最新技术
   implementation?: string; // md：我的实现（带真实文件链接）
+  code?: { caption?: string; body: string }; // 真实代码片段（从仓库摘的，非示意）
   tech?: string[]; // 技术要点 chips
   children?: ArchNode[]; // 二级架构
   sources?: Source[]; // 延伸阅读
@@ -77,6 +78,16 @@ export const ARCH: ArchRow[] = [
             summary: '6 位 TOTP 解锁换长 TTL agent_token，用派生密钥签而非主密钥。',
             concept: '私有通道要能"记住已授权"又不长期暴露主密钥——短码解锁换一个作用域受限的 token。',
             implementation: `token 用 \`sha256(AUTH_JWT_SECRET:agent-token-v1)\` 派生密钥签（若用主密钥，current_admin 会把它当 admin token 放行 = 公开 TOTP 换全 admin 权限）。TTL 默认 4h。[auth.py](${REPO}/apps/server/app/modules/agent/auth.py)`,
+            code: {
+              caption: 'auth.py — 派生密钥',
+              body: `def _secret() -> str:
+    base = config.get("AUTH_JWT_SECRET")
+    # 关键：agent_token 用派生密钥签，不用主密钥。否则 current_admin 不校验 type，
+    # 会把 agent_token 当 admin token 放行 = 公开 TOTP 直接换全 admin 权限。
+    return hashlib.sha256(f"{base}:agent-token-v1".encode()).hexdigest()
+
+token = jwt.encode({"sub": owner, "type": "agent", "ep": epoch, ...}, _secret(), "HS256")`,
+            },
           },
           {
             id: 'entry-sse',
@@ -117,6 +128,22 @@ export const ARCH: ArchRow[] = [
           '- 终止 = 模型这一步没有 tool_call（自然收口），而非固定步数。\n' +
           '- `MAX_STEPS=16` 只是**兜底防死循环**；`STEP_TOKEN_BUDGET=40_000` 累计工具往返超了强制收尾。\n' +
           '- **H1 不变量**：带 tool_calls 的 assistant 消息，后面必须紧跟等量的 tool 结果——否则 resume 时 DeepSeek 会 400（会话毒化）。这条贯穿落库、审批暂停、并发汇流。',
+        code: {
+          caption: 'service.py — answer_stream 主循环',
+          body: `for _ in range(MAX_STEPS):                    # 兜底防死循环，非常规上限
+    content, tool_calls = "", []
+    async for ev in chat_llm.stream_step(messages, tools=tools, model=model):
+        ...                                       # 正文 delta 实时 yield、攒 tool_calls
+
+    if not tool_calls:                            # 没工具调用 = 本轮正文即最终答案
+        answered = True
+        break                                     # ← 自然终止，不是固定步数
+
+    messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
+    await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
+    async for ev in self._execute_batch(...):     # 执行工具 → 结果回灌 messages
+        yield ev                                  # 下一轮 stream_step 带着结果再决策`,
+        },
         tech: ['ReAct 循环', 'MAX_STEPS=16 兜底', 'token 预算', 'H1 配对不变量', '流式 tool_call 解析'],
         children: [
           {
@@ -139,6 +166,17 @@ export const ARCH: ArchRow[] = [
             summary: 'assistant(tool_calls) 必须紧跟等量 tool 结果，否则会话毒化。',
             concept: 'append-only 会话逐字节重建 messages 以保住缓存前缀——一旦出现孤儿 tool_call，DeepSeek 直接 400。',
             implementation: 'C2 审批暂停时**不落** assistant(tool_calls)（存进 `pending`），批准续跑才落，避免孤儿。测试 `assert_paired` 守这条。',
+            code: {
+              caption: 'service.py — 审批暂停时不落 assistant',
+              body: `need = [tc for tc in tool_calls if requires_approval(_tc_name(tc))]
+if need:
+    # 关键：不 append 也不 repo.append assistant(tool_calls)——否则这条 assistant
+    # 后面没有配对的 tool 结果 = 孤儿 tool_call，resume 时 DeepSeek 直接 400。
+    await repo.set_pending(sid, {"content": content, "tool_calls": tool_calls})
+    yield {"type": "approval", "requests": [...]}
+    answered = True
+    break                        # 用户批/拒后带 approvals 续跑，那时才真正落库`,
+            },
           },
         ],
         sources: [
@@ -178,6 +216,18 @@ export const ARCH: ArchRow[] = [
             summary: 'SYSTEM + tools 恒定在前、变动在后，缓存命中便宜一个数量级。',
             concept: 'DeepSeek 上下文缓存对"逐字节相同的前缀"才命中。所以一切固定内容排最前、一切变动排最后——连工具注册表顺序都锁死。',
             implementation: '`_seed` 把 SYSTEM 放第一块逐字不变；私有多追加一条独立的 PRIVATE_SYSTEM（不改 SYSTEM）；REGISTRY append-only。前缀命中率实测 87~98%。',
+            code: {
+              caption: 'service.py — _seed 消息装配',
+              body: `def _seed(window, privileged=False):
+    messages = [{"role": "system", "content": SYSTEM}]   # 首块逐字不变 = 缓存前缀
+    if privileged:                                        # 私有：独立追加，不改 SYSTEM
+        messages.append({"role": "system", "content": PRIVATE_SYSTEM})
+    if window.summary:                                    # compaction 产物
+        messages.append({"role": "system", "content": f"[早前摘要]\\n{window.summary}"})
+    messages.extend(window.messages)                      # 变动部分一律排最后
+    return messages
+# tools 也恒定在前（REGISTRY 顺序锁死）→ SYSTEM+tools 前缀逐字节稳定 → 命中缓存`,
+            },
           },
           {
             id: 'context-compact',
@@ -218,6 +268,21 @@ export const ARCH: ArchRow[] = [
           REPO +
           '/apps/server/app/modules/skills/base.py) dataclass = 名字 + 描述 + JSON schema + handler + `risk(readonly|write)` + `private`。铁律：**SYSTEM 只讲策略、永不点名工具**，"何时用我"交给各 skill 的 description（点名过会导致 kb_graph 死活选不中）。\n\n' +
           '关键机制都在这层：结果状态前缀、并发、去重、路由 eval——见下面二级架构。',
+        code: {
+          caption: 'base.py — Skill 抽象',
+          body: `@dataclass(frozen=True)
+class Skill:
+    name: str
+    description: str          # 给模型看：决定何时调、传什么参数（"何时用我"全靠它）
+    parameters: dict         # OpenAI function-calling 的 JSON schema
+    handler: SkillHandler    # async (session, args) -> str
+    # readonly 自动放行 / write 有副作用需审批。新增 write skill 务必显式标，
+    # 否则默认 readonly 会绕过权限闸自动执行。
+    risk: Literal["readonly", "write"] = "readonly"
+    # private=True 只在鉴权私有通道暴露（即便 readonly）。与 risk 正交：
+    # risk 管"要不要审批"，private 管"哪条通道能看到"。
+    private: bool = False`,
+        },
         tech: ['Skill dataclass', 'risk 分级', '结果状态前缀', '并发 MAX=6', '归一化去重', 'SYSTEM 不点名'],
         children: [
           {
@@ -226,6 +291,18 @@ export const ARCH: ArchRow[] = [
             summary: '[无结果] / [出错] 前缀，让模型一眼分清"查了没有"和"工具坏了"。',
             concept: '模型（尤其较小的）容易把空结果当"该重试"→ 反复换措辞搜同一件事。给结果打自解释前缀是最省的解法。',
             implementation: `[results.py](${REPO}/apps/server/app/modules/skills/results.py)：\`empty()\`/\`error()\` 两个 helper，只前置不吞原文。`,
+            code: {
+              caption: 'results.py',
+              body: `def empty(msg: str) -> str:   # 工具跑了、但没命中 → 别反复换措辞搜同一件事
+    return f"[无结果] {msg}"
+
+def error(msg: str) -> str:   # 工具本身失败(网络/依赖/超时) → 重试通常无用，换条路
+    return f"[出错] {msg}"
+
+# 成功不加前缀（最常见）；参数错/通道不可用那类"改你的调用"也不用它。
+# kb_search 空 → return empty("知识库里没有相关内容。")
+# web_fetch 挂 → return error(f"抓取失败：{e}")`,
+            },
           },
           {
             id: 'tools-dedup',
@@ -233,6 +310,21 @@ export const ARCH: ArchRow[] = [
             summary: '每轮检索归一化去重 + 硬上限，挡"换角度重搜"烧 token。',
             concept: '实测 agent 一个回合能搜 13 次高度重复的 query。精确去重抓不住换措辞，需归一化 + 总次数上限双保险。',
             implementation: '`_norm_query`（去标点空白）+ `MAX_SEARCHES_PER_TURN=6`；子代理另有上限 2。见 [service.py](' + REPO + '/apps/server/app/modules/agent/service.py)。',
+            code: {
+              caption: 'service.py — 检索去重 + 硬上限',
+              body: `def _norm_query(q: str) -> str:            # "省显存?" 和 "省 显存" 归一成同一个
+    return re.sub(r"[\\W_]+", "", q.lower())   # \\W 按 Unicode 判定，CJK 保留
+
+def _turn_cap(name, args, state):          # 返回非 None = 拦下、用文案当结果、不真跑
+    if name in _SEARCH_SKILLS:             # {"web_search", "kb_search"}
+        q = _norm_query(str(args.get("query", "")))
+        if q in state["searched"]:
+            return "（这个查询本轮已经搜过了，别重复搜同一件事…）"
+        if len(state["searched"]) >= MAX_SEARCHES_PER_TURN:   # = 6
+            return "（本轮检索已达上限，别再搜了，用已有结果作答。）"
+        state["searched"].add(q)
+    return None`,
+            },
           },
           {
             id: 'tools-parallel',
@@ -278,6 +370,20 @@ export const ARCH: ArchRow[] = [
             summary: 'embed → 最近一条距离 < 0.12 则更新，否则新插 + 超限淘汰。',
             concept: '写时去重是记忆不烂的关键：同一件事换个说法不该记第二遍。',
             implementation: `[store.py](${REPO}/apps/server/app/modules/memory/store.py) \`remember\`：\`DEDUP_DISTANCE=0.12\` / \`MAX_MEMORIES_PER_OWNER=200\`。`,
+            code: {
+              caption: 'store.py — remember 写前去重',
+              body: `async def remember(self, owner, content):
+    vec = await embedder.embed_one(content)
+    near = (await self.session.execute(          # 该 owner 最近的一条
+        select(AgentMemoryRow, AgentMemoryRow.embedding.cosine_distance(vec).label("dist"))
+        .where(AgentMemoryRow.owner == owner, AgentMemoryRow.embedding.isnot(None))
+        .order_by("dist").limit(1))).first()
+    if near is not None and near.dist < DEDUP_DISTANCE:   # 0.12 → 同一件事
+        near[0].content = content; near[0].embedding = vec   # 更新，不新插
+        return "（已更新一条相近的记忆）"
+    self.session.add(AgentMemoryRow(owner=owner, content=content, embedding=vec))
+    await self._evict_over_cap(owner)            # 超 200 淘汰最旧`,
+            },
           },
           {
             id: 'memory-recall',
@@ -285,6 +391,24 @@ export const ARCH: ArchRow[] = [
             summary: 'query embed → owner 向量检索 → 阈值过滤 → system 备注注入。',
             concept: '召回位置很讲究：塞在稳定缓存前缀之后（同 summary/历史），不破 prompt cache。不相关的（距离超阈值）不注入，免当噪声。',
             implementation: '`RECALL_MAX_DISTANCE=0.6` / `RECALL_TOP_K=6`；注入在 [`_inject_memories`](' + REPO + '/apps/server/app/modules/agent/service.py)，失败吞掉不拖垮回答。',
+            code: {
+              caption: 'store.py + service.py — 召回并注入',
+              body: `# store.py：owner 向量检索 + 距离阈值筛选
+async def recall(self, owner, query, k=6):
+    qvec = await embedder.embed_one(query)
+    rows = (await self.session.execute(
+        select(AgentMemoryRow.content,
+               AgentMemoryRow.embedding.cosine_distance(qvec).label("dist"))
+        .where(AgentMemoryRow.owner == owner)
+        .order_by("dist").limit(k))).all()
+    return [r.content for r in rows if r.dist < RECALL_MAX_DISTANCE]   # 0.6 太远不要
+
+# service.py：注入在稳定缓存前缀之后（同 summary/历史动态区，不破 cache）
+mems = await MemoryStore(session).recall(owner, q)
+if mems:
+    messages.append({"role": "system",
+        "content": "[关于当前用户，你此前记住的]\\n" + "\\n".join(f"- {m}" for m in mems)})`,
+            },
           },
           {
             id: 'memory-owner',
@@ -321,6 +445,26 @@ export const ARCH: ArchRow[] = [
             summary: 'readonly/控制类免批，write 需审批；记忆写是"免批但串行"的例外。',
             concept: '权限判定要能表达"benign 的写"——记忆写有副作用但 owner 内部无害，不该弹审批却仍要串行。',
             implementation: '`_CONTROL`（update_plan/ask_user）+ `_AUTO_WRITE`（remember/forget）免批；后者不进 `is_parallel_safe`（dedup 读改写要串行）。',
+            code: {
+              caption: 'permissions.py',
+              body: `_CONTROL = {"update_plan", "ask_user"}      # 控制流，无外部副作用
+_AUTO_WRITE = {"remember", "forget"}        # 写自己的记忆：免批，但仍是 write
+
+def requires_approval(name: str) -> bool:
+    if name in _CONTROL or name in _AUTO_WRITE:
+        return False
+    skill = REGISTRY.get(name)
+    if skill is not None:
+        return skill.risk != "readonly"     # 原生 write 需批准
+    if mcp_manager.has(name):
+        return not mcp_manager.is_auto(name)  # 非 auto 的 MCP 需批准
+    return False
+
+def is_parallel_safe(name):                 # 能否与同批并发
+    if name in _CONTROL: return True
+    skill = REGISTRY.get(name)              # _AUTO_WRITE 是 write → 不在此，串行
+    return skill is not None and skill.risk == "readonly"`,
+            },
           },
           {
             id: 'sec-approval',
@@ -371,6 +515,20 @@ export const ARCH: ArchRow[] = [
             summary: '常驻的只是"名字+一句话"目录，完整 schema 用到才加载。',
             concept: '工具一多，光 schema 就撑爆上下文。学 CC Skills：目录常驻、正文按需。只对 MCP 做(别人写的、数量不可控)，原生常驻(成本≈0、拆开反而更选不中)。',
             implementation: `默认只给 \`load_tools\` 元工具(description 带轻目录、names 用 enum 钉死防幻觉)，模型 load 后 schema 才进本轮 tools(每步重算)。实测 276 vs 97 tok/个 = 2.8 倍。[service.py](${REPO}/apps/server/app/modules/skills/service.py)`,
+            code: {
+              caption: 'service.py — load_tools 元工具（目录常驻、schema 按需）',
+              body: `def _load_tools_schema(catalog):
+    listing = "\\n".join(f"- {c['name']}：{c['description']}" for c in catalog)
+    return {"type": "function", "function": {
+        "name": "load_tools",
+        "description": f"下列工具当前不可直接调用，需先加载：\\n{listing}",
+        "parameters": {"type": "object", "properties": {"names": {
+            "type": "array",
+            "items": {"enum": [c["name"] for c in catalog]}}}}}}  # enum 挡"编个不存在的工具名"
+
+# tools()：原生常驻在前；MCP 只给 load_tools + 已 loaded 的
+return native + [_load_tools_schema(catalog)] + mcp_manager.tools_by_names(loaded)`,
+            },
           },
           {
             id: 'mcp-timeout',
@@ -465,6 +623,22 @@ export const ARCH: ArchRow[] = [
             summary: '向量 + trigram 双路 RRF 融合，向量 2× 加权。',
             concept: '中文口语 query 走 trigram 只命中"大模型/模型"这类公共词、拿噪声分；等权融合会让泛文两票相加淹没正确文档。',
             implementation: `生产 57 篇实测：等权时"大模型怎么省显存"根本捞不到 FP4/vLLM 那几篇(向量单路其实排 4-6 位)。改 w_vec=2/w_fts=1 是甜点(再重会漏跨域噪声)。[repository.py](${REPO}/apps/server/app/modules/kb/repository.py)`,
+            code: {
+              caption: 'repository.py — 双路 RRF 融合（向量 2× 加权）',
+              body: `WITH vec AS (        -- 向量路：cosine 最近 pool 条
+  SELECT c.id, ROW_NUMBER() OVER (ORDER BY c.embedding <=> :qvec) AS rank
+  FROM kb_chunk c ... ORDER BY c.embedding <=> :qvec LIMIT :pool),   -- pool=40
+fts AS (             -- trigram 路：word_similarity 最高 pool 条
+  SELECT c.id, ROW_NUMBER() OVER (ORDER BY word_similarity(:q, c.content) DESC) AS rank
+  FROM kb_chunk c ... ORDER BY word_similarity(:q, c.content) DESC LIMIT :pool),
+fused AS (
+  SELECT id, SUM(score) AS rrf FROM (
+    SELECT id, :w_vec * 1.0 / (:k + rank) AS score FROM vec    -- w_vec = 2.0
+    UNION ALL
+    SELECT id, :w_fts * 1.0 / (:k + rank) AS score FROM fts    -- w_fts = 1.0 (向量 2×)
+  ) u GROUP BY id)                                             -- k = 60
+SELECT ... FROM fused f JOIN kb_chunk c ... ORDER BY f.rrf DESC LIMIT :limit`,
+            },
           },
           {
             id: 'rag-graph',
