@@ -48,3 +48,9 @@ apps/server/logs/
 
 # packages/api-types: openapi.json 是 gen 的中间产物，只 commit 生成出来的 openapi.ts
 packages/api-types/openapi.json
+
+# codex 本机配置 / 规划草稿（误入过一次，见 #212）——本机保留、不进仓库
+.codex/
+findings.md
+progress.md
+task_plan.md
