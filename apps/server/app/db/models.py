@@ -598,6 +598,24 @@ class AgentMemoryRow(Base):
     __table_args__ = (Index("ix_agent_memory_owner", "owner", "created_at"),)
 
 
+class AgentInboxRow(Base):
+    """agent 主动/定时任务的产出，异步投进 owner 的收件箱——「从被动应答到主动行动」的落点。
+
+    定时器（或手动触发）让 agent 自主跑一个目标 → 结果写这里 → owner 之后来看。owner 非空、按其隔离。
+    """
+
+    __tablename__ = "agent_inbox"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # 已读时间；空=未读
+
+    __table_args__ = (Index("ix_agent_inbox_owner_created", "owner", "created_at"),)
+
+
 class AgentMessageRow(Base):
     """会话内一条消息，append-only。role ∈ user | assistant | tool。"""
 

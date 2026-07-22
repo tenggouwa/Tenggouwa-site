@@ -88,6 +88,27 @@ export const listMemories = (token: string) => agentApi<MemoryItem[]>('/memories
 export const deleteMemory = (token: string, mid: number) =>
   agentApi<{ deleted: boolean }>(`/memories/${mid}`, token, { method: 'DELETE' });
 
+// 收件箱（主动/定时任务产出）：列 / 读 / 删 / 手动触发一次主动运行。仅私有通道。
+export interface InboxItem {
+  id: number;
+  title: string;
+  body: string;
+  created_at: string;
+  read: boolean;
+}
+
+export const listInbox = (token: string) => agentApi<InboxItem[]>('/inbox', token);
+export const readInbox = (token: string, id: number) =>
+  agentApi<{ ok: boolean }>(`/inbox/${id}/read`, token, { method: 'POST' });
+export const deleteInbox = (token: string, id: number) =>
+  agentApi<{ deleted: boolean }>(`/inbox/${id}`, token, { method: 'DELETE' });
+export const runProactive = (token: string, prompt: string, title = '手动触发') =>
+  agentApi<{ inbox_id: number }>('/proactive/run', token, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, title }),
+  });
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

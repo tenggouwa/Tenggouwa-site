@@ -8,8 +8,9 @@ import json
 from datetime import datetime
 from uuid import uuid4
 
-from db.models import AgentMessageRow, AgentSessionRow
+from db.models import AgentInboxRow, AgentMessageRow, AgentSessionRow
 from sqlalchemy import delete, func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -89,6 +90,51 @@ class AgentRepository:
         """删除会话及其消息（message 表有 ON DELETE CASCADE，删 session 即连带清）。"""
         await self.session.execute(delete(AgentSessionRow).where(AgentSessionRow.id == sid))
         await self.session.flush()
+
+    # ---------- 收件箱（主动/定时任务产出）----------
+
+    async def add_inbox(self, owner: str, title: str, body: str) -> int:
+        row = AgentInboxRow(owner=owner, title=title[:200], body=body)
+        self.session.add(row)
+        await self.session.flush()
+        return row.id
+
+    async def list_inbox(self, owner: str, limit: int = 50) -> list[AgentInboxRow]:
+        return list(
+            (
+                await self.session.execute(
+                    select(AgentInboxRow)
+                    .where(AgentInboxRow.owner == owner)
+                    .order_by(AgentInboxRow.created_at.desc())
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    async def unread_count(self, owner: str) -> int:
+        return (
+            await self.session.execute(
+                select(func.count(AgentInboxRow.id)).where(
+                    AgentInboxRow.owner == owner, AgentInboxRow.read_at.is_(None)
+                )
+            )
+        ).scalar() or 0
+
+    async def mark_inbox_read(self, owner: str, item_id: int) -> bool:
+        res = await self.session.execute(
+            sa_update(AgentInboxRow)
+            .where(AgentInboxRow.id == item_id, AgentInboxRow.owner == owner, AgentInboxRow.read_at.is_(None))
+            .values(read_at=func.now())
+        )
+        return (res.rowcount or 0) > 0
+
+    async def delete_inbox(self, owner: str, item_id: int) -> bool:
+        res = await self.session.execute(
+            delete(AgentInboxRow).where(AgentInboxRow.id == item_id, AgentInboxRow.owner == owner)
+        )
+        return (res.rowcount or 0) > 0
 
     async def delete_anonymous_before(self, cutoff: datetime) -> int:
         """Delete expired public sessions; private owner data is never included."""

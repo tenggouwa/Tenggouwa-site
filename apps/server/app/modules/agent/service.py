@@ -427,6 +427,19 @@ class AgentService:
             answer = revised
         yield {"type": "final", "content": answer}
 
+    async def run_proactive(self, session: AsyncSession, owner: str, prompt: str, title: str) -> int:
+        """主动/定时：让 agent 自主完成一个目标，产出投进 owner 收件箱——「从被动应答到主动行动」的落点。
+
+        由调度器（或手动触发）调用，没有现场用户。`privileged=False`：自主运行只用只读工具，
+        绝不在无人看管下做写操作。收集流式正文当作产出。
+        """
+        answer = ""
+        async for ev in self.answer_stream(session, prompt, privileged=False, owner=owner):
+            if ev.get("type") == "token":
+                answer += ev.get("delta") or ""
+        answer = answer.strip() or "（本次没有产出内容。）"
+        return await AgentRepository(session).add_inbox(owner, title, answer)
+
     async def _exec_one(self, session, name, args, tid, approvals, privileged, turn_state, emit) -> str:
         """跑一个 tool_call 拿结果字符串；流式增量经 emit 回调发出（并发时由队列汇总回主流）。
 

@@ -37,6 +37,23 @@ class AgentMemoryItem(BaseModel):
     created_at: str
 
 
+class AgentInboxItem(BaseModel):
+    """收件箱里的一条（主动/定时任务产出）。"""
+
+    id: int
+    title: str
+    body: str
+    created_at: str
+    read: bool
+
+
+class AgentProactiveRequest(BaseModel):
+    """手动触发一次主动运行：agent 自主完成 prompt，结果进收件箱。"""
+
+    prompt: str = Field(..., min_length=1, max_length=2000)
+    title: str = Field(default="手动触发", max_length=200)
+
+
 class AgentTranscriptTurn(BaseModel):
     q: str
     tools: list[dict] = Field(default_factory=list)  # [{name, args}]
