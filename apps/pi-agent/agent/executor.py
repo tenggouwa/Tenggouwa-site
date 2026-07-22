@@ -269,7 +269,12 @@ def _browser_page():
     from playwright.sync_api import sync_playwright  # 懒导入：没装也不影响 daemon 其它功能
 
     pw = sync_playwright().start()
-    browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+    kwargs: dict = {"headless": True, "args": ["--no-sandbox", "--disable-dev-shm-usage"]}
+    # Pi 外网走代理：直连出不去。从进程 env 读（daemon 已带 http(s)_proxy），传给浏览器，不硬编码地址。
+    proxy = os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY") or os.environ.get("http_proxy")
+    if proxy:
+        kwargs["proxy"] = {"server": proxy}
+    browser = pw.chromium.launch(**kwargs)
     _browser.update(pw=pw, browser=browser, page=browser.new_page())
     return _browser["page"]
 
