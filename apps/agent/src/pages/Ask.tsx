@@ -63,6 +63,8 @@ interface Turn {
   ask?: AskQuestion[]; // agent 抛的选择题（ask_user skill）
   askIntro?: string;
   reasoning?: string; // 深度思考模式的思维链（reasoner），单独折叠展示，不进正文
+  reflections?: { round: number; verdict: string; critique: string }[]; // 反思：历次自评
+  drafts?: string[]; // 反思：被改写前的历次稿（初稿在前），过程折叠展示
   toolOutput?: Record<string, string>; // tool_call_id → 流式输出（shell_exec 实时终端）
   approval?: ApprovalRequest[]; // agent 想执行需授权的工具，等用户批/拒（C2）
   usage?: Usage;
@@ -116,6 +118,7 @@ export default function Ask() {
   const [unlockError, setUnlockError] = useState<string | undefined>();
   const [autoRun, setAutoRun] = useState(false); // auto 模式：私有沙箱内自动执行、免逐条审批
   const [deepThink, setDeepThink] = useState(false); // 深度思考：换 deepseek-reasoner，显示思维链
+  const [reflect, setReflect] = useState(false); // 反思：答完自评→按需改写（evaluator-optimizer）
   const [sessionRevision, setSessionRevision] = useState(0); // 新建/更新会话后刷新私有侧栏
 
   useEffect(() => {
@@ -218,6 +221,9 @@ export default function Ask() {
       intro?: string;
       questions?: AskQuestion[];
       requests?: ApprovalRequest[];
+      round?: number; // reflect 事件
+      verdict?: string;
+      critique?: string;
     } & Usage;
     try {
       obj = JSON.parse(data);
@@ -246,6 +252,16 @@ export default function Ask() {
       });
     else if (event === 'reasoning')
       updateTurn(idx, (t) => ({ ...t, reasoning: (t.reasoning ?? '') + (obj.delta ?? '') }));
+    else if (event === 'reflect')
+      updateTurn(idx, (t) => {
+        const reflections = [
+          ...(t.reflections ?? []),
+          { round: obj.round as number, verdict: obj.verdict as string, critique: obj.critique as string },
+        ];
+        // 需改写：把当前稿收进 drafts、清空 answer，让随后的改写 token 成为新答案
+        if (obj.verdict === 'revise') return { ...t, reflections, drafts: [...(t.drafts ?? []), t.answer], answer: '' };
+        return { ...t, reflections };
+      });
     else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
     else if (event === 'done') {
       updateTurn(idx, (t) => ({ ...t, done: true }));
@@ -271,6 +287,7 @@ export default function Ask() {
           session_id: sessionId.current,
           auto_approve: !!(agentToken && autoRun),
           deep_think: deepThink,
+          reflect,
         }),
         credentials: 'include',
         signal: ac.signal,
@@ -432,6 +449,17 @@ export default function Ask() {
             >
               {deepThink ? '◆ 深度思考' : '◇ 深度思考'}
             </button>
+            <button
+              type="button"
+              onClick={() => setReflect((v) => !v)}
+              className={
+                'text-[11px] transition-colors ' +
+                (reflect ? 'text-terminal-yellow' : 'text-terminal-gray/60 hover:text-terminal-yellow')
+              }
+              title={reflect ? '反思已开：答完自评→按需改写（更慢、多花 token）' : '开启反思：答完让评审者打分、不过关就改写一版'}
+            >
+              {reflect ? '◆ 反思' : '◇ 反思'}
+            </button>
             {agentToken ? (
               <>
                 <span className="text-[11px] text-terminal-green flex items-center gap-1" title="私有模式已解锁">
@@ -580,6 +608,29 @@ export default function Ask() {
                   </summary>
                   <div className="mt-1 pl-2 border-l border-terminal-line/50 whitespace-pre-wrap leading-5 text-terminal-gray/45">
                     {t.reasoning}
+                  </div>
+                </details>
+              )}
+              {((t.reflections && t.reflections.length > 0) || (t.drafts && t.drafts.length > 0)) && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer select-none text-terminal-yellow/70 hover:text-terminal-yellow">
+                    🔍 反思过程{t.reflections && t.reflections.length > 0 && ` · ${t.reflections.length} 轮自评`}
+                  </summary>
+                  <div className="mt-1 pl-2 border-l border-terminal-yellow/30 space-y-2">
+                    {t.drafts?.map((d, di) => (
+                      <div key={`d${di}`}>
+                        <div className="text-terminal-gray/40">初稿 {di + 1}</div>
+                        <div className="whitespace-pre-wrap leading-5 text-terminal-gray/45">{d}</div>
+                      </div>
+                    ))}
+                    {t.reflections?.map((r) => (
+                      <div key={`r${r.round}`}>
+                        <div className={r.verdict === 'pass' ? 'text-terminal-green/70' : 'text-terminal-yellow/70'}>
+                          评审 {r.round} · {r.verdict === 'pass' ? '通过' : '需改进'}
+                        </div>
+                        <div className="whitespace-pre-wrap leading-5 text-terminal-gray/45">{r.critique}</div>
+                      </div>
+                    ))}
                   </div>
                 </details>
               )}
