@@ -7,6 +7,7 @@ import ApprovalCard, { type ApprovalRequest } from '../components/ApprovalCard';
 import UnlockPanel from '../components/UnlockPanel';
 import SessionList from '../components/SessionList';
 import MemoryList from '../components/MemoryList';
+import InboxPanel from '../components/InboxPanel';
 
 // agent 对话：公开走 POST /api/public/agent/chat；私有模式（TOTP 解锁）走 /api/agent/chat + Bearer，
 // 额外拿到文件读写等高危工具，write 操作触发 C2 审批卡。SSE 事件 tool/token/plan/ask/approval/done。
@@ -426,6 +427,7 @@ export default function Ask() {
               refreshKey={sessionRevision}
             />
             <MemoryList token={agentToken} />
+            <InboxPanel token={agentToken} />
           </aside>
         )}
 

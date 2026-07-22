@@ -18,7 +18,9 @@ from .auth import current_agent_owner, make_agent_token
 from .repository import AgentRepository
 from .schema import (
     AgentChatRequest,
+    AgentInboxItem,
     AgentMemoryItem,
+    AgentProactiveRequest,
     AgentSessionInfo,
     AgentTranscript,
     AgentTranscriptTurn,
@@ -187,3 +189,51 @@ async def delete_memory(
     if not await MemoryStore(session).delete_by_id(owner, mid):
         raise HTTPException(status_code=404, detail="记忆不存在")
     return ResponseModel(data={"deleted": True})
+
+
+@private_router.get("/inbox", response_model=ResponseModel[list[AgentInboxItem]])
+async def list_inbox(
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[AgentInboxItem]]:
+    """收件箱：agent 主动/定时任务的产出（最近在前）。"""
+    rows = await AgentRepository(session).list_inbox(owner)
+    data = [
+        AgentInboxItem(
+            id=r.id, title=r.title, body=r.body, created_at=r.created_at.isoformat(), read=r.read_at is not None
+        )
+        for r in rows
+    ]
+    return ResponseModel(data=data)
+
+
+@private_router.post("/inbox/{item_id}/read", response_model=ResponseModel[dict])
+async def read_inbox(
+    item_id: int,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    await AgentRepository(session).mark_inbox_read(owner, item_id)
+    return ResponseModel(data={"ok": True})
+
+
+@private_router.delete("/inbox/{item_id}", response_model=ResponseModel[dict])
+async def delete_inbox(
+    item_id: int,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    if not await AgentRepository(session).delete_inbox(owner, item_id):
+        raise HTTPException(status_code=404, detail="收件箱条目不存在")
+    return ResponseModel(data={"deleted": True})
+
+
+@private_router.post("/proactive/run", response_model=ResponseModel[dict])
+async def run_proactive(
+    payload: AgentProactiveRequest,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """手动触发一次主动运行：agent 自主完成 prompt（只读工具），结果进收件箱。学「主动」用。"""
+    item_id = await agent_service.run_proactive(session, owner, payload.prompt, payload.title)
+    return ResponseModel(data={"inbox_id": item_id})
