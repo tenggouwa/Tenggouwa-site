@@ -37,5 +37,7 @@ def is_parallel_safe(name: str) -> bool:
     """
     if name in _CONTROL:
         return True
+    if name == "browser":
+        return False  # 持久 Playwright 页面是共享状态：并发动作会乱序/竞态，必须串行
     skill = REGISTRY.get(name)
     return skill is not None and skill.risk == "readonly" and skill.parallel_safe

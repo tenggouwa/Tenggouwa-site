@@ -66,6 +66,19 @@ class PiExecBroker:
             self._pending.pop(rid, None)
             self._chunks.pop(rid, None)
 
+    async def submit_browser(self, action: str, *, timeout: float, **args) -> dict:
+        """入队一条浏览器动作给 Pi 的持久 Playwright 页面（navigate/snapshot/click/type/back/close），等结果。
+
+        cmd="true" 兜底旧 Pi（不认 kind=browser 会跑 no-op true 而非崩 exec 线程，同 submit_file）。
+        """
+        payload = {"kind": "browser", "action": action, "cmd": "true", **args}
+        rid, fut, _ = self._enqueue(payload, timeout)
+        try:
+            return await asyncio.wait_for(fut, timeout + _RESULT_GRACE)
+        finally:
+            self._pending.pop(rid, None)
+            self._chunks.pop(rid, None)
+
     async def submit_stream(self, cmd: str, *, cwd: str, timeout: float):
         """流式版：yield {"chunk": str} 边跑边出，最后 yield {"result": dict}。超时抛 TimeoutError。"""
         rid, fut, chunk_q = self._enqueue({"cmd": cmd, "cwd": cwd}, timeout)

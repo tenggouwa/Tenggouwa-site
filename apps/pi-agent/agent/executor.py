@@ -238,6 +238,96 @@ def _fresult(rc: int, output: str, *, truncated: bool = False) -> dict:
     return {"rc": rc, "output": output, "truncated": truncated, "timed_out": False}
 
 
+# ---------- 浏览器 agent（computer-use）：持久 Playwright 页面，navigate/snapshot/click/type ----------
+# 单条 exec 线程串行处理任务 → 这个共享页面无并发，安全。懒启动，close 释放。
+
+_browser: dict = {"pw": None, "browser": None, "page": None}
+
+# 给页面里可见的可交互元素打上 data-agent-ref（e1/e2…）并收集，供 LLM observe→act。
+_SNAPSHOT_JS = """() => {
+  const els = [...document.querySelectorAll('a,button,input,textarea,select,[role=button],[role=link]')];
+  const out = []; let n = 0;
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) continue;   // 不可见跳过
+    if (n >= 60) break;                               // 上限，别爆上下文
+    const ref = 'e' + (++n);
+    el.setAttribute('data-agent-ref', ref);
+    const tag = el.tagName.toLowerCase();
+    const text = (el.innerText || el.value || el.getAttribute('placeholder')
+                  || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ').slice(0, 60);
+    out.push({ref, role: el.getAttribute('role') || tag, text, href: el.getAttribute('href') || ''});
+  }
+  return out;
+}"""
+
+
+def _browser_page():
+    """懒启动持久无头 Chromium，返回页面。没装 playwright 抛 ImportError（上层转成友好提示）。"""
+    if _browser["page"] is not None:
+        return _browser["page"]
+    from playwright.sync_api import sync_playwright  # 懒导入：没装也不影响 daemon 其它功能
+
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+    _browser.update(pw=pw, browser=browser, page=browser.new_page())
+    return _browser["page"]
+
+
+def _browser_stop() -> None:
+    try:
+        if _browser["browser"]:
+            _browser["browser"].close()
+        if _browser["pw"]:
+            _browser["pw"].stop()
+    finally:
+        _browser.update(pw=None, browser=None, page=None)
+
+
+def _snapshot(page) -> str:
+    els = page.evaluate(_SNAPSHOT_JS)
+    lines = [f"[标题] {page.title()}", f"[URL] {page.url}", f"[可交互元素] 共 {len(els)}"]
+    for e in els:
+        extra = f" -> {e['href']}" if e["href"] else ""
+        lines.append(f"  {e['ref']:<4} {e['role']:<8} \"{e['text']}\"{extra}")
+    body = (page.evaluate("() => document.body ? document.body.innerText : ''") or "").strip()
+    lines += ["[正文摘要]", body[:1500]]
+    return "\n".join(lines)
+
+
+def _run_browser(cmd: dict) -> dict:
+    """一条浏览器动作。持久页面上执行后回传新快照（标题+可交互元素+正文摘要），供下一步决策。"""
+    if not _flag("PI_AGENT_BROWSER"):
+        return _fresult(1, "（Pi 未启用浏览器：设 PI_AGENT_BROWSER=1）")
+    action = cmd.get("action", "")
+    try:
+        page = _browser_page()
+    except ImportError:
+        return _fresult(1, "（Pi 未装 playwright：pip install playwright && playwright install chromium）")
+    try:
+        if action == "navigate":
+            page.goto(cmd["url"], wait_until="domcontentloaded", timeout=20000)
+        elif action == "click":
+            page.click(f'[data-agent-ref="{cmd["ref"]}"]', timeout=8000)
+            page.wait_for_load_state("domcontentloaded", timeout=8000)
+        elif action == "type":
+            sel = f'[data-agent-ref="{cmd["ref"]}"]'
+            page.fill(sel, cmd.get("text", ""), timeout=8000)
+            if cmd.get("submit"):
+                page.press(sel, "Enter")
+                page.wait_for_load_state("domcontentloaded", timeout=8000)
+        elif action == "back":
+            page.go_back(wait_until="domcontentloaded", timeout=8000)
+        elif action == "close":
+            _browser_stop()
+            return _fresult(0, "（浏览器已关闭。）")
+        elif action != "snapshot":
+            return _fresult(1, f"（未知浏览器动作：{action}）")
+        return _fresult(0, _snapshot(page))
+    except Exception as e:  # noqa: BLE001 —— 单条动作失败不崩线程；也别让坏页面卡住后续
+        return _fresult(1, f"（浏览器动作失败：{type(e).__name__}: {e}）")
+
+
 def _headers(token: str) -> dict[str, str]:
     # 自定义 UA：Cloudflare 会 403 拦 "Python-urllib"（error 1010）
     return {"Authorization": f"Bearer {token}", "User-Agent": f"tenggouwa-pi-agent/{__version__}"}
@@ -313,6 +403,8 @@ def exec_loop(server: str, token: str, stop: dict) -> None:
         try:
             if cmd.get("kind") == "file":
                 result = _run_file(cmd, workspace)
+            elif cmd.get("kind") == "browser":
+                result = _run_browser(cmd)
             else:
 
                 def _chunk(text: str, _rid: str = rid) -> None:
