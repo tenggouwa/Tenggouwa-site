@@ -6,6 +6,7 @@
 
 from .ask_user import ASK_USER
 from .base import Skill
+from .browser import BROWSER
 from .file_ops import FILE_EDIT, FILE_LIST, FILE_READ, FILE_WRITE
 from .git_ops import GIT
 from .kb_graph import KB_GRAPH
@@ -42,4 +43,6 @@ REGISTRY: dict[str, Skill] = {
     # remember / forget（private + write 但免批，agent 的 owner 维度长期记忆）
     REMEMBER.name: REMEMBER,
     FORGET.name: FORGET,
+    # browser（private + readonly，Pi 上真无头浏览器操作网页；持久页面状态→不并发）
+    BROWSER.name: BROWSER,
 }
