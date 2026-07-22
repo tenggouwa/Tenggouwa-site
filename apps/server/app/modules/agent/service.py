@@ -68,6 +68,19 @@ ASK_SKILL = "ask_user"  # 抛选择题给用户，触发后结束本轮、等用
 # 深度思考模式用的推理模型（返回 reasoning_content 思维链，仍支持 tools）；env 可覆盖。
 REASONER_MODEL = os.environ.get("KB_LLM_REASONER_MODEL") or "deepseek-reasoner"
 
+# 反思模式（evaluator-optimizer）：答完让一个「评审者」按标准打分，不过关就把评审喂回、改写一版。
+MAX_REFLECT_ROUNDS = 2  # 评审→改写最多几轮（防无限自我打磨 + 控成本）
+EVAL_SYSTEM = (
+    "你是严格的回答评审员。针对下面的【问题】和【待评审回答】，按四条审：准确、完整、直接回应问题、无编造。\n"
+    "- 回答已经足够好、无需改进：**第一行只输出 PASS**，不要多说。\n"
+    "- 否则：**第一行输出 REVISE**，随后用要点列出具体、可操作的改进项（指出缺了什么/哪里不对，别替它重写答案）。\n"
+    "简体中文，简洁，对事不对人。"
+)
+REVISE_PROMPT = (
+    "以下是对你上一条回答的评审意见。据此给出**改进后的完整回答**，只输出最终答案本身，"
+    "不要复述评审、不要说“好的我来改”之类的话：\n\n{critique}"
+)
+
 MAX_SUBAGENTS_PER_TURN = 2  # 每个用户轮最多派几个子代理，防主代理狂开（实测会一口气开 4 个）
 MAX_PARALLEL_TOOLS = 6  # 同一批 parallel-safe 工具的并发上限（对齐 Codex max_threads=6）
 _SEARCH_SKILLS = {"web_search", "kb_search"}  # 按 query 去重的检索类工具，挡反复换措辞搜同一件事
@@ -182,6 +195,7 @@ class AgentService:
         auto_approve: bool = False,
         owner: str | None = None,
         deep: bool = False,
+        reflect: bool = False,
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
         current_owner.set(owner)  # 让 remember/forget 拿到本轮 owner（skill handler 签名不带 owner，走 ContextVar）
@@ -264,8 +278,18 @@ class AgentService:
                     _accumulate_usage(usage_total, ev["usage"])
 
             if not tool_calls:
-                # 无工具调用：本轮正文即最终答案（已流式发出），落库收尾
-                await repo.append(sid, seq, "assistant", content)
+                # 无工具调用：本轮正文即最终答案（已流式发出）
+                final_answer = content
+                if reflect and content.strip() and q.strip():
+                    # 反思：评审当前答案 → 不过关就改写；初稿+评审作为过程发给前端，落库存最终版
+                    async for ev in self._reflect(messages, q, content):
+                        if ev["type"] == "final":
+                            final_answer = ev["content"]
+                        elif ev["type"] == "usage":
+                            _accumulate_usage(usage_total, ev["usage"])
+                        else:
+                            yield ev
+                await repo.append(sid, seq, "assistant", final_answer)
                 seq += 1
                 answered = True
                 break
@@ -357,6 +381,51 @@ class AgentService:
             + "\n（这些是你的长期记忆，仅供参考、可能过时；与当前对话冲突时以对话为准。）"
         )
         messages.append({"role": "system", "content": note})
+
+    @staticmethod
+    async def _evaluate(question: str, answer: str) -> dict:
+        """评审者：给回答打分，返回 {verdict: pass|revise, text}。用非流式 complete 拿一整段评审。"""
+        out = await chat_llm.complete(
+            [
+                {"role": "system", "content": EVAL_SYSTEM},
+                {"role": "user", "content": f"【问题】\n{question}\n\n【待评审回答】\n{answer}"},
+            ],
+            tools=None,
+        )
+        text = (out.get("content") or "").strip()
+        verdict = "pass" if text.lstrip().upper().startswith("PASS") else "revise"
+        return {"verdict": verdict, "text": text}
+
+    async def _reflect(self, messages: list[dict], question: str, draft: str) -> AsyncIterator[dict]:
+        """evaluator-optimizer 循环：评审当前答案 → 不过关就把评审喂回改写一版，最多 MAX_REFLECT_ROUNDS 轮。
+
+        yield：reflect（每轮评审）/ token（改写的流式正文）/ usage / 最后一条 final（最终答案，供落库）。
+        改写用不带 tools 的纯文本精炼——反思是打磨措辞与完整性，不是再去调工具。
+        """
+        answer = draft
+        for i in range(MAX_REFLECT_ROUNDS):
+            critique = await self._evaluate(question, answer)
+            yield {"type": "reflect", "round": i + 1, "verdict": critique["verdict"], "critique": critique["text"]}
+            if critique["verdict"] == "pass":
+                break
+            revise_messages = messages + [
+                {"role": "assistant", "content": answer},
+                {"role": "user", "content": REVISE_PROMPT.format(critique=critique["text"])},
+            ]
+            revised, leaked = "", False
+            async for ev in chat_llm.stream_step(revise_messages, tools=None):
+                if ev["type"] == "content" and not leaked:
+                    piece = ev["delta"]
+                    if LEAK_TOKEN in piece:
+                        piece = _strip_leak(piece)
+                        leaked = True
+                    if piece:
+                        revised += piece
+                        yield {"type": "token", "delta": piece}
+                elif ev["type"] == "usage":
+                    yield ev
+            answer = revised
+        yield {"type": "final", "content": answer}
 
     async def _exec_one(self, session, name, args, tid, approvals, privileged, turn_state, emit) -> str:
         """跑一个 tool_call 拿结果字符串；流式增量经 emit 回调发出（并发时由队列汇总回主流）。

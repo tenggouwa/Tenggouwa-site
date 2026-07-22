@@ -8,6 +8,7 @@ class AgentChatRequest(BaseModel):
     approvals: dict[str, bool] | None = Field(default=None)  # C2：审批决策，非空则走 resume
     auto_approve: bool = Field(default=False)  # auto 模式：私有通道内不暂停审批、直接执行（沙箱兜底）
     deep_think: bool = Field(default=False)  # 深度思考：换 deepseek-reasoner，回传思维链 reasoning
+    reflect: bool = Field(default=False)  # 反思：答完自评→按需改写（evaluator-optimizer），回传 reflect 过程
 
 
 class AgentUnlockRequest(BaseModel):

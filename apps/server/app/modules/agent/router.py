@@ -87,6 +87,7 @@ def _chat_stream(
                 auto_approve=payload.auto_approve,
                 owner=owner,
                 deep=payload.deep_think,
+                reflect=payload.reflect,
             ):
                 yield _sse(ev["type"], ev)
         except asyncio.CancelledError:
