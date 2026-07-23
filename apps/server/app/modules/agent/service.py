@@ -155,11 +155,10 @@ def _norm_query(q: str) -> str:
 
 def _turn_cap(name: str, args: dict, state: dict) -> str | None:
     """本轮收敛闸：返回非 None 表示这次工具调用被拦（子代理超限 / 检索重复或超量），用返回文案当结果、不真执行。"""
+    if name == SUBAGENT_SKILL and state["subagents"] >= MAX_SUBAGENTS_PER_TURN:
+        return f"（本轮子代理已达上限 {MAX_SUBAGENTS_PER_TURN} 个，别再派了，用现有信息直接作答。）"
     if name == SUBAGENT_SKILL:
-        if state["subagents"] >= MAX_SUBAGENTS_PER_TURN:
-            return f"（本轮子代理已达上限 {MAX_SUBAGENTS_PER_TURN} 个，别再派了，用现有信息直接作答。）"
-        state["subagents"] += 1
-        return None
+        state["subagents"] += 1  # 计数后穿过下面的检索/浏览器判定（都不匹配）到末尾 return None
     if name in _SEARCH_SKILLS:
         q = _norm_query(str(args.get("query", "")))
         if not q:
@@ -169,6 +168,17 @@ def _turn_cap(name: str, args: dict, state: dict) -> str | None:
         if len(state["searched"]) >= MAX_SEARCHES_PER_TURN:
             return f"（本轮检索已达上限 {MAX_SEARCHES_PER_TURN} 次，别再搜了，用已经拿到的结果作答。）"
         state["searched"].add(q)
+    if name == "browser" and str(args.get("action", "")).strip() == "navigate":
+        # 同一 URL 本轮别反复 navigate：浏览器连续没响应通常是 Pi 网络在抖，重试同一页只是烧 token。
+        url = str(args.get("url", "")).strip().lower()
+        nav = state.setdefault("navigated", set())
+        if url and url in nav:
+            return (
+                "（这个页面本轮已经用浏览器试过打开了。浏览器没响应多半是 Pi 出网在抖，别反复重试同一个——"
+                "改用 web_fetch 抓这个 URL，或如实告诉用户浏览器暂时不可用。）"
+            )
+        if url:
+            nav.add(url)
     return None
 
 

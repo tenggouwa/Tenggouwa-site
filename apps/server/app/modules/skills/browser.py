@@ -17,7 +17,7 @@ from ..pi.exec import SandboxBusy, pi_exec
 from .base import Skill
 
 BROWSER_SKILL = "browser"
-_TIMEOUT = 40.0  # 浏览器动作可能要等页面加载，比 shell 多留
+_TIMEOUT = 90.0  # 浏览器动作要等页面加载 + 结果经 Pi 抖动网络回传；多留窗口给 daemon 重试 POST（治标，网络稳了可调回）
 _ACTIONS = ("navigate", "snapshot", "click", "type", "back", "close")
 
 

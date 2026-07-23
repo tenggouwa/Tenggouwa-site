@@ -56,3 +56,26 @@ def test_subagent_cap():
         assert _turn_cap(SUBAGENT_SKILL, {}, state) is None
     over = _turn_cap(SUBAGENT_SKILL, {}, state)
     assert over is not None and "子代理已达上限" in over
+
+
+def test_browser_navigate_dedups_same_url():
+    """同一 URL 本轮第二次 navigate 被拦（挡浏览器没响应时的重试风暴）。"""
+    state = _fresh()
+    a = {"action": "navigate", "url": "https://tenggouwa.com"}
+    assert _turn_cap("browser", a, state) is None  # 首次放行
+    blocked = _turn_cap("browser", {"action": "navigate", "url": "https://tenggouwa.com"}, state)
+    assert blocked is not None and "已经用浏览器试过" in blocked
+
+
+def test_browser_navigate_different_url_ok():
+    """navigate 到不同 URL 不拦（正常浏览多个页面）。"""
+    state = _fresh()
+    assert _turn_cap("browser", {"action": "navigate", "url": "https://a.com"}, state) is None
+    assert _turn_cap("browser", {"action": "navigate", "url": "https://b.com"}, state) is None
+
+
+def test_browser_non_navigate_not_deduped():
+    """click/snapshot 等非 navigate 动作不受 URL 去重影响。"""
+    state = _fresh()
+    assert _turn_cap("browser", {"action": "snapshot"}, state) is None
+    assert _turn_cap("browser", {"action": "snapshot"}, state) is None
