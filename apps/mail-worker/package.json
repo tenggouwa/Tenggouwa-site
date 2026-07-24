@@ -1,0 +1,17 @@
+{
+  "name": "@tenggouwa/mail-worker",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Email Worker：收信 → 抽验证码 → 打日志（独立部署，不入 pnpm workspace）",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "dependencies": {
+    "postal-mime": "^2.4.4"
+  },
+  "devDependencies": {
+    "wrangler": "^4.42.0"
+  }
+}

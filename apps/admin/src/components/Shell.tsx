@@ -13,6 +13,7 @@ const MENU = [
   { key: 'posts', label: '文章管理' },
   { key: 'inspirations', label: '小灵感' },
   { key: 'terminal', label: '终端' },
+  { key: 'mail', label: '接码' },
   { key: 'settings', label: '站点设置' },
 ];
 

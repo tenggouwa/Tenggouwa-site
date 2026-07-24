@@ -9,6 +9,7 @@ import InspirationsPage from './pages/InspirationsPage';
 import SeoPage from './pages/SeoPage';
 import SettingsPage from './pages/SettingsPage';
 import TerminalPage from './pages/TerminalPage';
+import MailPage from './pages/MailPage';
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="posts" element={<PostsPage />} />
           <Route path="inspirations" element={<InspirationsPage />} />
           <Route path="terminal" element={<TerminalPage />} />
+          <Route path="mail" element={<MailPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

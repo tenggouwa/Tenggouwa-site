@@ -1,3 +1,5 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # Cloudflare Email Worker，靠 wrangler 独立部署，自带 install，不进 monorepo
+  - "!apps/mail-worker"
