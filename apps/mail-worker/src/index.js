@@ -47,6 +47,8 @@ export default {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        // 该 zone 的 CF 规则会拦非浏览器 UA（1010），带上正常 UA 免得被挡
+        'user-agent': 'Mozilla/5.0 (compatible; tenggouwa-mail-worker)',
         'X-Mail-Timestamp': ts,
         'X-Mail-Signature': `sha256=${sig}`,
       },
