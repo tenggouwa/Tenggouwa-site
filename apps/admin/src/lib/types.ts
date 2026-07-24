@@ -202,3 +202,10 @@ export interface MailLatestCode {
   subject: string | null;
   received_at: string | null;
 }
+
+export interface MailInboxItem {
+  mailbox: string;
+  total: number;
+  with_code: number;
+  latest_at: string;
+}

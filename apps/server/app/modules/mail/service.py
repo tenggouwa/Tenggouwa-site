@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .extract import extract_code
 from .repository import MailRepository
-from .schema import LatestCodeResult, MailIngestPayload, MailMessageItem
+from .schema import LatestCodeResult, MailInboxItem, MailIngestPayload, MailMessageItem
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,19 @@ class MailService:
             subject=row.subject,
             received_at=row.received_at,
         )
+
+    async def list_inboxes(self, session: AsyncSession) -> list[MailInboxItem]:
+        """列出所有收过信的收件箱及其聚合信息，最近在前。"""
+        rows = await MailRepository(session).list_inboxes()
+        return [
+            MailInboxItem(
+                mailbox=row.mailbox,
+                total=row.total,
+                with_code=row.with_code,
+                latest_at=row.latest_at,
+            )
+            for row in rows
+        ]
 
     async def list_messages(
         self,

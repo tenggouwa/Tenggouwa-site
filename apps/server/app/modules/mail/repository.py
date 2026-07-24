@@ -1,9 +1,10 @@
 """mail 模块数据访问。"""
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from db import MailMessageRow
-from sqlalchemy import delete, select
+from sqlalchemy import Row, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,6 +80,21 @@ class MailRepository:
         )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def list_inboxes(self) -> Sequence[Row]:
+        """按收件箱聚合：每个 mailbox 的邮件数 / 含码数 / 最近收信时间，最近在前。"""
+        stmt = (
+            select(
+                MailMessageRow.mailbox,
+                func.count().label("total"),
+                func.count(MailMessageRow.code).label("with_code"),
+                func.max(MailMessageRow.received_at).label("latest_at"),
+            )
+            .group_by(MailMessageRow.mailbox)
+            .order_by(func.max(MailMessageRow.received_at).desc())
+        )
+        result = await self._session.execute(stmt)
+        return result.all()
 
     async def delete_expired(self, now: datetime) -> int:
         """删掉已过期的邮件，返回删除条数。"""

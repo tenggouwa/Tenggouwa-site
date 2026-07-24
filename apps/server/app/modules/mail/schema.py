@@ -29,6 +29,15 @@ class MailMessageItem(BaseModel):
     received_at: datetime
 
 
+class MailInboxItem(BaseModel):
+    """收件箱总览的一行。"""
+
+    mailbox: str
+    total: int
+    with_code: int
+    latest_at: datetime
+
+
 class LatestCodeResult(BaseModel):
     """latest-code 查询结果。"""
 
