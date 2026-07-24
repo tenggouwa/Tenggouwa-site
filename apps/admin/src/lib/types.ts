@@ -187,3 +187,18 @@ export interface IndexingStatus {
   baidu_indexed: boolean;
   last_checked: string | null;
 }
+
+export interface MailMessageItem {
+  id: number;
+  from_address: string | null;
+  subject: string | null;
+  code: string | null;
+  received_at: string;
+}
+
+export interface MailLatestCode {
+  code: string | null;
+  message_id: string | null;
+  subject: string | null;
+  received_at: string | null;
+}

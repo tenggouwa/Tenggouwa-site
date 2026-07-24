@@ -1,0 +1,10 @@
+name = "tenggouwa-mail-log"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# Email Worker 没有 wrangler 侧 trigger —— 收信的绑定在
+# Cloudflare 后台 Email Routing 的 catch-all 规则里设成 "Send to Worker"。见 README.md。
+
+[vars]
+# 后端 ingest 地址。MAIL_INGEST_SECRET 走 `wrangler secret put`（别写这里）。
+INGEST_URL = "https://api.tenggouwa.com/api/ingest/mail"
