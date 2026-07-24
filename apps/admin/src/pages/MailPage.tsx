@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Button, Input, Message, Space, Table, Tag, Typography } from '@arco-design/web-react';
+import { useEffect, useState } from 'react';
+import { Button, Input, Link, Message, Space, Table, Tag, Typography } from '@arco-design/web-react';
 import { http } from '../lib/api';
-import type { MailLatestCode, MailMessageItem } from '../lib/types';
+import type { MailInboxItem, MailLatestCode, MailMessageItem } from '../lib/types';
 
 // 收信域名：*@MAIL_DOMAIN 都会进一次性收件箱（CF Email Routing catch-all）。
 const MAIL_DOMAIN = 'tenggouwa.com';
@@ -22,18 +22,34 @@ function fmt(ts: string | null): string {
 
 export default function MailPage() {
   const [mailbox, setMailbox] = useState('');
+  const [inboxes, setInboxes] = useState<MailInboxItem[]>([]);
+  const [inboxLoading, setInboxLoading] = useState(false);
   const [messages, setMessages] = useState<MailMessageItem[]>([]);
   const [latest, setLatest] = useState<MailLatestCode | null>(null);
   const [loading, setLoading] = useState(false);
   const [waiting, setWaiting] = useState(false);
 
-  const box = mailbox.trim().toLowerCase();
+  async function loadInboxes() {
+    setInboxLoading(true);
+    try {
+      const data = (await http.get('/api/admin/mail/inboxes')) as unknown as MailInboxItem[];
+      setInboxes(data);
+    } finally {
+      setInboxLoading(false);
+    }
+  }
 
-  async function loadMessages() {
+  useEffect(() => {
+    loadInboxes();
+  }, []);
+
+  async function loadMessages(target?: string) {
+    const box = (target ?? mailbox).trim().toLowerCase();
     if (!box) {
-      Message.warning('先填收件箱名（@ 前那段）');
+      Message.warning('先填收件箱名（@ 前那段），或从下面总览点一个');
       return;
     }
+    if (target !== undefined) setMailbox(target);
     setLoading(true);
     try {
       const data = (await http.get(
@@ -58,6 +74,7 @@ export default function MailPage() {
 
   // 只等「点击之后」到达的新码：since=now，最多等 25s
   async function waitForCode() {
+    const box = mailbox.trim().toLowerCase();
     if (!box) {
       Message.warning('先填收件箱名（@ 前那段）');
       return;
@@ -113,6 +130,43 @@ export default function MailPage() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-bold">一次性收件箱 · 接码</h2>
+        <Button size="small" loading={inboxLoading} onClick={loadInboxes}>
+          刷新总览
+        </Button>
+      </div>
+
+      <div>
+        <div className="text-sm text-gray-500 mb-2">
+          收件箱总览（哪些地址被用过，24h 内）—— 点收件箱名直接查看
+        </div>
+        <Table
+          rowKey="mailbox"
+          size="small"
+          loading={inboxLoading}
+          data={inboxes}
+          pagination={false}
+          noDataElement={<div className="py-6 text-gray-400">还没有任何收件箱收到过邮件</div>}
+          columns={[
+            {
+              title: '收件箱',
+              dataIndex: 'mailbox',
+              render: (v: string) => (
+                <Link onClick={() => loadMessages(v)}>
+                  {v}
+                  <span className="text-gray-400">@{MAIL_DOMAIN}</span>
+                </Link>
+              ),
+            },
+            { title: '邮件数', dataIndex: 'total', width: 100 },
+            {
+              title: '含验证码',
+              dataIndex: 'with_code',
+              width: 110,
+              render: (v: number) => (v ? <Tag color="green">{v}</Tag> : <span className="text-gray-400">0</span>),
+            },
+            { title: '最近收信', dataIndex: 'latest_at', width: 190, render: (v: string) => fmt(v) },
+          ]}
+        />
       </div>
 
       <Space wrap>
@@ -120,12 +174,12 @@ export default function MailPage() {
           style={{ width: 320 }}
           value={mailbox}
           onChange={setMailbox}
-          onPressEnter={loadMessages}
+          onPressEnter={() => loadMessages()}
           placeholder="收件箱名（@ 前那段），如 netflix"
           addAfter={`@${MAIL_DOMAIN}`}
           allowClear
         />
-        <Button type="primary" loading={loading} onClick={loadMessages}>
+        <Button type="primary" loading={loading} onClick={() => loadMessages()}>
           查收件箱
         </Button>
         <Button loading={waiting} onClick={waitForCode}>

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
-from .schema import LatestCodeResult, MailIngestPayload, MailMessageItem
+from .schema import LatestCodeResult, MailInboxItem, MailIngestPayload, MailMessageItem
 from .service import mail_service
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,15 @@ async def ingest(
 
 # admin 后台查询：JWT 鉴权
 admin_router = APIRouter(prefix="/admin/mail", tags=["admin.mail"], dependencies=[Depends(current_admin)])
+
+
+@admin_router.get("/inboxes", response_model=ResponseModel[list[MailInboxItem]])
+async def list_inboxes(
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[MailInboxItem]]:
+    """列出所有收过信的收件箱（哪些地址被用过）。"""
+    items = await mail_service.list_inboxes(session)
+    return ResponseModel(data=items)
 
 
 @admin_router.get("/{mailbox}/latest-code", response_model=ResponseModel[LatestCodeResult])
