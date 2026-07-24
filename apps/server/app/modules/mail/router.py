@@ -1,14 +1,16 @@
 """mail 模块路由。"""
 
 import logging
+from datetime import datetime
 
 from common.rate_limit import AttemptLimiter, client_ip
 from db import get_session
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from dependencies import current_admin
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
-from .schema import MailIngestPayload
+from .schema import LatestCodeResult, MailIngestPayload, MailMessageItem
 from .service import mail_service
 
 logger = logging.getLogger(__name__)
@@ -36,3 +38,31 @@ async def ingest(
     payload = MailIngestPayload.model_validate_json(raw)
     is_new = await mail_service.ingest(session, payload)
     return ResponseModel(data={"ok": True, "new": is_new})
+
+
+# admin 后台查询：JWT 鉴权
+admin_router = APIRouter(prefix="/admin/mail", tags=["admin.mail"], dependencies=[Depends(current_admin)])
+
+
+@admin_router.get("/{mailbox}/latest-code", response_model=ResponseModel[LatestCodeResult])
+async def latest_code(
+    mailbox: str,
+    since: datetime | None = Query(default=None, description="只取此时间之后的码"),
+    wait: float = Query(default=0, ge=0, le=25, description="等码秒数，>0 时短轮询直到有码或超时"),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[LatestCodeResult]:
+    """取某收件箱最近的验证码，可选「等码」短轮询。"""
+    result = await mail_service.latest_code(session, mailbox, since=since, wait_seconds=wait)
+    return ResponseModel(data=result)
+
+
+@admin_router.get("/{mailbox}/messages", response_model=ResponseModel[list[MailMessageItem]])
+async def list_messages(
+    mailbox: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[MailMessageItem]]:
+    """列某收件箱的邮件，最近在前。"""
+    items = await mail_service.list_messages(session, mailbox, limit=limit, offset=offset)
+    return ResponseModel(data=items)
