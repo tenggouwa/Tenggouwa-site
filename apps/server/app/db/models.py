@@ -633,3 +633,27 @@ class AgentMessageRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (Index("ix_agent_message_session_seq", "session_id", "seq", unique=True),)
+
+
+class MailMessageRow(Base):
+    """一次性收件箱收到的邮件 + 抽取的验证码。message_id 唯一，用于幂等去重。"""
+
+    __tablename__ = "mail_message"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    message_id: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
+    to_address: Mapped[str] = mapped_column(String(320), nullable=False)  # 完整收件地址（小写）
+    mailbox: Mapped[str] = mapped_column(String(255), nullable=False)  # local-part，查询主维度
+    from_address: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    subject: Mapped[str | None] = mapped_column(Text, nullable=True)
+    text_body: Mapped[str | None] = mapped_column(Text, nullable=True)  # Worker 侧已截断的可读正文
+    code: Mapped[str | None] = mapped_column(String(16), nullable=True)  # 抽取到的验证码
+    code_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)  # numeric / alnum
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # 邮件 Date 头
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)  # TTL：入库时算
+
+    __table_args__ = (
+        Index("ix_mail_message_mailbox_received", "mailbox", "received_at"),
+        Index("ix_mail_message_expires_at", "expires_at"),
+    )

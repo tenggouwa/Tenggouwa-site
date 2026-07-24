@@ -7,6 +7,7 @@ from .models import (
     KBChunkRow,
     KBDocumentRow,
     KBSourceRow,
+    MailMessageRow,
     PageViewRow,
     PostRow,
     SeoSearchSnapshotRow,
@@ -30,4 +31,5 @@ __all__ = [
     "KBSourceRow",
     "KBDocumentRow",
     "KBChunkRow",
+    "MailMessageRow",
 ]
