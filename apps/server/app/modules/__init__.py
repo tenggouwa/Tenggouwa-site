@@ -18,6 +18,7 @@ from .inspirations.router import admin_router as inspiration_admin_router
 from .inspirations.router import public_router as inspiration_public_router
 from .kb.router import admin_router as kb_admin_router
 from .kb.router import public_router as kb_public_router
+from .mail.router import admin_router as mail_admin_router
 from .mail.router import ingest_router as mail_ingest_router
 from .pi.router import agent_router as pi_agent_router
 from .pi.router import public_router as pi_public_router
@@ -67,5 +68,6 @@ router.include_router(kb_admin_router)
 router.include_router(analytics_admin_router)
 router.include_router(seo_admin_router)
 router.include_router(agent_private_router)  # /api/agent/*：owner-only，可用 write/MCP 高危工具
+router.include_router(mail_admin_router)  # /api/admin/mail/*：一次性收件箱查询 / 取码
 router.include_router(terminal_admin_router)
 router.include_router(terminal_client_ws_router)
