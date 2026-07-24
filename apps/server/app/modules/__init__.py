@@ -18,6 +18,7 @@ from .inspirations.router import admin_router as inspiration_admin_router
 from .inspirations.router import public_router as inspiration_public_router
 from .kb.router import admin_router as kb_admin_router
 from .kb.router import public_router as kb_public_router
+from .mail.router import ingest_router as mail_ingest_router
 from .pi.router import agent_router as pi_agent_router
 from .pi.router import public_router as pi_public_router
 from .posts.router import admin_router as post_admin_router
@@ -54,6 +55,8 @@ router.include_router(terminal_console_router)  # /api/console/*：自带 voice/
 router.include_router(terminal_agent_router)
 # 树莓派 pi-agent 接入（HTTPS POST，bearer PI_AGENT_TOKEN）
 router.include_router(pi_agent_router)
+# CF Email Worker 收信回调（HTTPS POST，HMAC 签名）
+router.include_router(mail_ingest_router)
 
 # 管理接口（admin 后台用，需 JWT）
 router.include_router(auth_router)
