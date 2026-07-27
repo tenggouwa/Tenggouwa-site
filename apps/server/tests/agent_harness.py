@@ -4,6 +4,7 @@
 消息配对 / 落库 / 边界。新场景照着 test_agent_loop.py 加即可。
 """
 
+import json
 from types import SimpleNamespace
 
 from modules.agent.repository import AgentWindow
@@ -169,6 +170,40 @@ def first_tool_calls(rows) -> list[str]:
         if r.role == "assistant" and r.tool_calls:
             return [tc["function"]["name"] for tc in r.tool_calls]
     return []
+
+
+def extract_trajectory(rows) -> list[dict]:
+    """把一段 agent 运行抽成有序的工具调用轨迹：[{name, args}, ...]，跨所有 assistant 轮。
+
+    比 first_tool_calls 更全——那个只看首轮，这个看整段（轨迹级评估要评的是全程）。
+    """
+    traj: list[dict] = []
+    for r in rows:
+        if r.role == "assistant" and r.tool_calls:
+            for tc in r.tool_calls:
+                fn = tc.get("function", {})
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+                traj.append({"name": fn.get("name", ""), "args": args})
+    return traj
+
+
+def score_trajectory(traj: list[dict], *, budget: int) -> dict:
+    """给轨迹打分（纯函数，确定性）：效率（工具数 vs 预算）+ 绕路（完全相同的调用重复出现）。
+
+    efficient = 没超预算 且 没重复调用。完成度靠 LLM 评审（live 里做），这里只算能确定性量化的两维。
+    """
+    seen: set[tuple[str, str]] = set()
+    dups = 0
+    for tc in traj:
+        key = (tc["name"], json.dumps(tc.get("args", {}), sort_keys=True, ensure_ascii=False))
+        if key in seen:
+            dups += 1
+        seen.add(key)
+    n = len(traj)
+    return {"tools": n, "over_budget": n > budget, "duplicates": dups, "efficient": n <= budget and dups == 0}
 
 
 # ---------- 不变量断言（每个场景都该调）----------
