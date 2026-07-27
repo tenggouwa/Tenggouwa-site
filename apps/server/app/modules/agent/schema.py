@@ -38,6 +38,17 @@ class AgentMemoryItem(BaseModel):
     created_at: str
 
 
+class AgentSkillProposal(BaseModel):
+    """agent 自提的技能提案（提案面板用）。"""
+
+    id: int
+    name: str
+    description: str
+    parameters: dict = Field(default_factory=dict)
+    rationale: str = ""
+    created_at: str
+
+
 class AgentInboxItem(BaseModel):
     """收件箱里的一条（主动/定时任务产出）。"""
 

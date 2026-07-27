@@ -15,6 +15,7 @@ from ..memory.store import MemoryStore
 from ..terminal.service import terminal_service
 from ..totp.repository import AdminTotpRepository
 from .auth import current_agent_owner, make_agent_token
+from .proposals import ProposalStore
 from .repository import AgentRepository
 from .schema import (
     AgentChatRequest,
@@ -22,6 +23,7 @@ from .schema import (
     AgentMemoryItem,
     AgentProactiveRequest,
     AgentSessionInfo,
+    AgentSkillProposal,
     AgentTranscript,
     AgentTranscriptTurn,
     AgentUnlockRequest,
@@ -189,6 +191,28 @@ async def delete_memory(
     """删该 owner 名下一条记忆。owner 圈定，删不到（不存在 / 不属于你）→ 404。"""
     if not await MemoryStore(session).delete_by_id(owner, mid):
         raise HTTPException(status_code=404, detail="记忆不存在")
+    return ResponseModel(data={"deleted": True})
+
+
+@private_router.get("/skill-proposals", response_model=ResponseModel[list[AgentSkillProposal]])
+async def list_skill_proposals(
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[AgentSkillProposal]]:
+    """列出该 owner 名下 agent 自提的技能提案（最近在前），供「提案」面板评审。"""
+    rows = await ProposalStore(session).list_all(owner)
+    return ResponseModel(data=[AgentSkillProposal(**r) for r in rows])
+
+
+@private_router.delete("/skill-proposals/{pid}", response_model=ResponseModel[dict])
+async def delete_skill_proposal(
+    pid: int,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """删该 owner 名下一条技能提案（评审完/不要了）。owner 圈定，删不到 → 404。"""
+    if not await ProposalStore(session).delete_by_id(owner, pid):
+        raise HTTPException(status_code=404, detail="提案不存在")
     return ResponseModel(data={"deleted": True})
 
 

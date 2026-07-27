@@ -576,6 +576,26 @@ class AgentSessionRow(Base):
     __table_args__ = (Index("ix_agent_session_owner_updated", "owner", "updated_at"),)
 
 
+class AgentSkillProposalRow(Base):
+    """agent 自提的技能提案：撞到能力缺口时描述一个「该有但没有」的工具，交 owner 评审。
+
+    不是运行时代码生成（不安全、不做）——只存规格（名字/用途/参数草图/为什么需要），
+    站主看了自己决定要不要实现。owner 非空，仅私有通道该 owner 可见。
+    """
+
+    __tablename__ = "agent_skill_proposal"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)  # 建议的 skill 名
+    description: Mapped[str] = mapped_column(Text, nullable=False)  # 用途
+    parameters: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)  # 参数 schema 草图
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")  # 为什么需要（触发它的缺口）
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (Index("ix_agent_skill_proposal_owner", "owner", "created_at"),)
+
+
 class AgentMemoryRow(Base):
     """agent 的长期记忆：owner 维度、跨会话——让它越用越懂 owner。
 

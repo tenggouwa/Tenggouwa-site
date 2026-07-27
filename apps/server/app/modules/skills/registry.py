@@ -12,6 +12,7 @@ from .git_ops import GIT
 from .kb_graph import KB_GRAPH
 from .kb_search import KB_SEARCH
 from .memory_skill import FORGET, REMEMBER
+from .propose_skill import PROPOSE_SKILL
 from .shell_exec import SHELL_EXEC
 from .subagent import SUBAGENT
 from .update_plan import UPDATE_PLAN
@@ -43,6 +44,8 @@ REGISTRY: dict[str, Skill] = {
     # remember / forget（private + write 但免批，agent 的 owner 维度长期记忆）
     REMEMBER.name: REMEMBER,
     FORGET.name: FORGET,
+    # propose_skill（private + write 但免批，agent 撞到能力缺口时提议新工具规格，交站主评审）
+    PROPOSE_SKILL.name: PROPOSE_SKILL,
     # browser（private + readonly，Pi 上真无头浏览器操作网页；持久页面状态→不并发）
     BROWSER.name: BROWSER,
 }
