@@ -102,6 +102,36 @@ export const listSkillProposals = (token: string) => agentApi<SkillProposal[]>('
 export const deleteSkillProposal = (token: string, pid: number) =>
   agentApi<{ deleted: boolean }>(`/skill-proposals/${pid}`, token, { method: 'DELETE' });
 
+// 自定义 skill（页面上自己加，agent 私有通道直接调）：列 / 建改 / 删。仅私有通道。
+export interface CustomSkill {
+  id: number;
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  kind: 'http' | 'prompt';
+  config: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface CustomSkillUpsert {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  kind: 'http' | 'prompt';
+  config: Record<string, unknown>;
+}
+
+export const listCustomSkills = (token: string) => agentApi<CustomSkill[]>('/custom-skills', token);
+export const upsertCustomSkill = (token: string, body: CustomSkillUpsert) =>
+  agentApi<{ ok: boolean; message: string }>('/custom-skills', token, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+export const deleteCustomSkill = (token: string, sid: number) =>
+  agentApi<{ deleted: boolean }>(`/custom-skills/${sid}`, token, { method: 'DELETE' });
+
 // 收件箱（主动/定时任务产出）：列 / 读 / 删 / 手动触发一次主动运行。仅私有通道。
 export interface InboxItem {
   id: number;
