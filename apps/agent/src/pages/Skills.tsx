@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiGet } from '../lib/api';
+import SkillProposals from '../components/SkillProposals';
 
 interface SkillInfo {
   name: string;
@@ -10,6 +11,7 @@ interface SkillInfo {
 export default function Skills() {
   const [skills, setSkills] = useState<SkillInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const agentToken = sessionStorage.getItem('agent_token'); // 私有解锁后才有；提案是 owner 维度
 
   useEffect(() => {
     apiGet<SkillInfo[]>('/api/public/skills')
@@ -62,6 +64,16 @@ export default function Skills() {
       )}
 
       <p className="text-xs text-terminal-gray/40">私有文件、Shell、Git 和 MCP 工具仅在 TOTP 解锁后可用。</p>
+
+      <div className="pt-2 border-t border-terminal-line/40">
+        {agentToken ? (
+          <SkillProposals token={agentToken} />
+        ) : (
+          <p className="text-xs text-terminal-gray/45">
+            <span className="text-terminal-green">$ </span>agent 提议的新技能 —— 解锁私有模式后，这里会显示 agent 撞到能力缺口时自提的 skill 提案。
+          </p>
+        )}
+      </div>
     </div>
   );
 }

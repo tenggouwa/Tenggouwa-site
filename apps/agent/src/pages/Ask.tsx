@@ -8,7 +8,6 @@ import UnlockPanel from '../components/UnlockPanel';
 import SessionList from '../components/SessionList';
 import MemoryList from '../components/MemoryList';
 import InboxPanel from '../components/InboxPanel';
-import SkillProposals from '../components/SkillProposals';
 
 // agent 对话：公开走 POST /api/public/agent/chat；私有模式（TOTP 解锁）走 /api/agent/chat + Bearer，
 // 额外拿到文件读写等高危工具，write 操作触发 C2 审批卡。SSE 事件 tool/token/plan/ask/approval/done。
@@ -436,7 +435,6 @@ export default function Ask() {
             />
             <MemoryList token={agentToken} />
             <InboxPanel token={agentToken} />
-            <SkillProposals token={agentToken} />
           </aside>
         )}
 

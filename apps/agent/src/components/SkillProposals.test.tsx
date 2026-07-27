@@ -34,12 +34,15 @@ describe('SkillProposals 技能提案面板', () => {
     expect(calls.some((c) => c.method === 'DELETE' && c.url.endsWith('/skill-proposals/1'))).toBe(true);
   });
 
-  it('没提案时不渲染（不占侧栏）', async () => {
+  it('没提案时显示空态提示（区块标题仍在）', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(env([])) })) as unknown as typeof fetch,
+      vi.fn(() =>
+        Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(env([])) }),
+      ) as unknown as typeof fetch,
     );
-    const { container } = render(<SkillProposals token="t" />);
-    await waitFor(() => expect(container.textContent).toBe(''));
+    render(<SkillProposals token="t" />);
+    await waitFor(() => expect(screen.getByText(/暂无提案/)).toBeTruthy());
+    expect(screen.getByText(/agent 提议的新技能/)).toBeTruthy();
   });
 });
