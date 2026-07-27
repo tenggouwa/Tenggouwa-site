@@ -11,7 +11,7 @@ from .registry import REGISTRY
 
 _CONTROL = {"update_plan", "ask_user"}  # 控制流，无外部副作用
 # 写自己的记忆：owner 内部、无外部副作用 → 免批；但仍是 write，不进 is_parallel_safe（dedup 读改写要串行）。
-_AUTO_WRITE = {"remember", "forget"}
+_AUTO_WRITE = {"remember", "forget", "propose_skill"}
 
 
 def requires_approval(name: str) -> bool:

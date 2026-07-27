@@ -88,6 +88,20 @@ export const listMemories = (token: string) => agentApi<MemoryItem[]>('/memories
 export const deleteMemory = (token: string, mid: number) =>
   agentApi<{ deleted: boolean }>(`/memories/${mid}`, token, { method: 'DELETE' });
 
+// 技能提案（agent 撞到能力缺口时自提，交站主评审）：列 / 删。仅私有通道。
+export interface SkillProposal {
+  id: number;
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  rationale: string;
+  created_at: string;
+}
+
+export const listSkillProposals = (token: string) => agentApi<SkillProposal[]>('/skill-proposals', token);
+export const deleteSkillProposal = (token: string, pid: number) =>
+  agentApi<{ deleted: boolean }>(`/skill-proposals/${pid}`, token, { method: 'DELETE' });
+
 // 收件箱（主动/定时任务产出）：列 / 读 / 删 / 手动触发一次主动运行。仅私有通道。
 export interface InboxItem {
   id: number;
