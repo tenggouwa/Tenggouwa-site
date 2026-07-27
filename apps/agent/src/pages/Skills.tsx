@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiGet } from '../lib/api';
 import SkillProposals from '../components/SkillProposals';
+import CustomSkills from '../components/CustomSkills';
 
 interface SkillInfo {
   name: string;
@@ -65,15 +66,20 @@ export default function Skills() {
 
       <p className="text-xs text-terminal-gray/40">私有文件、Shell、Git 和 MCP 工具仅在 TOTP 解锁后可用。</p>
 
-      <div className="pt-2 border-t border-terminal-line/40">
-        {agentToken ? (
-          <SkillProposals token={agentToken} />
-        ) : (
-          <p className="text-xs text-terminal-gray/45">
-            <span className="text-terminal-green">$ </span>agent 提议的新技能 —— 解锁私有模式后，这里会显示 agent 撞到能力缺口时自提的 skill 提案。
-          </p>
-        )}
-      </div>
+      {agentToken ? (
+        <>
+          <div className="pt-2 border-t border-terminal-line/40">
+            <CustomSkills token={agentToken} />
+          </div>
+          <div className="pt-2 border-t border-terminal-line/40">
+            <SkillProposals token={agentToken} />
+          </div>
+        </>
+      ) : (
+        <p className="pt-2 border-t border-terminal-line/40 text-xs text-terminal-gray/45">
+          <span className="text-terminal-green">$ </span>自定义 skill / agent 提案 —— 解锁私有模式后，这里能自己加 skill、看 agent 自提的技能。
+        </p>
+      )}
     </div>
   );
 }
