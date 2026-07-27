@@ -68,6 +68,12 @@ ASK_SKILL = "ask_user"  # 抛选择题给用户，触发后结束本轮、等用
 # 深度思考模式用的推理模型（返回 reasoning_content 思维链，仍支持 tools）；env 可覆盖。
 REASONER_MODEL = os.environ.get("KB_LLM_REASONER_MODEL") or "deepseek-reasoner"
 
+# 模型路由（性价比）：一次极短分类调用判题难易 → 难题自动升 reasoner、简单走快模型，不用人工开深度思考。
+ROUTER_SYSTEM = (
+    "你是模型路由器。判断下面这个用户问题是否需要**强推理**（数学/证明/多步逻辑/复杂算法或代码/严密规划）。\n"
+    "只输出一行：HARD 或 SIMPLE，后跟一个极短理由（十个字以内）。别答问题本身。"
+)
+
 # 反思模式（evaluator-optimizer）：答完让一个「评审者」按标准打分，不过关就把评审喂回、改写一版。
 MAX_REFLECT_ROUNDS = 2  # 评审→改写最多几轮（防无限自我打磨 + 控成本）
 EVAL_SYSTEM = (
@@ -206,6 +212,7 @@ class AgentService:
         owner: str | None = None,
         deep: bool = False,
         reflect: bool = False,
+        auto_model: bool = False,
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
         current_owner.set(owner)  # 让 remember/forget 拿到本轮 owner（skill handler 签名不带 owner，走 ContextVar）
@@ -216,6 +223,11 @@ class AgentService:
             existing = None
         sid = existing.id if existing else await repo.create_session(q or "（审批）", owner=owner)
         yield {"type": "session", "session_id": sid}
+
+        # 模型路由：未手动开深度思考 + 开了自动选模型 + 是正常提问（非审批续跑）→ 判题难易自动选模型
+        if auto_model and not deep and approvals is None and q.strip():
+            model, reason = await self._route_model(q)
+            yield {"type": "route", "model": "reasoner" if model else "chat", "reason": reason}
 
         usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
         # 本轮状态：收敛闸（子代理计数 + 检索去重）+ 渐进披露已加载的 MCP 工具名
@@ -391,6 +403,28 @@ class AgentService:
             + "\n（这些是你的长期记忆，仅供参考、可能过时；与当前对话冲突时以对话为准。）"
         )
         messages.append({"role": "system", "content": note})
+
+    @staticmethod
+    async def _route_model(question: str) -> tuple[str | None, str]:
+        """路由分类器：一次极短调用判难易，返回 (model, 理由)。HARD→reasoner，SIMPLE→None(快模型)。
+
+        分类失败/异常一律降级到快模型（None）——路由是加分项，不该因它拖垮或抬高成本。
+        """
+        try:
+            out = await chat_llm.complete(
+                [
+                    {"role": "system", "content": ROUTER_SYSTEM},
+                    {"role": "user", "content": question[:500]},
+                ],
+                tools=None,
+            )
+        except Exception:
+            logger.exception("模型路由分类失败，降级快模型")
+            return None, "路由失败，用快模型"
+        text = (out.get("content") or "").strip()
+        hard = text.lstrip().upper().startswith("HARD")
+        reason = text.split(None, 1)[1].strip() if len(text.split(None, 1)) > 1 else text
+        return (REASONER_MODEL, reason) if hard else (None, reason or "常规问题")
 
     @staticmethod
     async def _evaluate(question: str, answer: str) -> dict:
