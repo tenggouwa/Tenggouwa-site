@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { deleteSkillProposal, listSkillProposals, type SkillProposal } from '../lib/api';
 
-// 私有模式「技能提案」面板：列出 agent 撞到能力缺口时自提的 skill 规格，✕ 删。
-// 提案不会自动生效——是留给站主看的「该有但没有的工具」建议，看完自己决定要不要实现。
+// skills 页的「agent 提议的新技能」区块：agent 撞到能力缺口时自提的 skill 规格，站主在此评审 / ✕ 删。
+// 提案不会自动生效——是「该有但没有的工具」的建议，看完自己决定要不要人工实现。仅私有通道（需 agent_token）。
 
 export default function SkillProposals({ token }: { token: string }) {
   const [items, setItems] = useState<SkillProposal[] | null>(null);
@@ -29,34 +29,68 @@ export default function SkillProposals({ token }: { token: string }) {
     }
   }
 
-  if (!error && (items === null || items.length === 0)) return null; // 没提案就不占地方
-
   return (
-    <div className="rounded-lg border border-terminal-line/70 bg-terminal-bg/95 p-2 text-xs">
-      <div className="px-1 pb-2 mb-1 border-b border-terminal-line/50 text-terminal-gray/60">
-        <span className="text-terminal-pink">~$</span> <span className="text-terminal-green">cat</span> ~/skill-proposals
-        {items && <span className="text-terminal-gray/40"> · {items.length}</span>}
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <h2 className="text-terminal-green text-lg">
+          <span className="text-terminal-pink">$ </span>agent 提议的新技能
+        </h2>
+        <p className="text-xs text-terminal-gray/60">
+          agent 撞到「该做但没有对应工具」时会在这里提议一个 skill 规格。不会自动生效——看完你决定要不要实现。
+        </p>
       </div>
-      {error && <div className="px-1 py-2 text-terminal-red">加载失败：{error}</div>}
-      <div className="max-h-[40vh] overflow-y-auto space-y-2">
-        {items?.map((p) => (
-          <div key={p.id} className="group rounded px-1.5 py-1 hover:bg-terminal-line/20">
-            <div className="flex items-center gap-2">
-              <span className="text-terminal-cyan font-mono flex-1 truncate">{p.name}</span>
-              <button
-                type="button"
-                onClick={() => del(p.id)}
-                title="删掉这条提案"
-                className="shrink-0 text-terminal-gray/30 hover:text-terminal-red opacity-0 group-hover:opacity-100 transition-opacity"
+
+      {error && <div className="text-sm text-terminal-red">加载失败：{error}</div>}
+      {!error && items === null && <div className="text-sm text-terminal-gray/50">加载中…</div>}
+      {!error && items?.length === 0 && (
+        <div className="text-xs text-terminal-gray/45">
+          暂无提案。私有模式下问 agent 一件它现在做不到的事（如「发封邮件」），它会在这里提议对应的新技能。
+        </div>
+      )}
+
+      {items && items.length > 0 && (
+        <div className="grid sm:grid-cols-2 gap-4">
+          {items.map((p) => {
+            const props = (p.parameters?.properties ?? {}) as Record<string, unknown>;
+            const params = Object.keys(props);
+            return (
+              <div
+                key={p.id}
+                className="group rounded-lg border border-terminal-yellow/40 bg-terminal-yellow/[0.04] p-4 space-y-2"
               >
-                ✕
-              </button>
-            </div>
-            <div className="text-terminal-gray/70 mt-0.5">{p.description}</div>
-            {p.rationale && <div className="text-terminal-gray/40 mt-0.5">缺口：{p.rationale}</div>}
-          </div>
-        ))}
-      </div>
+                <div className="flex items-center justify-between gap-2">
+                  <code className="text-terminal-cyan">{p.name}</code>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded border border-terminal-yellow/50 text-terminal-yellow">
+                      待评审
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => del(p.id)}
+                      title="删掉这条提案"
+                      className="text-terminal-gray/30 hover:text-terminal-red opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-terminal-gray/75 leading-relaxed">{p.description}</p>
+                {params.length > 0 && (
+                  <div className="text-[11px] text-terminal-gray/55">
+                    参数：
+                    {params.map((k) => (
+                      <code key={k} className="text-terminal-yellow ml-1">
+                        {k}
+                      </code>
+                    ))}
+                  </div>
+                )}
+                {p.rationale && <div className="text-[11px] text-terminal-gray/45">缺口：{p.rationale}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
