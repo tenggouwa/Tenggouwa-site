@@ -9,6 +9,7 @@ class AgentChatRequest(BaseModel):
     auto_approve: bool = Field(default=False)  # auto 模式：私有通道内不暂停审批、直接执行（沙箱兜底）
     deep_think: bool = Field(default=False)  # 深度思考：换 deepseek-reasoner，回传思维链 reasoning
     reflect: bool = Field(default=False)  # 反思：答完自评→按需改写（evaluator-optimizer），回传 reflect 过程
+    auto_model: bool = Field(default=False)  # 模型路由：判题难易自动选快模型/reasoner，回传 route 事件
 
 
 class AgentUnlockRequest(BaseModel):

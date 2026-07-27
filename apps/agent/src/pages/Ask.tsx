@@ -66,6 +66,7 @@ interface Turn {
   reasoning?: string; // 深度思考模式的思维链（reasoner），单独折叠展示，不进正文
   reflections?: { round: number; verdict: string; critique: string }[]; // 反思：历次自评
   drafts?: string[]; // 反思：被改写前的历次稿（初稿在前），过程折叠展示
+  route?: { model: string; reason: string }; // 模型路由：这轮自动选了哪个模型 + 理由
   toolOutput?: Record<string, string>; // tool_call_id → 流式输出（shell_exec 实时终端）
   approval?: ApprovalRequest[]; // agent 想执行需授权的工具，等用户批/拒（C2）
   usage?: Usage;
@@ -120,6 +121,7 @@ export default function Ask() {
   const [autoRun, setAutoRun] = useState(false); // auto 模式：私有沙箱内自动执行、免逐条审批
   const [deepThink, setDeepThink] = useState(false); // 深度思考：换 deepseek-reasoner，显示思维链
   const [reflect, setReflect] = useState(false); // 反思：答完自评→按需改写（evaluator-optimizer）
+  const [autoModel, setAutoModel] = useState(false); // 模型路由：判题难易自动选快模型/reasoner
   const [sessionRevision, setSessionRevision] = useState(0); // 新建/更新会话后刷新私有侧栏
 
   useEffect(() => {
@@ -225,6 +227,8 @@ export default function Ask() {
       round?: number; // reflect 事件
       verdict?: string;
       critique?: string;
+      model?: string; // route 事件
+      reason?: string;
     } & Usage;
     try {
       obj = JSON.parse(data);
@@ -253,6 +257,8 @@ export default function Ask() {
       });
     else if (event === 'reasoning')
       updateTurn(idx, (t) => ({ ...t, reasoning: (t.reasoning ?? '') + (obj.delta ?? '') }));
+    else if (event === 'route')
+      updateTurn(idx, (t) => ({ ...t, route: { model: obj.model as string, reason: obj.reason as string } }));
     else if (event === 'reflect')
       updateTurn(idx, (t) => {
         const reflections = [
@@ -289,6 +295,7 @@ export default function Ask() {
           auto_approve: !!(agentToken && autoRun),
           deep_think: deepThink,
           reflect,
+          auto_model: autoModel,
         }),
         credentials: 'include',
         signal: ac.signal,
@@ -462,6 +469,17 @@ export default function Ask() {
             >
               {reflect ? '◆ 反思' : '◇ 反思'}
             </button>
+            <button
+              type="button"
+              onClick={() => setAutoModel((v) => !v)}
+              className={
+                'text-[11px] transition-colors ' +
+                (autoModel ? 'text-terminal-pink' : 'text-terminal-gray/60 hover:text-terminal-pink')
+              }
+              title={autoModel ? '智能选模型已开：判题难易自动选快模型/reasoner' : '开启智能选模型：难题自动升推理模型、简单走快模型'}
+            >
+              {autoModel ? '◆ 智能选模型' : '◇ 智能选模型'}
+            </button>
             {agentToken ? (
               <>
                 <span className="text-[11px] text-terminal-green flex items-center gap-1" title="私有模式已解锁">
@@ -601,6 +619,15 @@ export default function Ask() {
                   locked={i < turns.length - 1 || busy}
                   onDecide={(approvals) => resume(i, approvals)}
                 />
+              )}
+              {t.route && (
+                <div className="text-[11px] text-terminal-gray/50">
+                  <span className="text-terminal-pink">~</span> 路由 →{' '}
+                  <span className={t.route.model === 'reasoner' ? 'text-terminal-cyan' : 'text-terminal-gray/70'}>
+                    {t.route.model === 'reasoner' ? '深度推理模型' : '快模型'}
+                  </span>
+                  {t.route.reason && <span className="text-terminal-gray/40"> · {t.route.reason}</span>}
+                </div>
               )}
               {t.reasoning && (
                 <details className="text-xs" open={!t.answer}>
