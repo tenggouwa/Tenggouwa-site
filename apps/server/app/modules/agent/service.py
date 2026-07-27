@@ -27,6 +27,7 @@ from ..skills.service import LOAD_TOOLS, skills_service
 from ..skills.shell_exec import SHELL_SKILL, stream_exec
 from ..skills.subagent import SUBAGENT_SKILL
 from ..skills.subagent import stream_run as subagent_run
+from .custom_skills import CustomSkillStore
 from .repository import AgentRepository
 
 logger = logging.getLogger(__name__)
@@ -231,7 +232,12 @@ class AgentService:
 
         usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
         # 本轮状态：收敛闸（子代理计数 + 检索去重）+ 渐进披露已加载的 MCP 工具名
-        turn_state: dict = {"subagents": 0, "searched": set(), "loaded": set()}
+        turn_state: dict = {"subagents": 0, "searched": set(), "loaded": set(), "custom": []}
+        if privileged and owner and session is not None:
+            try:  # owner 的自定义 skill（页面上加的），拉一次进本轮，暴露给模型 + 供 invoke 分派
+                turn_state["custom"] = await CustomSkillStore(session).list_enabled(owner)
+            except Exception:  # noqa: BLE001 —— 拉不到不该拖垮对话
+                logger.exception("拉取自定义 skill 失败，跳过")
 
         # 组装初始 messages + seq：C2 审批续跑（消费 pending、按 approvals 执行）vs 正常提问
         resume_asked = False  # 续跑批里若含 ask_user，执行完也要停（等用户点选），别继续生成
@@ -280,7 +286,9 @@ class AgentService:
                 break
             content, tool_calls = "", []
             leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
-            tools = skills_service.tools(privileged=privileged, loaded=turn_state["loaded"])
+            tools = skills_service.tools(
+                privileged=privileged, loaded=turn_state["loaded"], custom=turn_state["custom"]
+            )
             async for ev in chat_llm.stream_step(messages, tools=tools, model=model):
                 if ev["type"] == "reasoning":  # 深度思考的思维链：实时转发给前端单独展示，不进正文/不落库
                     yield {"type": "reasoning", "delta": ev["delta"]}
@@ -321,7 +329,8 @@ class AgentService:
             # auto 模式：用户在沙箱里选了自动执行 → 不暂停、直接跑（沙箱 bwrap 是安全边界）。
             # 公开通道压根不暴露高危工具，审批是私有通道概念；即便模型幻觉出高危名，invoke 也会拒执行。
             gate = privileged and not auto_approve
-            need = [tc for tc in tool_calls if requires_approval(_tc_name(tc))] if gate else []
+            custom_http = frozenset(c["name"] for c in turn_state["custom"] if c.get("kind") == "http")
+            need = [tc for tc in tool_calls if requires_approval(_tc_name(tc), custom_http)] if gate else []
             if need:
                 await repo.set_pending(sid, {"content": content, "tool_calls": tool_calls})
                 yield {
@@ -494,13 +503,15 @@ class AgentService:
         capped = _turn_cap(name, args, turn_state)  # 收敛闸：超限/重复检索直接给提示、不真执行
         if capped is not None:
             return capped
-        if approvals is not None and requires_approval(name) and not approvals.get(tid, False):
+        custom = turn_state.get("custom") or []
+        custom_http = frozenset(c["name"] for c in custom if c.get("kind") == "http")
+        if approvals is not None and requires_approval(name, custom_http) and not approvals.get(tid, False):
             return "（用户拒绝执行此操作。）"
         streamed = await self._exec_streaming(session, name, args, tid, privileged, emit)
         if streamed is not None:
             return streamed
         try:
-            return await skills_service.invoke(session, name, args, privileged=privileged)
+            return await skills_service.invoke(session, name, args, privileged=privileged, custom=custom)
         except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
             logger.exception("skill %s failed", name)
             return f"（skill {name} 执行失败：{e}）"

@@ -15,10 +15,13 @@ from ..memory.store import MemoryStore
 from ..terminal.service import terminal_service
 from ..totp.repository import AdminTotpRepository
 from .auth import current_agent_owner, make_agent_token
+from .custom_skills import CustomSkillStore
 from .proposals import ProposalStore
 from .repository import AgentRepository
 from .schema import (
     AgentChatRequest,
+    AgentCustomSkill,
+    AgentCustomSkillUpsert,
     AgentInboxItem,
     AgentMemoryItem,
     AgentProactiveRequest,
@@ -191,6 +194,42 @@ async def delete_memory(
     """删该 owner 名下一条记忆。owner 圈定，删不到（不存在 / 不属于你）→ 404。"""
     if not await MemoryStore(session).delete_by_id(owner, mid):
         raise HTTPException(status_code=404, detail="记忆不存在")
+    return ResponseModel(data={"deleted": True})
+
+
+@private_router.get("/custom-skills", response_model=ResponseModel[list[AgentCustomSkill]])
+async def list_custom_skills(
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[AgentCustomSkill]]:
+    """列出该 owner 自定义的 skill（管理 UI 用）。"""
+    rows = await CustomSkillStore(session).list_all(owner)
+    return ResponseModel(data=[AgentCustomSkill(**r) for r in rows])
+
+
+@private_router.post("/custom-skills", response_model=ResponseModel[dict])
+async def upsert_custom_skill(
+    payload: AgentCustomSkillUpsert,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """新建 / 更新一个自定义 skill（按 name upsert）。校验失败在返回文案里说明，不抛 500。"""
+    msg = await CustomSkillStore(session).upsert(
+        owner, payload.name, payload.description, payload.parameters, payload.kind, payload.config
+    )
+    ok = "已新建" in msg or "已更新" in msg  # 成功文案；校验失败是「（name 需…）」这类
+    return ResponseModel(data={"ok": ok, "message": msg})
+
+
+@private_router.delete("/custom-skills/{sid}", response_model=ResponseModel[dict])
+async def delete_custom_skill(
+    sid: int,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """删该 owner 名下一个自定义 skill。owner 圈定，删不到 → 404。"""
+    if not await CustomSkillStore(session).delete_by_id(owner, sid):
+        raise HTTPException(status_code=404, detail="自定义 skill 不存在")
     return ResponseModel(data={"deleted": True})
 
 

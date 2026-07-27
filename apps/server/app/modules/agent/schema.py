@@ -38,6 +38,29 @@ class AgentMemoryItem(BaseModel):
     created_at: str
 
 
+class AgentCustomSkill(BaseModel):
+    """owner 自定义 skill（管理 UI 用）。"""
+
+    id: int
+    name: str
+    description: str
+    parameters: dict = Field(default_factory=dict)
+    kind: str  # http | prompt
+    config: dict = Field(default_factory=dict)
+    enabled: bool = True
+    created_at: str
+
+
+class AgentCustomSkillUpsert(BaseModel):
+    """新建 / 更新自定义 skill 的入参（按 name upsert）。"""
+
+    name: str = Field(..., max_length=64)
+    description: str = Field(..., max_length=2000)
+    parameters: dict = Field(default_factory=dict)
+    kind: str = Field(..., max_length=16)  # http | prompt
+    config: dict = Field(default_factory=dict)
+
+
 class AgentSkillProposal(BaseModel):
     """agent 自提的技能提案（提案面板用）。"""
 

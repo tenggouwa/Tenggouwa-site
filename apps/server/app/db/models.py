@@ -576,6 +576,34 @@ class AgentSessionRow(Base):
     __table_args__ = (Index("ix_agent_session_owner_updated", "owner", "updated_at"),)
 
 
+class AgentCustomSkillRow(Base):
+    """owner 在页面上自定义的 skill，agent 私有通道可直接调。两种执行体（kind）：
+
+    - http：把参数填进一个（公网）URL 的请求里、响应返给 agent（走 SSRF 守卫 + C2 审批）。
+    - prompt：用参数填一段提示词模板、跑一次 LLM 返回文本（纯变换、免审批）。
+
+    **不是运行时任意代码执行**（不做）——只是把「调 URL」「跑提示词」这两种安全执行体参数化。
+    owner 非空、仅私有通道暴露；name 在 owner 内唯一（且不得与原生 skill 撞名）。
+    """
+
+    __tablename__ = "agent_custom_skill"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)  # 合法函数名，owner 内唯一
+    description: Mapped[str] = mapped_column(Text, nullable=False)  # 给模型看：何时调
+    parameters: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)  # 参数 JSON schema
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # http | prompt
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)  # kind 相关配置
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (Index("uq_agent_custom_skill_owner_name", "owner", "name", unique=True),)
+
+
 class AgentSkillProposalRow(Base):
     """agent 自提的技能提案：撞到能力缺口时描述一个「该有但没有」的工具，交 owner 评审。
 

@@ -6,6 +6,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..agent.custom_skills import custom_tool_schema, run_custom
 from ..mcp.manager import mcp_manager
 from .base import tool_schema
 from .registry import REGISTRY
@@ -58,7 +59,9 @@ class SkillsService:
             if not s.private
         ]
 
-    def tools(self, *, privileged: bool = False, loaded: set[str] | None = None) -> list[dict]:
+    def tools(
+        self, *, privileged: bool = False, loaded: set[str] | None = None, custom: list[dict] | None = None
+    ) -> list[dict]:
         """function-calling 的 tools 列表（agent 传给 LLM）。
 
         公开通道（privileged=False）只暴露既 readonly 又非 private 的原生 skill；私有（鉴权）
@@ -74,16 +77,30 @@ class SkillsService:
         native = [tool_schema(s) for s in REGISTRY.values() if privileged or (s.risk == "readonly" and not s.private)]
         if not privileged:
             return native
+        # owner 的自定义 skill：append 在原生 + MCP 之后（固定前缀不动，尾巴按 owner 变，同 MCP 逻辑）
+        extra = [custom_tool_schema(c) for c in (custom or [])]
         catalog = mcp_manager.catalog()
         if not catalog:
-            return native  # 没配 MCP → 完全 inert，连 load_tools 都不出现
-        return native + [_load_tools_schema(catalog)] + mcp_manager.tools_by_names(sorted(loaded or set()))
+            return native + extra  # 没配 MCP：原生 + 自定义
+        return native + [_load_tools_schema(catalog)] + mcp_manager.tools_by_names(sorted(loaded or set())) + extra
 
-    async def invoke(self, session: AsyncSession, name: str, args: dict, *, privileged: bool = False) -> str:
-        """执行一个 skill / MCP 工具；未知 / 越权返回错误字符串（不抛，交给 agent 续答）。
+    async def invoke(
+        self,
+        session: AsyncSession,
+        name: str,
+        args: dict,
+        *,
+        privileged: bool = False,
+        custom: list[dict] | None = None,
+    ) -> str:
+        """执行一个 skill / MCP 工具 / owner 自定义 skill；未知 / 越权返回错误字符串（不抛，交给 agent 续答）。
 
         纵深防御：即便模型幻觉出一个公开通道不该有的高危工具名，这里也拒绝执行。
         """
+        if privileged and custom:
+            hit = next((c for c in custom if c["name"] == name), None)
+            if hit is not None:
+                return await run_custom(hit, args)  # 自定义 skill 仅私有通道
         if mcp_manager.has(name):
             if not privileged:
                 return f"（{name} 是外部 MCP 工具，仅在鉴权的私有通道可用，公开通道不执行。）"
