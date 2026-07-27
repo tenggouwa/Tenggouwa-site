@@ -185,7 +185,7 @@ async def test_approval_pause_saves_pending_no_assistant(monkeypatch):
     """C2：这批含需批准工具 → 发 approval 事件、存 pending、不落 assistant（免孤儿 tool_call）、收尾。"""
     import modules.agent.service as svc
 
-    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    monkeypatch.setattr(svc, "requires_approval", lambda name, _custom_http=frozenset(): name == "danger")
 
     async def should_not_run(_s, _n, _a):
         raise AssertionError("暂停时不该执行任何工具")
@@ -213,7 +213,7 @@ async def test_public_channel_never_pauses_for_approval(monkeypatch):
     """C2 是私有通道概念：公开通道即便模型幻觉出需批准工具，也不发 approval（invoke 那层再拒）。"""
     import modules.agent.service as svc
 
-    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    monkeypatch.setattr(svc, "requires_approval", lambda name, _custom_http=frozenset(): name == "danger")
     rounds = [
         [{"type": "tool_calls", "tool_calls": [tool_call("danger", "{}")]}],
         [{"type": "content", "delta": "继续"}],
@@ -228,7 +228,7 @@ async def test_auto_approve_skips_pause_on_private(monkeypatch):
     """auto 模式：私有通道里需批准工具也不暂停、直接执行（沙箱兜底），不发 approval。"""
     import modules.agent.service as svc
 
-    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    monkeypatch.setattr(svc, "requires_approval", lambda name, _custom_http=frozenset(): name == "danger")
     rounds = [
         [{"type": "tool_calls", "tool_calls": [tool_call("danger", "{}")]}],
         [{"type": "content", "delta": "干完了"}],
@@ -244,7 +244,7 @@ async def test_auto_approve_on_public_channel_still_never_pauses(monkeypatch):
     （write 工具在公开通道被 invoke 层拒，见 test_skills_channel；这里断言门闸不因 auto 而变松）。"""
     import modules.agent.service as svc
 
-    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    monkeypatch.setattr(svc, "requires_approval", lambda name, _custom_http=frozenset(): name == "danger")
     rounds = [
         [{"type": "tool_calls", "tool_calls": [tool_call("danger", "{}")]}],
         [{"type": "content", "delta": "ok"}],
@@ -280,7 +280,7 @@ async def test_approval_resume_approve_executes(monkeypatch):
     import modules.agent.service as svc
     from modules.agent.repository import AgentWindow
 
-    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    monkeypatch.setattr(svc, "requires_approval", lambda name, _custom_http=frozenset(): name == "danger")
 
     invoked = []
 
@@ -344,7 +344,7 @@ async def test_approval_resume_reject_skips_execution(monkeypatch):
     import modules.agent.service as svc
     from modules.agent.repository import AgentWindow
 
-    monkeypatch.setattr(svc, "requires_approval", lambda name: name == "danger")
+    monkeypatch.setattr(svc, "requires_approval", lambda name, _custom_http=frozenset(): name == "danger")
 
     async def inv(_s, name, _a):
         if name == "danger":

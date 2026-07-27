@@ -14,11 +14,13 @@ _CONTROL = {"update_plan", "ask_user"}  # 控制流，无外部副作用
 _AUTO_WRITE = {"remember", "forget", "propose_skill"}
 
 
-def requires_approval(name: str) -> bool:
+def requires_approval(name: str, custom_http: frozenset[str] = frozenset()) -> bool:
     # 顺序（先原生后 MCP）与 skills_service.invoke（先 MCP）相反，但不冲突：MCP 工具名恒含 `__`
     # （<server>__<tool>），原生名均无 `__`，两集合不相交。将来若加含 `__` 的原生名需对齐两处。
     if name in _CONTROL or name in _AUTO_WRITE:
         return False
+    if name in custom_http:  # owner 自定义的 http skill：有外部副作用（真发请求）→ 走审批，先看 URL+参数再放行
+        return True
     skill = REGISTRY.get(name)
     if skill is not None:
         return skill.risk != "readonly"  # 原生：write 需批准
