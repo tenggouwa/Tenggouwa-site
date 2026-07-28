@@ -6,7 +6,7 @@ import { deleteCustomSkill, listCustomSkills, upsertCustomSkill, type CustomSkil
 // - http：填 URL(+方法/头/body，可带 {参数})，调用时后端请求它、响应返 agent（SSRF 守卫 + 走审批）。
 // 参数用「逗号分隔的名字」声明（都当 string），够日常用；模板/URL 里用 {名字} 引用。
 
-const EMPTY = { name: '', description: '', kind: 'prompt' as 'prompt' | 'http', params: '', template: '', url: '', method: 'GET', headers: '', body: '' };
+const EMPTY = { name: '', description: '', kind: 'prompt' as 'prompt' | 'http', params: '', template: '', url: '', method: 'GET', headers: '', secretHeaders: '', body: '' };
 
 function buildParams(csv: string): Record<string, unknown> {
   const names = csv
@@ -52,7 +52,13 @@ export default function CustomSkills({ token }: { token: string }) {
     const config =
       form.kind === 'prompt'
         ? { template: form.template }
-        : { url: form.url, method: form.method, headers: parseHeaders(form.headers), body: form.body };
+        : {
+            url: form.url,
+            method: form.method,
+            headers: parseHeaders(form.headers),
+            secret_headers: parseHeaders(form.secretHeaders),
+            body: form.body,
+          };
     try {
       const r = await upsertCustomSkill(token, {
         name: form.name,
@@ -156,7 +162,14 @@ export default function CustomSkills({ token }: { token: string }) {
                 ))}
               </select>
             </div>
-            <textarea className={inputCls + ' font-mono'} rows={2} placeholder="请求头，每行 K: V（可选）" value={form.headers} onChange={(e) => set('headers', e.target.value)} />
+            <textarea className={inputCls + ' font-mono'} rows={2} placeholder="普通请求头，每行 K: V（可选；不要填密钥）" value={form.headers} onChange={(e) => set('headers', e.target.value)} />
+            <textarea
+              className={inputCls + ' font-mono'}
+              rows={2}
+              placeholder="密钥请求头：Authorization: CUSTOM_SKILL_SECRET_API（只填环境变量名，不保存密钥）"
+              value={form.secretHeaders}
+              onChange={(e) => set('secretHeaders', e.target.value)}
+            />
             {(form.method === 'POST' || form.method === 'PUT') && (
               <textarea className={inputCls + ' font-mono'} rows={2} placeholder="请求 body（可含 {参数}，可选）" value={form.body} onChange={(e) => set('body', e.target.value)} />
             )}

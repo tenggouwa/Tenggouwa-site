@@ -30,6 +30,22 @@ class AgentSessionInfo(BaseModel):
     updated_at: str
 
 
+class AgentRunItem(BaseModel):
+    id: int
+    session_id: str
+    model: str
+    deep: bool
+    reflect: bool
+    auto_model: bool
+    status: str
+    tool_names: list[str] = Field(default_factory=list)
+    tool_count: int
+    duration_ms: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    created_at: str
+
+
 class AgentMemoryItem(BaseModel):
     """长期记忆列表里的一条（记忆面板用）。"""
 

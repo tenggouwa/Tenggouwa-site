@@ -53,6 +53,10 @@ def create_app() -> FastAPI:
         from modules.agent.scheduler import start_agent_scheduler, stop_agent_scheduler
 
         start_agent_scheduler()
+        # 临时邮箱 TTL：每天删除过期邮件，避免验证码/正文无限保留。
+        from modules.mail.scheduler import start_mail_scheduler, stop_mail_scheduler
+
+        start_mail_scheduler()
         # MCP 客户端：连 MCP_SERVERS 白名单里的 server（未配置则 inert）。必须在 lifespan 同一 task
         # 里 start/stop（mcp SDK 基于 anyio task group）。
         from modules.mcp.manager import mcp_manager
@@ -64,6 +68,7 @@ def create_app() -> FastAPI:
         stop_seo_scheduler()
         stop_kb_scheduler()
         stop_agent_scheduler()
+        stop_mail_scheduler()
         await mcp_manager.stop()
         logger.info("tenggouwa-server stopped.")
 

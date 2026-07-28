@@ -82,3 +82,18 @@ sudo systemctl restart tenggouwa-pi-agent
 
 > ⚠️ Pi 在你家 LAN 上：`PI_AGENT_EXEC_ALLOW_NET=0`（默认）很重要，否则命令能碰内网。
 > Pi 非 throwaway 但可重刷，当「半可弃」——别在 workspace 外放你不愿被读的东西。
+
+## 浏览器 live smoke（显式开启）
+
+浏览器能力默认不开；在 Pi 的环境文件设 `PI_AGENT_BROWSER=1` 并完成 Playwright Chromium 安装后，
+可以在该 Pi 上跑一次真实的无头浏览器检查。这个测试不会进入常规 CI：
+
+```bash
+cd apps/pi-agent
+PI_AGENT_BROWSER=1 RUN_PI_BROWSER_LIVE_TESTS=1 \
+  python3 -m unittest tests/test_browser_live.py
+```
+
+默认访问 `https://example.com`；如需换成自己的探针地址，另设
+`PI_AGENT_BROWSER_LIVE_URL=https://…`。测试仅验证 Pi 节点上的 Chromium 能导航并产出快照，
+不发送 Agent 指令，也不会触发写操作。

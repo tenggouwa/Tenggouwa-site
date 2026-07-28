@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import time
 from collections.abc import AsyncIterator
 
 from db.models import AgentMessageRow
@@ -231,6 +232,34 @@ class AgentService:
             yield {"type": "route", "model": "reasoner" if model else "chat", "reason": reason}
 
         usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
+        run_started = time.perf_counter()
+        create_run = getattr(repo, "create_run", None)
+        run_id = (
+            await create_run(
+                sid,
+                owner,
+                "reasoner" if model else "chat",
+                deep=deep,
+                reflect=reflect,
+                auto_model=auto_model,
+            )
+            if create_run is not None
+            else None
+        )
+        run_tools: list[str] = []
+        run_status = "completed"
+
+        async def finish_run(status: str) -> None:
+            if run_id is None:
+                return
+            await repo.finish_run(
+                run_id,
+                status=status,
+                duration_ms=int((time.perf_counter() - run_started) * 1000),
+                tool_names=run_tools,
+                usage=usage_total,
+            )
+
         # 本轮状态：收敛闸（子代理计数 + 检索去重）+ 渐进披露已加载的 MCP 工具名
         turn_state: dict = {"subagents": 0, "searched": set(), "loaded": set(), "custom": []}
         if privileged and owner and session is not None:
@@ -245,12 +274,14 @@ class AgentService:
             if existing is None or not existing.pending:
                 # 审批续跑但 pending 已消费/过期（重复提交、会话丢失）→ 不伪造空 user 轮，直接收尾
                 yield {"type": "done"}
+                await finish_run("noop")
                 return
             window = await repo.load_window(sid)
             seq = window.next_seq
             messages = self._seed(window, privileged)  # system + summary + 历史
             pending = existing.pending
             content, tool_calls = pending.get("content", ""), pending.get("tool_calls", [])
+            run_tools.extend(_tc_name(tc) for tc in tool_calls)
             messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
             await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
             seq += 1
@@ -264,6 +295,7 @@ class AgentService:
         else:
             if not q.strip():
                 yield {"type": "done"}  # 正常请求但 q 空 → 无可答，直接收尾（不落空 user 轮）
+                await finish_run("noop")
                 return
             if existing is not None and existing.pending:
                 await repo.set_pending(sid, None)  # 用户改问了别的 → 放弃上次待批
@@ -332,16 +364,20 @@ class AgentService:
             custom_http = frozenset(c["name"] for c in turn_state["custom"] if c.get("kind") == "http")
             need = [tc for tc in tool_calls if requires_approval(_tc_name(tc), custom_http)] if gate else []
             if need:
+                run_status = "awaiting_approval"
+                run_tools.extend(_tc_name(tc) for tc in tool_calls)
                 await repo.set_pending(sid, {"content": content, "tool_calls": tool_calls})
                 yield {
                     "type": "approval",
                     "requests": [{"id": tc.get("id"), "name": _tc_name(tc), "args": _tc_args(tc)} for tc in need],
                 }
                 answered = True
+                await finish_run("awaiting_approval")
                 break
 
             # 全部无需批准 → 落 assistant + 执行这批
             messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
+            run_tools.extend(_tc_name(tc) for tc in tool_calls)
             await repo.append(sid, seq, "assistant", content, tool_calls=tool_calls)
             seq += 1
             asked = any(_tc_name(tc) == ASK_SKILL for tc in tool_calls)
@@ -377,6 +413,8 @@ class AgentService:
 
         if usage_total:
             yield {"type": "usage", **usage_total}
+        if run_status != "awaiting_approval":
+            await finish_run("completed")
         yield {"type": "done"}
 
     @staticmethod

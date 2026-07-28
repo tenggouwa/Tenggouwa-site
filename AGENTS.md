@@ -20,7 +20,7 @@ Tenggouwa-site 是一个 monorepo：
 
 **不直接 `git push origin main`**。本仓库以 PR 为单位推进：
 
-1. 改完代码 → 给用户看 diff → **等用户点头**（[[feedback-no-eager-commit]]）。
+1. 改完代码 → 自行审阅 diff、运行适当验证后继续。站主已授权 agent 独立维护和发布；仅涉及不可逆数据操作、生产密钥/权限变更或显著扩 scope 时再说明并确认。
 2. `git checkout -b <type>/<topic> origin/main` 起 feature 分支。
 3. `git commit` + `git push -u`（pre-commit / pre-push 钩子自动跑）。
 4. `gh pr create` 开 PR；body 填 Summary / Why / Test plan。
