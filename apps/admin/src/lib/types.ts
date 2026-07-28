@@ -101,6 +101,25 @@ export interface TotpStatusResp {
   enrolled: boolean;
 }
 
+export interface OpsJob {
+  id: string;
+  next_run: string | null;
+}
+
+export interface OpsScheduler {
+  running: boolean;
+  jobs: OpsJob[];
+}
+
+export interface OpsOverview {
+  environment: string;
+  alembic_revision: string | null;
+  agent_scheduler: OpsScheduler;
+  mail_scheduler: OpsScheduler;
+  mcp: { configured: number; connected: string[]; tool_count: number };
+  pi: { online: boolean; last_seen: string | null; age_seconds: number | null };
+}
+
 export interface TotpEnrollStartResp {
   secret_b32: string;
   provisioning_uri: string;

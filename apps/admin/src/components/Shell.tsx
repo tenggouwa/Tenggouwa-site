@@ -14,6 +14,7 @@ const MENU = [
   { key: 'inspirations', label: '小灵感' },
   { key: 'terminal', label: '终端' },
   { key: 'mail', label: '接码' },
+  { key: 'ops', label: '运行状态' },
   { key: 'settings', label: '站点设置' },
 ];
 

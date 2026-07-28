@@ -10,6 +10,7 @@ import SeoPage from './pages/SeoPage';
 import SettingsPage from './pages/SettingsPage';
 import TerminalPage from './pages/TerminalPage';
 import MailPage from './pages/MailPage';
+import OpsPage from './pages/OpsPage';
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="inspirations" element={<InspirationsPage />} />
           <Route path="terminal" element={<TerminalPage />} />
           <Route path="mail" element={<MailPage />} />
+          <Route path="ops" element={<OpsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
