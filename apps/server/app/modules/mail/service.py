@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import os
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -58,7 +59,11 @@ class MailService:
 
     def ttl_hours(self) -> int:
         """邮件保留小时数，默认 24。"""
-        return int(config.get("mail.ttl_hours") or 24)
+        value = os.environ.get("MAIL_TTL_HOURS") or config.get("mail.ttl_hours") or 24
+        try:
+            return max(1, min(168, int(value)))
+        except (TypeError, ValueError):
+            return 24
 
     async def ingest(
         self,

@@ -54,7 +54,7 @@ KB_EMBED_API_KEY=<embedding provider key>
 
 ### 检索质量
 
-- [ ] 建立离线 retrieval eval corpus，用 nDCG/Recall 比较 RRF 权重，而不继续凭个例调参。
+- [x] 建立离线 retrieval eval corpus（`apps/server/tests/fixtures/kb_retrieval_eval.json`）和 nDCG/Recall 指标；新增/改写文章时补同类 query，再用它比较 RRF 权重。
 - [ ] 根据 eval 决定是否加入 reranker 或 Contextual Retrieval。
 - [ ] 若精确中文匹配成为主要失败模式，再评估 pg_jieba/zhparser。
 

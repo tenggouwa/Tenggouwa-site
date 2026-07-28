@@ -1,0 +1,12 @@
+[
+  {
+    "id": "personal-site-architecture",
+    "query": "这个个人站由哪些应用组成，后端在哪里？",
+    "expected_urls": ["/posts/architecture/"]
+  },
+  {
+    "id": "agent-skills",
+    "query": "agent 如何调用工具并做审批？",
+    "expected_urls": ["/posts/agent-v2/"]
+  }
+]

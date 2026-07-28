@@ -17,6 +17,8 @@ def test_validate_rejects_bad_inputs():
     assert v("ok_name", "weird", {})  # kind 非法
     assert v("http_no_url", "http", {"method": "GET"})  # http 缺 url
     assert v("prompt_no_tmpl", "prompt", {})  # prompt 缺 template
+    assert v("raw_secret", "http", {"url": "https://x.com", "headers": {"Authorization": "Bearer secret"}})
+    assert v("bad_secret_ref", "http", {"url": "https://x.com", "secret_headers": {"Authorization": "HOME"}})
     assert v("send_email", "http", {"url": "https://x.com", "method": "POST"}) is None  # 合法
 
 
@@ -44,6 +46,45 @@ async def test_run_http_rejects_private_host():
     skill = {"kind": "http", "config": {"url": "http://127.0.0.1:8080/x", "method": "GET"}}
     out = await run_custom(skill, {})
     assert "拒绝" in out and "公网" in out
+
+
+async def test_run_http_pins_validated_ip_and_reads_secret_from_env(monkeypatch):
+    captured = {}
+
+    class _Response:
+        status_code = 200
+        text = "ok"
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def request(self, method, url, **kwargs):
+            captured.update(method=method, url=url, **kwargs)
+            return _Response()
+
+    monkeypatch.setattr(cs, "_public_ips", lambda _host: ["203.0.113.9"])
+    monkeypatch.setattr(cs.httpx, "AsyncClient", lambda **_kw: _Client())
+    monkeypatch.setenv("CUSTOM_SKILL_SECRET_DEMO", "Bearer top-secret")
+    out = await run_custom(
+        {
+            "kind": "http",
+            "config": {
+                "url": "https://api.example.com/v1?q={q}",
+                "method": "GET",
+                "headers": {"X-Query": "{q}"},
+                "secret_headers": {"Authorization": "CUSTOM_SKILL_SECRET_DEMO"},
+            },
+        },
+        {"q": "hello"},
+    )
+    assert out == "[200]\nok"
+    assert captured["url"] == "https://203.0.113.9/v1?q=hello"
+    assert captured["headers"] == {"X-Query": "hello", "Authorization": "Bearer top-secret", "Host": "api.example.com"}
+    assert captured["extensions"] == {"sni_hostname": "api.example.com"}
 
 
 def test_custom_tool_schema_shape():

@@ -25,6 +25,7 @@ from .schema import (
     AgentInboxItem,
     AgentMemoryItem,
     AgentProactiveRequest,
+    AgentRunItem,
     AgentSessionInfo,
     AgentSkillProposal,
     AgentTranscript,
@@ -139,6 +140,35 @@ async def list_sessions(
     rows = await AgentRepository(session).list_sessions(owner)
     data = [AgentSessionInfo(id=r.id, title=r.title, updated_at=r.updated_at.isoformat()) for r in rows]
     return ResponseModel(data=data)
+
+
+@private_router.get("/runs", response_model=ResponseModel[list[AgentRunItem]])
+async def list_runs(
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[AgentRunItem]]:
+    """列出安全的运行摘要；不返回 prompt、回答、工具参数或输出。"""
+    rows = await AgentRepository(session).list_runs(owner)
+    return ResponseModel(
+        data=[
+            AgentRunItem(
+                id=row.id,
+                session_id=row.session_id,
+                model=row.model,
+                deep=row.deep,
+                reflect=row.reflect,
+                auto_model=row.auto_model,
+                status=row.status,
+                tool_names=row.tool_names,
+                tool_count=row.tool_count,
+                duration_ms=row.duration_ms,
+                prompt_tokens=row.prompt_tokens,
+                completion_tokens=row.completion_tokens,
+                created_at=row.created_at.isoformat(),
+            )
+            for row in rows
+        ]
+    )
 
 
 async def _owned_session(sid: str, owner: str, session: AsyncSession) -> AgentRepository:

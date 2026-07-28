@@ -6,6 +6,7 @@
 不做运行时任意代码执行。owner 维度、仅私有通道；参数用 {slot} 占位，_fill 做安全替换（不用 format 防注入）。
 """
 
+import os
 import re
 from urllib.parse import urlparse
 
@@ -15,11 +16,13 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..kb.provider import chat_llm
-from ..skills.web_fetch import _host_is_public  # 复用 SSRF 守卫（拒环回/私网/保留段）
+from ..skills.web_fetch import _pinned_url, _public_ips  # 复用 DNS 固定连接，避免校验后再次解析
 
 _NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{1,63}$")
 _KINDS = ("http", "prompt")
 _HTTP_METHODS = ("GET", "POST", "PUT", "DELETE")
+_SECRET_ENV_RE = re.compile(r"^CUSTOM_SKILL_SECRET_[A-Z0-9_]{1,96}$")
+_SENSITIVE_HEADERS = frozenset({"authorization", "proxy-authorization", "x-api-key", "api-key", "cookie"})
 MAX_CUSTOM_PER_OWNER = 30
 _MAX_RESULT = 6000
 
@@ -27,6 +30,25 @@ _MAX_RESULT = 6000
 def _fill(template: str, args: dict) -> str:
     """把模板里的 {key} 替换成 args[key]（缺失留空）。不用 str.format 以免 KeyError / 花括号注入。"""
     return re.sub(r"\{(\w+)\}", lambda m: str(args.get(m.group(1), "")), template or "")
+
+
+def _validate_http_config(config: dict) -> str | None:
+    url_ok = str(config.get("url", "")).strip().startswith(("http://", "https://"))
+    method_ok = str(config.get("method", "GET")).upper() in _HTTP_METHODS
+    if not (url_ok and method_ok):
+        return f"http 型需要合法 config.url（http/https）+ method（{' / '.join(_HTTP_METHODS)}）"
+    headers = config.get("headers") or {}
+    if not isinstance(headers, dict):
+        return "http 型 config.headers 必须是对象"
+    if any(str(key).lower() in _SENSITIVE_HEADERS and str(value).strip() for key, value in headers.items()):
+        return "敏感请求头不能保存值；请改用 secret_headers 引用 CUSTOM_SKILL_SECRET_* 环境变量"
+    secret_headers = config.get("secret_headers") or {}
+    invalid_secret_ref = not isinstance(secret_headers, dict) or any(
+        not _SECRET_ENV_RE.match(str(value)) for value in secret_headers.values()
+    )
+    if invalid_secret_ref:
+        return "secret_headers 只能引用 CUSTOM_SKILL_SECRET_* 环境变量"
+    return None
 
 
 def custom_tool_schema(c: dict) -> dict:
@@ -50,10 +72,7 @@ class CustomSkillStore:
         if kind not in _KINDS:
             return f"kind 只能是 {' / '.join(_KINDS)}"
         if kind == "http":
-            url_ok = str(config.get("url", "")).strip().startswith(("http://", "https://"))
-            method_ok = str(config.get("method", "GET")).upper() in _HTTP_METHODS
-            if not (url_ok and method_ok):
-                return f"http 型需要合法 config.url（http/https）+ method（{' / '.join(_HTTP_METHODS)}）"
+            return _validate_http_config(config)
         if kind == "prompt" and not str(config.get("template", "")).strip():
             return "prompt 型需要 config.template"
         return None
@@ -162,14 +181,29 @@ async def _run_http(skill: dict, args: dict) -> str:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return "[出错] 非法 URL"
-    if not _host_is_public(parsed.hostname):
+    ips = _public_ips(parsed.hostname)
+    if not ips:
         return "[出错] 拒绝：目标不是公网地址"
     method = str(cfg.get("method", "GET")).upper()
-    headers = {str(k): _fill(str(v), args) for k, v in (cfg.get("headers") or {}).items()}
+    headers = {str(k): _fill(str(v), args) for k, v in (cfg.get("headers") or {}).items() if str(k).lower() != "host"}
+    for key, env_name in (cfg.get("secret_headers") or {}).items():
+        value = os.environ.get(str(env_name), "")
+        if not value:
+            return f"[出错] 自定义 skill 密钥环境变量未配置：{env_name}"
+        headers[str(key)] = value
+    host_header = parsed.hostname if not parsed.port else f"{parsed.hostname}:{parsed.port}"
+    headers["Host"] = host_header
+    target = _pinned_url(parsed, ips[0])
     body = _fill(str(cfg.get("body", "")), args) if method in ("POST", "PUT") else None
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=6.0), follow_redirects=False) as client:
-            resp = await client.request(method, url, headers=headers, content=body)
+            resp = await client.request(
+                method,
+                target,
+                headers=headers,
+                content=body,
+                extensions={"sni_hostname": parsed.hostname},
+            )
             text = resp.text[:_MAX_RESULT]
     except httpx.HTTPError as e:
         return f"[出错] 自定义 skill 请求失败：{e}"

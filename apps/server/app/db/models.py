@@ -576,6 +576,34 @@ class AgentSessionRow(Base):
     __table_args__ = (Index("ix_agent_session_owner_updated", "owner", "updated_at"),)
 
 
+class AgentRunRow(Base):
+    """一次 agent 流式执行的安全摘要；不存提问、回答、参数或工具输出。"""
+
+    __tablename__ = "agent_run"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("agent_session.id", ondelete="CASCADE"), nullable=False
+    )
+    owner: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str] = mapped_column(String(32), nullable=False)
+    deep: Mapped[bool] = mapped_column(nullable=False, default=False)
+    reflect: Mapped[bool] = mapped_column(nullable=False, default=False)
+    auto_model: Mapped[bool] = mapped_column(nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="running")
+    tool_names: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    tool_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    duration_ms: Mapped[int | None] = mapped_column(nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    cache_hit_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    cache_miss_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_agent_run_owner_created", "owner", "created_at"),)
+
+
 class AgentCustomSkillRow(Base):
     """owner 在页面上自定义的 skill，agent 私有通道可直接调。两种执行体（kind）：
 

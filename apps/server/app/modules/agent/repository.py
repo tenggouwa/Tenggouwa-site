@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from uuid import uuid4
 
-from db.models import AgentInboxRow, AgentMessageRow, AgentSessionRow
+from db.models import AgentInboxRow, AgentMessageRow, AgentRunRow, AgentSessionRow
 from sqlalchemy import delete, func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +55,51 @@ class AgentRepository:
             )
         ).scalars()
         return list(rows)
+
+    async def create_run(
+        self, sid: str, owner: str | None, model: str, *, deep: bool, reflect: bool, auto_model: bool
+    ) -> int:
+        row = AgentRunRow(session_id=sid, owner=owner, model=model, deep=deep, reflect=reflect, auto_model=auto_model)
+        self.session.add(row)
+        await self.session.flush()
+        return row.id
+
+    async def finish_run(
+        self,
+        run_id: int,
+        *,
+        status: str,
+        duration_ms: int,
+        tool_names: list[str],
+        usage: dict,
+    ) -> None:
+        row = await self.session.get(AgentRunRow, run_id)
+        if row is None:
+            return
+        row.status = status
+        row.duration_ms = duration_ms
+        row.tool_names = tool_names
+        row.tool_count = len(tool_names)
+        row.prompt_tokens = usage.get("prompt_tokens")
+        row.completion_tokens = usage.get("completion_tokens")
+        row.cache_hit_tokens = usage.get("cache_hit_tokens")
+        row.cache_miss_tokens = usage.get("cache_miss_tokens")
+        row.completed_at = func.now()
+        await self.session.flush()
+
+    async def list_runs(self, owner: str, limit: int = 50) -> list[AgentRunRow]:
+        return list(
+            (
+                await self.session.execute(
+                    select(AgentRunRow)
+                    .where(AgentRunRow.owner == owner)
+                    .order_by(AgentRunRow.created_at.desc())
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     async def transcript(self, sid: str) -> list[dict]:
         """把 append-only 消息重建成前端可渲染的轮次 [{q, tools:[{name,args}], answer}]。
