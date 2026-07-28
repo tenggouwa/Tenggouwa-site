@@ -1,12 +1,32 @@
 [
   {
-    "id": "personal-site-architecture",
-    "query": "这个个人站由哪些应用组成，后端在哪里？",
-    "expected_urls": ["/posts/architecture/"]
+    "id": "agent-loop",
+    "query": "Agent 怎么在多步任务中规划、调用工具并纠正错误？",
+    "expected_urls": ["/posts/agent/"]
   },
   {
-    "id": "agent-skills",
-    "query": "agent 如何调用工具并做审批？",
-    "expected_urls": ["/posts/agent-v2/"]
+    "id": "rag-pipeline",
+    "query": "RAG 为什么需要切块、embedding 和 hybrid 检索？",
+    "expected_urls": ["/posts/rag/"]
+  },
+  {
+    "id": "tool-calling",
+    "query": "Function Calling 是怎么让模型调用外部工具的？",
+    "expected_urls": ["/posts/tool-use/"]
+  },
+  {
+    "id": "containers",
+    "query": "Docker 容器里的 namespace、cgroup 和 overlayfs 分别做什么？",
+    "expected_urls": ["/posts/containers-inside/"]
+  },
+  {
+    "id": "ssh-tunnel",
+    "query": "SSH tunnel、跳板机和 config 怎么配置？",
+    "expected_urls": ["/posts/ssh-deep/"]
+  },
+  {
+    "id": "linux-observability",
+    "query": "排查 Linux 机器性能问题应该用 top、vmstat 还是 strace？",
+    "expected_urls": ["/posts/observability/"]
   }
 ]
