@@ -95,3 +95,14 @@ def stop_agent_scheduler() -> None:
     _scheduler.shutdown(wait=False)
     _scheduler = None
     logger.info("Agent scheduler stopped")
+
+
+def scheduler_status() -> dict:
+    """Return safe scheduler metadata for the admin operations overview."""
+    jobs = []
+    if _scheduler is not None:
+        jobs = [
+            {"id": job.id, "next_run": job.next_run_time.isoformat() if job.next_run_time else None}
+            for job in _scheduler.get_jobs()
+        ]
+    return {"running": _scheduler is not None, "jobs": jobs}
