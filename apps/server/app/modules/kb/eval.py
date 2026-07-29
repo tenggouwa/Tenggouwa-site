@@ -48,13 +48,19 @@ async def evaluate_cases(
         urls = [str(hit["url"]) for hit in retrieved]
         recall = recall_at_k(urls, expected, top_k)
         ndcg = ndcg_at_k(urls, expected, top_k)
+        first_expected_rank = next((index + 1 for index, url in enumerate(urls) if url in expected), None)
         results.append(
             {
                 "id": case["id"],
                 "query": case["query"],
                 "expected_urls": sorted(expected),
                 "retrieved": retrieved,
-                "metrics": {"recall_at_k": recall, "ndcg_at_k": ndcg},
+                "metrics": {
+                    "recall_at_k": recall,
+                    "ndcg_at_k": ndcg,
+                    "first_expected_rank": first_expected_rank,
+                    "reciprocal_rank": 1 / first_expected_rank if first_expected_rank else 0.0,
+                },
                 "passed": bool(set(urls).intersection(expected)),
             }
         )
@@ -67,6 +73,12 @@ async def evaluate_cases(
             "cases": count,
             "recall_at_k": sum(case["metrics"]["recall_at_k"] for case in results) / count if count else 0.0,
             "ndcg_at_k": sum(case["metrics"]["ndcg_at_k"] for case in results) / count if count else 0.0,
+            "top_1_rate": sum(case["metrics"]["first_expected_rank"] == 1 for case in results) / count
+            if count
+            else 0.0,
+            "mean_reciprocal_rank": sum(case["metrics"]["reciprocal_rank"] for case in results) / count
+            if count
+            else 0.0,
             "failed_case_ids": failed,
         },
     }
