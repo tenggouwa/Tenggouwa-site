@@ -110,6 +110,15 @@ uv run pytest
 涉及模型行为的改动还应运行受 `RUN_LIVE_TESTS=1` 和 `KB_LLM_API_KEY` 控制的 live tests；
 GitHub Actions 每晚也会执行同一套 smoke/eval。
 
+### KB retrieval eval
+
+在已配置数据库连接的环境中运行，报告只记录 query、命中文章的标题/URL/分数与 Recall@k、nDCG@k，不包含 chunk 正文或配置：
+
+```bash
+cd apps/server
+uv run python scripts/kb_retrieval_eval.py --output /tmp/kb-retrieval-eval.json --top-k 3
+```
+
 ## 构建与部署
 
 ```bash
