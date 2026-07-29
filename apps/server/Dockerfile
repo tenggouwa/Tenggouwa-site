@@ -33,6 +33,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # 应用代码
 COPY app/ ./app/
+COPY scripts/ ./scripts/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY entrypoint.sh ./
