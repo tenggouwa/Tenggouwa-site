@@ -34,6 +34,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # 应用代码
 COPY app/ ./app/
 COPY scripts/ ./scripts/
+COPY tests/fixtures/kb_retrieval_eval.json ./tests/fixtures/kb_retrieval_eval.json
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY entrypoint.sh ./
