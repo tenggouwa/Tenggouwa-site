@@ -43,9 +43,18 @@ async def test_evaluate_cases_reports_only_safe_retrieval_metadata():
         [{"id": "case", "query": "查询", "expected_urls": ["/posts/target/"]}], retrieve, top_k=2
     )
 
-    assert report["summary"] == {"cases": 1, "recall_at_k": 1.0, "ndcg_at_k": 1.0, "failed_case_ids": []}
+    assert report["summary"] == {
+        "cases": 1,
+        "recall_at_k": 1.0,
+        "ndcg_at_k": 1.0,
+        "top_1_rate": 1.0,
+        "mean_reciprocal_rank": 1.0,
+        "failed_case_ids": [],
+    }
     assert report["cases"][0]["retrieved"] == [
         {"title": "目标文章", "url": "/posts/target/", "score": 0.8},
         {"title": "其他文章", "url": "/posts/other/", "score": 0.5},
     ]
+    assert report["cases"][0]["metrics"]["first_expected_rank"] == 1
+    assert report["cases"][0]["metrics"]["reciprocal_rank"] == 1.0
     assert "content" not in str(report)

@@ -46,7 +46,8 @@ def main() -> None:
     summary = report["summary"]
     print(
         f"KB retrieval eval: {summary['cases']} cases, Recall@{args.top_k}={summary['recall_at_k']:.3f}, "
-        f"nDCG@{args.top_k}={summary['ndcg_at_k']:.3f}, failed={len(summary['failed_case_ids'])}"
+        f"nDCG@{args.top_k}={summary['ndcg_at_k']:.3f}, Top-1={summary['top_1_rate']:.3f}, "
+        f"MRR={summary['mean_reciprocal_rank']:.3f}, failed={len(summary['failed_case_ids'])}"
     )
 
 
