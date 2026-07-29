@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from modules.kb.eval import ndcg_at_k, recall_at_k
+from modules.kb.eval import evaluate_cases, ndcg_at_k, recall_at_k
 
 
 def test_kb_retrieval_corpus_has_unique_queries_and_expected_urls():
@@ -29,3 +29,23 @@ def test_retrieval_metrics():
     expected = {"a", "b"}
     assert recall_at_k(["x", "a", "b"], expected, 2) == 0.5
     assert ndcg_at_k(["a", "x", "b"], expected, 3) > 0.9
+
+
+async def test_evaluate_cases_reports_only_safe_retrieval_metadata():
+    async def retrieve(_query: str, _limit: int):
+        return [
+            {"title": "目标文章", "url": "/posts/target/", "score": 0.8, "content": "不得出现在报告"},
+            {"title": "重复 chunk", "url": "/posts/target/", "score": 0.7, "content": "不得出现在报告"},
+            {"title": "其他文章", "url": "/posts/other/", "score": 0.5, "content": "不得出现在报告"},
+        ]
+
+    report = await evaluate_cases(
+        [{"id": "case", "query": "查询", "expected_urls": ["/posts/target/"]}], retrieve, top_k=2
+    )
+
+    assert report["summary"] == {"cases": 1, "recall_at_k": 1.0, "ndcg_at_k": 1.0, "failed_case_ids": []}
+    assert report["cases"][0]["retrieved"] == [
+        {"title": "目标文章", "url": "/posts/target/", "score": 0.8},
+        {"title": "其他文章", "url": "/posts/other/", "score": 0.5},
+    ]
+    assert "content" not in str(report)
