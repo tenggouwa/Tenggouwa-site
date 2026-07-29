@@ -3,11 +3,13 @@
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
 APP_ROOT = Path(__file__).parents[1] / "app"
+os.chdir(APP_ROOT)
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
