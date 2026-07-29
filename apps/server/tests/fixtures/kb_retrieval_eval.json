@@ -28,5 +28,25 @@
     "id": "linux-observability",
     "query": "排查 Linux 机器性能问题应该用 top、vmstat 还是 strace？",
     "expected_urls": ["/posts/observability/"]
+  },
+  {
+    "id": "mcp-protocol",
+    "query": "MCP server 怎样把工具暴露给 Agent，和 function calling 有什么关系？",
+    "expected_urls": ["/posts/mcp-and-agent-sdk/"]
+  },
+  {
+    "id": "llm-evals",
+    "query": "改模型或 prompt 后，怎样用 benchmark 和回归集评估 LLM 是否变好？",
+    "expected_urls": ["/posts/evals/"]
+  },
+  {
+    "id": "systemd-units",
+    "query": "怎样写 systemd service unit，让 Linux 服务开机自启并查看日志？",
+    "expected_urls": ["/posts/systemd-services/"]
+  },
+  {
+    "id": "linux-permissions",
+    "query": "Linux 的 chmod、chown 和 rwx 权限位分别怎么用？",
+    "expected_urls": ["/posts/permissions/"]
   }
 ]
