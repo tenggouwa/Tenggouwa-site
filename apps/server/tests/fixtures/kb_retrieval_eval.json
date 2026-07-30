@@ -48,5 +48,85 @@
     "id": "linux-permissions",
     "query": "Linux 的 chmod、chown 和 rwx 权限位分别怎么用？",
     "expected_urls": ["/posts/permissions/"]
+  },
+  {
+    "id": "kernel-userspace",
+    "query": "Linux 内核态和用户态有什么区别，系统调用发生在哪里？",
+    "expected_urls": ["/posts/kernel-vs-userspace/"]
+  },
+  {
+    "id": "linux-files",
+    "query": "为什么 Linux 里设备和进程很多东西都能当作文件处理？",
+    "expected_urls": ["/posts/everything-is-a-file/"]
+  },
+  {
+    "id": "shell-pipelines",
+    "query": "Shell 怎么把多个命令用管道组合成一个处理流程？",
+    "expected_urls": ["/posts/text-pipes/"]
+  },
+  {
+    "id": "process-signals",
+    "query": "如何优雅停止 Linux 进程，SIGTERM 和 SIGKILL 有什么不同？",
+    "expected_urls": ["/posts/signals/"]
+  },
+  {
+    "id": "archive-sync",
+    "query": "备份目录时 tar 和 rsync 应该怎么选，怎样做增量同步？",
+    "expected_urls": ["/posts/archive-rsync/"]
+  },
+  {
+    "id": "firewall-network",
+    "query": "Linux 防火墙里 iptables、nftables 和网络分层分别负责什么？",
+    "expected_urls": ["/posts/firewall-stack/"]
+  },
+  {
+    "id": "vps-bootstrap",
+    "query": "新买的 VPS 从账号、SSH 到防火墙应该怎样初始化加固？",
+    "expected_urls": ["/posts/vps-bootstrap/"]
+  },
+  {
+    "id": "neural-net-learning",
+    "query": "神经网络怎样通过反向传播和梯度下降学习参数？",
+    "expected_urls": ["/posts/how-neural-nets-learn/"]
+  },
+  {
+    "id": "transformer-history",
+    "query": "RNN 为什么被 Transformer 取代，attention 解决了什么问题？",
+    "expected_urls": ["/posts/from-rnn-to-transformer/"]
+  },
+  {
+    "id": "tokens-context",
+    "query": "LLM 的 token 和 context window 是什么，为什么输入会被截断？",
+    "expected_urls": ["/posts/tokenizer-and-context/"]
+  },
+  {
+    "id": "prompt-practice",
+    "query": "怎样写 prompt 才能让大模型稳定按格式回答并减少跑偏？",
+    "expected_urls": ["/posts/prompt-engineering/"]
+  },
+  {
+    "id": "alignment-safety",
+    "query": "模型对齐和 AI 安全为什么重要，常见风险有哪些？",
+    "expected_urls": ["/posts/alignment-and-safety/"]
+  },
+  {
+    "id": "local-llm",
+    "query": "本地部署大语言模型需要考虑显存、量化和推理框架哪些问题？",
+    "expected_urls": ["/posts/local-deployment/"]
+  },
+  {
+    "id": "multimodal-models",
+    "query": "多模态模型如何同时理解文字、图片和声音？",
+    "expected_urls": ["/posts/multimodal/"]
+  },
+  {
+    "id": "reasoning-rl",
+    "query": "推理模型为什么会使用强化学习，怎样提升复杂问题推理？",
+    "expected_urls": ["/posts/reasoning-and-rl/"]
+  },
+  {
+    "id": "frontier-models",
+    "query": "开源模型和闭源前沿模型在能力、成本和部署上怎么取舍？",
+    "expected_urls": ["/posts/open-vs-frontier/"]
   }
 ]
