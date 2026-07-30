@@ -40,3 +40,4 @@ class OpsOverview(BaseModel):
     mcp: OpsMcp
     pi: OpsPi
     live_smoke: OpsLiveSmoke
+    live_smoke_history: list[OpsLiveSmoke] = Field(default_factory=list)

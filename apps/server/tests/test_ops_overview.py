@@ -24,15 +24,17 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
     )
     monkeypatch.setattr(ops.config, "get", lambda _key, _default=None: "prod")
 
-    async def live_smoke():
-        return OpsLiveSmoke(
-            status="failure",
-            completed_at="2026-07-30T00:00:00+00:00",
-            summary="最近一次夜间冒烟未通过，请查看运行详情。",
-            url="https://github.com/tenggouwa/Tenggouwa-site/actions/runs/1",
-        )
+    async def live_smoke_history():
+        return [
+            OpsLiveSmoke(
+                status="failure",
+                completed_at="2026-07-30T00:00:00+00:00",
+                summary="最近一次夜间冒烟未通过，请查看运行详情。",
+                url="https://github.com/tenggouwa/Tenggouwa-site/actions/runs/1",
+            )
+        ]
 
-    monkeypatch.setattr(ops.ops_service, "_latest_live_smoke", live_smoke)
+    monkeypatch.setattr(ops.ops_service, "_live_smoke_history", live_smoke_history)
 
     data = await ops.ops_service.overview(_Session())
     assert data.model_dump() == {
@@ -48,4 +50,12 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
             "summary": "最近一次夜间冒烟未通过，请查看运行详情。",
             "url": "https://github.com/tenggouwa/Tenggouwa-site/actions/runs/1",
         },
+        "live_smoke_history": [
+            {
+                "status": "failure",
+                "completed_at": "2026-07-30T00:00:00+00:00",
+                "summary": "最近一次夜间冒烟未通过，请查看运行详情。",
+                "url": "https://github.com/tenggouwa/Tenggouwa-site/actions/runs/1",
+            }
+        ],
     }
