@@ -61,7 +61,7 @@
   },
   {
     "id": "shell-pipelines",
-    "query": "Shell 怎么把多个命令用管道组合成一个处理流程？",
+    "query": "Linux 里怎样用 cut、awk、sed、sort 和 uniq 处理日志或 CSV 文本？",
     "expected_urls": ["/posts/text-pipes/"]
   },
   {
