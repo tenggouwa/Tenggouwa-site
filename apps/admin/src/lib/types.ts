@@ -126,6 +126,7 @@ export interface OpsOverview {
   mcp: { configured: number; connected: string[]; tool_count: number };
   pi: { online: boolean; last_seen: string | null; age_seconds: number | null };
   live_smoke: OpsLiveSmoke;
+  live_smoke_history: OpsLiveSmoke[];
 }
 
 export interface TotpEnrollStartResp {

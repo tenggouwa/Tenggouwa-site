@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Descriptions, Spin, Statistic, Tag } from '@arco-design/web-react';
+import { Button, Card, Descriptions, Spin, Statistic, Table, Tag } from '@arco-design/web-react';
 import { http } from '../lib/api';
 import type { OpsOverview, OpsScheduler } from '../lib/types';
 
@@ -134,6 +134,20 @@ export default function OpsPage() {
               label: '运行详情',
               value: data.live_smoke.url ? <a href={data.live_smoke.url} target="_blank" rel="noreferrer">打开 GitHub Actions</a> : '—',
             },
+          ]}
+        />
+      </Card>
+
+      <Card title="Nightly Live Smoke 历史" extra={<span className="text-sm text-gray-500">最近 {data.live_smoke_history.length} 次；失败通知尚未配置</span>}>
+        <Table
+          pagination={{ pageSize: 10, sizeCanChange: false }}
+          rowKey={(row) => row.url ?? `${row.completed_at}-${row.status}`}
+          data={data.live_smoke_history}
+          columns={[
+            { title: '状态', dataIndex: 'status', render: (status: string) => <StateTag ok={status === 'success'}>{status}</StateTag> },
+            { title: '完成时间', dataIndex: 'completed_at', render: (value: string | null) => fmt(value) },
+            { title: '摘要', dataIndex: 'summary' },
+            { title: '详情', dataIndex: 'url', render: (url: string | null) => url ? <a href={url} target="_blank" rel="noreferrer">打开运行</a> : '—' },
           ]}
         />
       </Card>

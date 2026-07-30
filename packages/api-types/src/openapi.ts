@@ -2489,6 +2489,8 @@ export interface components {
             mcp: components["schemas"]["OpsMcp"];
             pi: components["schemas"]["OpsPi"];
             live_smoke: components["schemas"]["OpsLiveSmoke"];
+            /** Live Smoke History */
+            live_smoke_history?: components["schemas"]["OpsLiveSmoke"][];
         };
         /** OpsPi */
         OpsPi: {
