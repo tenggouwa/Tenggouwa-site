@@ -161,6 +161,13 @@ def _norm_query(q: str) -> str:
     return re.sub(r"[\W_]+", "", q.lower())
 
 
+def _is_direct_kb_question(q: str) -> bool:
+    """Whether one successful KB lookup should be enough to answer the question directly."""
+    return bool(
+        re.search(r"(?:站里|本站|文章).*(?:怎么定义|如何定义|怎么说|怎么解释|是什么意思)", q, flags=re.IGNORECASE)
+    )
+
+
 def _turn_cap(name: str, args: dict, state: dict) -> str | None:
     """本轮收敛闸：返回非 None 表示这次工具调用被拦（子代理超限 / 检索重复或超量），用返回文案当结果、不真执行。"""
     if name == SUBAGENT_SKILL and state["subagents"] >= MAX_SUBAGENTS_PER_TURN:
@@ -261,7 +268,14 @@ class AgentService:
             )
 
         # 本轮状态：收敛闸（子代理计数 + 检索去重）+ 渐进披露已加载的 MCP 工具名
-        turn_state: dict = {"subagents": 0, "searched": set(), "loaded": set(), "custom": []}
+        turn_state: dict = {
+            "subagents": 0,
+            "searched": set(),
+            "loaded": set(),
+            "custom": [],
+            "direct_kb_question": _is_direct_kb_question(q),
+            "direct_kb_ready": False,
+        }
         if privileged and owner and session is not None:
             try:  # owner 的自定义 skill（页面上加的），拉一次进本轮，暴露给模型 + 供 invoke 分派
                 turn_state["custom"] = await CustomSkillStore(session).list_enabled(owner)
@@ -318,8 +332,12 @@ class AgentService:
                 break
             content, tool_calls = "", []
             leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
-            tools = skills_service.tools(
-                privileged=privileged, loaded=turn_state["loaded"], custom=turn_state["custom"]
+            tools = (
+                None
+                if turn_state["direct_kb_ready"]
+                else skills_service.tools(
+                    privileged=privileged, loaded=turn_state["loaded"], custom=turn_state["custom"]
+                )
             )
             async for ev in chat_llm.stream_step(messages, tools=tools, model=model):
                 if ev["type"] == "reasoning":  # 深度思考的思维链：实时转发给前端单独展示，不进正文/不落库
@@ -549,7 +567,10 @@ class AgentService:
         if streamed is not None:
             return streamed
         try:
-            return await skills_service.invoke(session, name, args, privileged=privileged, custom=custom)
+            result = await skills_service.invoke(session, name, args, privileged=privileged, custom=custom)
+            if name == "kb_search" and turn_state["direct_kb_question"] and not result.startswith("[无结果]"):
+                turn_state["direct_kb_ready"] = True
+            return result
         except Exception as e:  # noqa: BLE001 —— skill 失败不该毒化会话
             logger.exception("skill %s failed", name)
             return f"（skill {name} 执行失败：{e}）"

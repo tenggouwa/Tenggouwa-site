@@ -25,6 +25,13 @@ class OpsPi(BaseModel):
     age_seconds: float | None = None
 
 
+class OpsLiveSmoke(BaseModel):
+    status: str
+    completed_at: str | None = None
+    summary: str
+    url: str | None = None
+
+
 class OpsOverview(BaseModel):
     environment: str
     alembic_revision: str | None = None
@@ -32,3 +39,4 @@ class OpsOverview(BaseModel):
     mail_scheduler: OpsScheduler
     mcp: OpsMcp
     pi: OpsPi
+    live_smoke: OpsLiveSmoke

@@ -358,6 +358,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/kb/graph/hubs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Graph Hubs
+         * @description 概念图谱着陆数据（公开只读）：{hubs, stats}——枢纽入口 + 覆盖度统计。
+         */
+        get: operations["graph_hubs_api_public_kb_graph_hubs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/kb/graph/full": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Graph Full
+         * @description 全图 dump（公开只读）：{nodes, edges, stats}——力导向图一次拉全。
+         */
+        get: operations["graph_full_api_public_kb_graph_full_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/kb/graph/entity/{entity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Graph Neighborhood
+         * @description 一个概念的邻域（公开只读）：点节点展开时拉这个。
+         */
+        get: operations["graph_neighborhood_api_public_kb_graph_entity__entity_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/kb/ask": {
         parameters: {
             query?: never;
@@ -557,6 +617,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/agent/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unlock
+         * @description TOTP 解锁私有通道：6 位码校验（复用 console 那套 TOTP）→ 返回长 TTL 的 agent_token。
+         */
+        post: operations["unlock_api_public_agent_unlock_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/agent/chat": {
         parameters: {
             query?: never;
@@ -568,6 +648,28 @@ export interface paths {
         put?: never;
         /** Chat */
         post: operations["chat_api_public_agent_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/agent/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mcp Status
+         * @description MCP 连了哪些 server、桥了哪些工具、哪些免审批。
+         *
+         *     MCP 工具只在私有通道暴露、启动日志又是 INFO（prod 过滤掉）——没这个端点就完全是黑盒。
+         */
+        get: operations["mcp_status_api_admin_agent_mcp_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -679,6 +781,86 @@ export interface paths {
          * @description Pi 上报一轮监控探针结果（HTTP 延迟 / 下行吞吐等）。
          */
         post: operations["probe_api_agent_pi_probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/pi/exec-poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exec Poll
+         * @description Pi 长轮询：取一条待执行命令（最多挂 25s，无命令返回 command=null）。
+         */
+        get: operations["exec_poll_api_agent_pi_exec_poll_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/pi/exec-result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exec Result
+         * @description Pi 回传命令执行结果，唤醒等待的 shell_exec。
+         */
+        post: operations["exec_result_api_agent_pi_exec_result_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/pi/exec-chunk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exec Chunk
+         * @description Pi 边跑边推的一块流式输出 → 转给等待的 shell_exec 实时显示。
+         */
+        post: operations["exec_chunk_api_agent_pi_exec_chunk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ingest/mail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ingest
+         * @description 接收 Worker 投递的一封邮件，抽码幂等入库。
+         */
+        post: operations["ingest_api_ingest_mail_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -904,6 +1086,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/kb/graph/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Graph
+         * @description dry-run 抽取某篇文章（只回不写）：看模型原始输出 + 清洗后结果，用来调 prompt。
+         */
+        get: operations["preview_graph_api_admin_kb_graph_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/kb/graph/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build Graph
+         * @description 抽概念图谱（LLM，按 graph_hash 增量）。耗时随篇数线性增长，建议先 limit=3 试跑。
+         */
+        post: operations["build_graph_api_admin_kb_graph_build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/analytics/overview": {
         parameters: {
             query?: never;
@@ -1057,6 +1279,388 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke
+         * @description 注销该 owner 的所有 agent_token（纪元 +1，含当前这个），需重新 TOTP 解锁。
+         */
+        post: operations["revoke_api_agent_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chat Privileged
+         * @description owner-only 私有通道：可用 write / MCP 高危工具（仍走 C2 审批）；会话归属该 owner。
+         */
+        post: operations["chat_privileged_api_agent_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sessions
+         * @description 列出该 owner 的会话（最近活跃在前），供前端「我的会话」侧栏。
+         */
+        get: operations["list_sessions_api_agent_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Runs
+         * @description 列出安全的运行摘要；不返回 prompt、回答、工具参数或输出。
+         */
+        get: operations["list_runs_api_agent_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/sessions/{sid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Transcript
+         * @description 取某会话的完整对话记录（重建成轮次），供前端点开续聊时回填。
+         */
+        get: operations["get_transcript_api_agent_sessions__sid__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Session
+         * @description 删除该 owner 名下的一个会话（连带消息）。
+         */
+        delete: operations["delete_session_api_agent_sessions__sid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/memories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Memories
+         * @description 列出该 owner 的长期记忆（最近在前），供前端「记忆」面板查看 / 手动删。
+         */
+        get: operations["list_memories_api_agent_memories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/memories/{mid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Memory
+         * @description 删该 owner 名下一条记忆。owner 圈定，删不到（不存在 / 不属于你）→ 404。
+         */
+        delete: operations["delete_memory_api_agent_memories__mid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/custom-skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Custom Skills
+         * @description 列出该 owner 自定义的 skill（管理 UI 用）。
+         */
+        get: operations["list_custom_skills_api_agent_custom_skills_get"];
+        put?: never;
+        /**
+         * Upsert Custom Skill
+         * @description 新建 / 更新一个自定义 skill（按 name upsert）。校验失败在返回文案里说明，不抛 500。
+         */
+        post: operations["upsert_custom_skill_api_agent_custom_skills_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/custom-skills/{sid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Custom Skill
+         * @description 删该 owner 名下一个自定义 skill。owner 圈定，删不到 → 404。
+         */
+        delete: operations["delete_custom_skill_api_agent_custom_skills__sid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/skill-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Skill Proposals
+         * @description 列出该 owner 名下 agent 自提的技能提案（最近在前），供「提案」面板评审。
+         */
+        get: operations["list_skill_proposals_api_agent_skill_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/skill-proposals/{pid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Skill Proposal
+         * @description 删该 owner 名下一条技能提案（评审完/不要了）。owner 圈定，删不到 → 404。
+         */
+        delete: operations["delete_skill_proposal_api_agent_skill_proposals__pid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Inbox
+         * @description 收件箱：agent 主动/定时任务的产出（最近在前）。
+         */
+        get: operations["list_inbox_api_agent_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/inbox/{item_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Read Inbox */
+        post: operations["read_inbox_api_agent_inbox__item_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/inbox/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Inbox */
+        delete: operations["delete_inbox_api_agent_inbox__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/proactive/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Proactive
+         * @description 手动触发一次主动运行：agent 自主完成 prompt（只读工具），结果进收件箱。学「主动」用。
+         */
+        post: operations["run_proactive_api_agent_proactive_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/mail/inboxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Inboxes
+         * @description 列出所有收过信的收件箱（哪些地址被用过）。
+         */
+        get: operations["list_inboxes_api_admin_mail_inboxes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/mail/{mailbox}/latest-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest Code
+         * @description 取某收件箱最近的验证码，可选「等码」短轮询。
+         */
+        get: operations["latest_code_api_admin_mail__mailbox__latest_code_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/mail/{mailbox}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Messages
+         * @description 列某收件箱的邮件，最近在前。
+         */
+        get: operations["list_messages_api_admin_mail__mailbox__messages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ops/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description Return safe health metadata only; never configuration, credentials, prompts, or mail contents.
+         */
+        get: operations["overview_api_admin_ops_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/terminal/agent/issue": {
         parameters: {
             query?: never;
@@ -1184,8 +1788,102 @@ export interface components {
         };
         /** AgentChatRequest */
         AgentChatRequest: {
-            /** Q */
+            /**
+             * Q
+             * @default
+             */
             q: string;
+            /** Session Id */
+            session_id?: string | null;
+            /** Approvals */
+            approvals?: {
+                [key: string]: boolean;
+            } | null;
+            /**
+             * Auto Approve
+             * @default false
+             */
+            auto_approve: boolean;
+            /**
+             * Deep Think
+             * @default false
+             */
+            deep_think: boolean;
+            /**
+             * Reflect
+             * @default false
+             */
+            reflect: boolean;
+            /**
+             * Auto Model
+             * @default false
+             */
+            auto_model: boolean;
+        };
+        /**
+         * AgentCustomSkill
+         * @description owner 自定义 skill（管理 UI 用）。
+         */
+        AgentCustomSkill: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            /** Kind */
+            kind: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Created At */
+            created_at: string;
+        };
+        /**
+         * AgentCustomSkillUpsert
+         * @description 新建 / 更新自定义 skill 的入参（按 name upsert）。
+         */
+        AgentCustomSkillUpsert: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            /** Kind */
+            kind: string;
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * AgentInboxItem
+         * @description 收件箱里的一条（主动/定时任务产出）。
+         */
+        AgentInboxItem: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at: string;
+            /** Read */
+            read: boolean;
         };
         /** AgentIssueRequest */
         AgentIssueRequest: {
@@ -1214,6 +1912,130 @@ export interface components {
             name: string;
             /** Online */
             online: boolean;
+        };
+        /**
+         * AgentMemoryItem
+         * @description 长期记忆列表里的一条（记忆面板用）。
+         */
+        AgentMemoryItem: {
+            /** Id */
+            id: number;
+            /** Content */
+            content: string;
+            /** Created At */
+            created_at: string;
+        };
+        /**
+         * AgentProactiveRequest
+         * @description 手动触发一次主动运行：agent 自主完成 prompt，结果进收件箱。
+         */
+        AgentProactiveRequest: {
+            /** Prompt */
+            prompt: string;
+            /**
+             * Title
+             * @default 手动触发
+             */
+            title: string;
+        };
+        /** AgentRunItem */
+        AgentRunItem: {
+            /** Id */
+            id: number;
+            /** Session Id */
+            session_id: string;
+            /** Model */
+            model: string;
+            /** Deep */
+            deep: boolean;
+            /** Reflect */
+            reflect: boolean;
+            /** Auto Model */
+            auto_model: boolean;
+            /** Status */
+            status: string;
+            /** Tool Names */
+            tool_names?: string[];
+            /** Tool Count */
+            tool_count: number;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Prompt Tokens */
+            prompt_tokens?: number | null;
+            /** Completion Tokens */
+            completion_tokens?: number | null;
+            /** Created At */
+            created_at: string;
+        };
+        /**
+         * AgentSessionInfo
+         * @description 会话列表里的一条（不含消息正文）。
+         */
+        AgentSessionInfo: {
+            /** Id */
+            id: string;
+            /** Title */
+            title?: string | null;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * AgentSkillProposal
+         * @description agent 自提的技能提案（提案面板用）。
+         */
+        AgentSkillProposal: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** AgentTranscript */
+        AgentTranscript: {
+            /** Id */
+            id: string;
+            /** Title */
+            title?: string | null;
+            /** Turns */
+            turns?: components["schemas"]["AgentTranscriptTurn"][];
+        };
+        /** AgentTranscriptTurn */
+        AgentTranscriptTurn: {
+            /** Q */
+            q: string;
+            /** Tools */
+            tools?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Answer
+             * @default
+             */
+            answer: string;
+        };
+        /** AgentUnlockRequest */
+        AgentUnlockRequest: {
+            /** Totp */
+            totp: string;
+        };
+        /** AgentUnlockResponse */
+        AgentUnlockResponse: {
+            /** Token */
+            token: string;
+            /** Ttl Seconds */
+            ttl_seconds: number;
         };
         /** AskRequest */
         AskRequest: {
@@ -1367,6 +2189,24 @@ export interface components {
             /** Theoretical House Edge */
             theoretical_house_edge: number;
         };
+        /**
+         * GraphBuildResult
+         * @description 概念图谱构建结果。pending=本次待抽的文档数（受 limit 前），done/failed=实际抽取情况。
+         */
+        GraphBuildResult: {
+            /** Documents Pending */
+            documents_pending: number;
+            /** Documents Done */
+            documents_done: number;
+            /** Documents Failed */
+            documents_failed: number;
+            /** Pruned */
+            pruned: number;
+            /** Entities */
+            entities: number;
+            /** Relations */
+            relations: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1470,6 +2310,20 @@ export interface components {
             /** Occurrences */
             occurrences: number;
         };
+        /**
+         * LatestCodeResult
+         * @description latest-code 查询结果。
+         */
+        LatestCodeResult: {
+            /** Code */
+            code?: string | null;
+            /** Message Id */
+            message_id?: string | null;
+            /** Subject */
+            subject?: string | null;
+            /** Received At */
+            received_at?: string | null;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Username */
@@ -1493,6 +2347,42 @@ export interface components {
             expires_in?: number | null;
             /** Step Token */
             step_token?: string | null;
+        };
+        /**
+         * MailInboxItem
+         * @description 收件箱总览的一行。
+         */
+        MailInboxItem: {
+            /** Mailbox */
+            mailbox: string;
+            /** Total */
+            total: number;
+            /** With Code */
+            with_code: number;
+            /**
+             * Latest At
+             * Format: date-time
+             */
+            latest_at: string;
+        };
+        /**
+         * MailMessageItem
+         * @description 查询接口返回的单封邮件。
+         */
+        MailMessageItem: {
+            /** Id */
+            id: number;
+            /** From Address */
+            from_address: string | null;
+            /** Subject */
+            subject: string | null;
+            /** Code */
+            code: string | null;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
         };
         /** MinesRevealRequest */
         MinesRevealRequest: {
@@ -1558,6 +2448,64 @@ export interface components {
             /** Pv */
             pv: number;
         };
+        /** OpsJob */
+        OpsJob: {
+            /** Id */
+            id: string;
+            /** Next Run */
+            next_run?: string | null;
+        };
+        /** OpsLiveSmoke */
+        OpsLiveSmoke: {
+            /** Status */
+            status: string;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Summary */
+            summary: string;
+            /** Url */
+            url?: string | null;
+        };
+        /** OpsMcp */
+        OpsMcp: {
+            /** Configured */
+            configured: number;
+            /** Connected */
+            connected?: string[];
+            /**
+             * Tool Count
+             * @default 0
+             */
+            tool_count: number;
+        };
+        /** OpsOverview */
+        OpsOverview: {
+            /** Environment */
+            environment: string;
+            /** Alembic Revision */
+            alembic_revision?: string | null;
+            agent_scheduler: components["schemas"]["OpsScheduler"];
+            mail_scheduler: components["schemas"]["OpsScheduler"];
+            mcp: components["schemas"]["OpsMcp"];
+            pi: components["schemas"]["OpsPi"];
+            live_smoke: components["schemas"]["OpsLiveSmoke"];
+        };
+        /** OpsPi */
+        OpsPi: {
+            /** Online */
+            online: boolean;
+            /** Last Seen */
+            last_seen?: string | null;
+            /** Age Seconds */
+            age_seconds?: number | null;
+        };
+        /** OpsScheduler */
+        OpsScheduler: {
+            /** Running */
+            running: boolean;
+            /** Jobs */
+            jobs?: components["schemas"]["OpsJob"][];
+        };
         /** OverviewResponse */
         OverviewResponse: {
             /** Pv Total */
@@ -1604,6 +2552,85 @@ export interface components {
             meta?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * PiExecChunk
+         * @description Pi 边跑边推的一块流式输出。
+         */
+        PiExecChunk: {
+            /** Id */
+            id: string;
+            /**
+             * Chunk
+             * @default
+             */
+            chunk: string;
+        };
+        /**
+         * PiExecCommand
+         * @description 一条待 Pi 执行的命令（exec-poll 返回给 Pi）：shell（cmd）或文件操作（kind=file）。
+         */
+        PiExecCommand: {
+            /** Id */
+            id: string;
+            /**
+             * Timeout
+             * @default 30
+             */
+            timeout: number;
+            /** Cmd */
+            cmd?: string | null;
+            /**
+             * Cwd
+             * @default workspace
+             */
+            cwd: string;
+            /** Kind */
+            kind?: string | null;
+            /** Op */
+            op?: string | null;
+            /** Path */
+            path?: string | null;
+            /** Content */
+            content?: string | null;
+            /** Old String */
+            old_string?: string | null;
+            /** New String */
+            new_string?: string | null;
+            /**
+             * Replace All
+             * @default false
+             */
+            replace_all: boolean;
+        };
+        /** PiExecPollResponse */
+        PiExecPollResponse: {
+            command?: components["schemas"]["PiExecCommand"] | null;
+        };
+        /**
+         * PiExecResult
+         * @description Pi 执行完回传的结果。
+         */
+        PiExecResult: {
+            /** Id */
+            id: string;
+            /** Rc */
+            rc: number;
+            /**
+             * Output
+             * @default
+             */
+            output: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /**
+             * Timed Out
+             * @default false
+             */
+            timed_out: boolean;
         };
         /** PiHistoryPoint */
         PiHistoryPoint: {
@@ -1855,6 +2882,34 @@ export interface components {
             message: string;
             data?: components["schemas"]["AgentIssueResponse"] | null;
         };
+        /** ResponseModel[AgentTranscript] */
+        ResponseModel_AgentTranscript_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["AgentTranscript"] | null;
+        };
+        /** ResponseModel[AgentUnlockResponse] */
+        ResponseModel_AgentUnlockResponse_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["AgentUnlockResponse"] | null;
+        };
         /** ResponseModel[BlackjackState] */
         ResponseModel_BlackjackState_: {
             /**
@@ -1911,6 +2966,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["DeviceStats"] | null;
         };
+        /** ResponseModel[GraphBuildResult] */
+        ResponseModel_GraphBuildResult_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["GraphBuildResult"] | null;
+        };
         /** ResponseModel[InspirationListPage] */
         ResponseModel_InspirationListPage_: {
             /**
@@ -1953,6 +3022,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["KBDocumentPage"] | null;
         };
+        /** ResponseModel[LatestCodeResult] */
+        ResponseModel_LatestCodeResult_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["LatestCodeResult"] | null;
+        };
         /** ResponseModel[LoginResponse] */
         ResponseModel_LoginResponse_: {
             /**
@@ -1981,6 +3064,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["MinesState"] | null;
         };
+        /** ResponseModel[OpsOverview] */
+        ResponseModel_OpsOverview_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["OpsOverview"] | null;
+        };
         /** ResponseModel[OverviewResponse] */
         ResponseModel_OverviewResponse_: {
             /**
@@ -1994,6 +3091,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["OverviewResponse"] | null;
+        };
+        /** ResponseModel[PiExecPollResponse] */
+        ResponseModel_PiExecPollResponse_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["PiExecPollResponse"] | null;
         };
         /** ResponseModel[PiStatus] */
         ResponseModel_PiStatus_: {
@@ -2250,6 +3361,96 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** ResponseModel[list[AgentCustomSkill]] */
+        ResponseModel_list_AgentCustomSkill__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["AgentCustomSkill"][] | null;
+        };
+        /** ResponseModel[list[AgentInboxItem]] */
+        ResponseModel_list_AgentInboxItem__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["AgentInboxItem"][] | null;
+        };
+        /** ResponseModel[list[AgentMemoryItem]] */
+        ResponseModel_list_AgentMemoryItem__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["AgentMemoryItem"][] | null;
+        };
+        /** ResponseModel[list[AgentRunItem]] */
+        ResponseModel_list_AgentRunItem__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["AgentRunItem"][] | null;
+        };
+        /** ResponseModel[list[AgentSessionInfo]] */
+        ResponseModel_list_AgentSessionInfo__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["AgentSessionInfo"][] | null;
+        };
+        /** ResponseModel[list[AgentSkillProposal]] */
+        ResponseModel_list_AgentSkillProposal__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["AgentSkillProposal"][] | null;
+        };
         /** ResponseModel[list[Agent]] */
         ResponseModel_list_Agent__: {
             /**
@@ -2324,6 +3525,36 @@ export interface components {
             message: string;
             /** Data */
             data?: components["schemas"]["KeywordStat"][] | null;
+        };
+        /** ResponseModel[list[MailInboxItem]] */
+        ResponseModel_list_MailInboxItem__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["MailInboxItem"][] | null;
+        };
+        /** ResponseModel[list[MailMessageItem]] */
+        ResponseModel_list_MailMessageItem__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["MailMessageItem"][] | null;
         };
         /** ResponseModel[list[PiProbe]] */
         ResponseModel_list_PiProbe__: {
@@ -3385,6 +4616,88 @@ export interface operations {
             };
         };
     };
+    graph_hubs_api_public_kb_graph_hubs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    graph_full_api_public_kb_graph_full_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+        };
+    };
+    graph_neighborhood_api_public_kb_graph_entity__entity_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ask_api_public_kb_ask_post: {
         parameters: {
             query?: never;
@@ -3679,6 +4992,39 @@ export interface operations {
             };
         };
     };
+    unlock_api_public_agent_unlock_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentUnlockRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_AgentUnlockResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     chat_api_public_agent_chat_post: {
         parameters: {
             query?: never;
@@ -3699,6 +5045,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mcp_status_api_admin_agent_mcp_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -3884,6 +5261,139 @@ export interface operations {
                 "application/json": components["schemas"]["PiProbeReport"][];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exec_poll_api_agent_pi_exec_poll_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_PiExecPollResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exec_result_api_agent_pi_exec_result_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PiExecResult"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exec_chunk_api_agent_pi_exec_chunk_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PiExecChunk"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_api_ingest_mail_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-mail-timestamp"?: string | null;
+                "x-mail-signature"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -4396,6 +5906,76 @@ export interface operations {
             };
         };
     };
+    preview_graph_api_admin_kb_graph_preview_get: {
+        parameters: {
+            query: {
+                /** @description 文档 slug，如 scaling-laws-and-emergence */
+                external_id: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    build_graph_api_admin_kb_graph_build_post: {
+        parameters: {
+            query?: {
+                /** @description 忽略 graph_hash，全量重抽（会重新烧 LLM） */
+                force?: boolean;
+                /** @description 本次最多抽几篇；先小批试跑看质量 */
+                limit?: number | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_GraphBuildResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     overview_api_admin_analytics_overview_get: {
         parameters: {
             query?: {
@@ -4686,6 +6266,695 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_list_IndexingStatus__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_api_agent_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_privileged_api_agent_chat_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sessions_api_agent_sessions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_AgentSessionInfo__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_runs_api_agent_runs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_AgentRunItem__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transcript_api_agent_sessions__sid__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_AgentTranscript_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_session_api_agent_sessions__sid__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_memories_api_agent_memories_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_AgentMemoryItem__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_memory_api_agent_memories__mid__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                mid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_custom_skills_api_agent_custom_skills_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_AgentCustomSkill__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_custom_skill_api_agent_custom_skills_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentCustomSkillUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_custom_skill_api_agent_custom_skills__sid__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                sid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_skill_proposals_api_agent_skill_proposals_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_AgentSkillProposal__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_skill_proposal_api_agent_skill_proposals__pid__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                pid: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_inbox_api_agent_inbox_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_AgentInboxItem__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_inbox_api_agent_inbox__item_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_inbox_api_agent_inbox__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_proactive_api_agent_proactive_run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentProactiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_inboxes_api_admin_mail_inboxes_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_MailInboxItem__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_code_api_admin_mail__mailbox__latest_code_get: {
+        parameters: {
+            query?: {
+                /** @description 只取此时间之后的码 */
+                since?: string | null;
+                /** @description 等码秒数，>0 时短轮询直到有码或超时 */
+                wait?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                mailbox: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_LatestCodeResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_messages_api_admin_mail__mailbox__messages_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                mailbox: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_MailMessageItem__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_admin_ops_overview_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_OpsOverview_"];
                 };
             };
             /** @description Validation Error */

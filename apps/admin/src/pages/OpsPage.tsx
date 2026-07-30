@@ -65,7 +65,7 @@ export default function OpsPage() {
   }
 
   if (!data) return null;
-  const healthy = data.agent_scheduler.running && data.mail_scheduler.running && data.pi.online;
+  const healthy = data.agent_scheduler.running && data.mail_scheduler.running && data.pi.online && data.live_smoke.status === 'success';
 
   return (
     <div className="space-y-4">
@@ -118,6 +118,25 @@ export default function OpsPage() {
           />
         </Card>
       </div>
+
+      <Card
+        title="Nightly Live Smoke"
+        extra={<StateTag ok={data.live_smoke.status === 'success'}>{data.live_smoke.status === 'success' ? '通过' : '需要关注'}</StateTag>}
+      >
+        <Descriptions
+          column={1}
+          size="small"
+          layout="inline-horizontal"
+          data={[
+            { label: '完成时间', value: fmt(data.live_smoke.completed_at) },
+            { label: '摘要', value: data.live_smoke.summary },
+            {
+              label: '运行详情',
+              value: data.live_smoke.url ? <a href={data.live_smoke.url} target="_blank" rel="noreferrer">打开 GitHub Actions</a> : '—',
+            },
+          ]}
+        />
+      </Card>
 
       {error && <p className="text-sm text-orange-600" role="alert">刷新失败，当前显示上次成功数据：{error}</p>}
     </div>
