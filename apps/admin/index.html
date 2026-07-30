@@ -5,14 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>tenggouwa · admin</title>
     <script>
-      // 配合 pages-dist/404.html：把刷新 deep link 时丢失的原始 URL 还原回 history
+      // 配合 404.html：把刷新 deep link 时丢失的原始 URL 还原回 history。
+      // location.pathname 是兜底跳回的 admin 根，两种部署都适用：
+      // ghpages=/Tenggouwa-site/admin/，根域=/admin/。
       (function () {
         try {
           var r = sessionStorage.getItem('tg_spa_redirect');
           if (!r) return;
           sessionStorage.removeItem('tg_spa_redirect');
-          // 只接受 admin 自己的 base
-          if (r.indexOf('/Tenggouwa-site/admin/') !== 0) return;
+          if (r.indexOf(location.pathname) !== 0) return;
           if (r === location.pathname + location.search + location.hash) return;
           history.replaceState(null, '', r);
         } catch (e) {}
