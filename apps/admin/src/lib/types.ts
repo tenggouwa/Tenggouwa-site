@@ -129,6 +129,40 @@ export interface OpsOverview {
   live_smoke_history: OpsLiveSmoke[];
 }
 
+export interface GraphNode {
+  id: number;
+  name: string;
+  type: string;
+  docs: number;
+  deg: number;
+}
+
+export interface GraphEdge {
+  id: number;
+  source: number;
+  target: number;
+  type: string;
+}
+
+export interface GraphFull {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GraphReview {
+  id: number;
+  target_kind: 'entity' | 'relation';
+  target_id: number;
+  action: 'rename_entity' | 'disable_relation';
+  payload: Record<string, string>;
+  note: string;
+  status: 'pending' | 'applied' | 'rejected';
+  requested_by: string;
+  resolved_by: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
 export interface TotpEnrollStartResp {
   secret_b32: string;
   provisioning_uri: string;
