@@ -58,6 +58,7 @@ python main.py
 | --- | --- |
 | 数据与鉴权 | `POSTGRES_DEFAULT_PASSWORD`、`AUTH_JWT_SECRET`、`ADMIN_*_PASSWORD_HASH` |
 | Knowledge Base | `KB_LLM_*`、`KB_EMBED_*`、`KB_LLM_REASONER_MODEL` |
+| Notes Knowledge Base | `KB_NOTES_DIR`（可选 Markdown/Obsidian 根目录；未设置时 notes source 空跑） |
 | Agent | `AGENT_TOKEN_TTL_MIN`、`AGENT_PI_SANDBOX`、`AGENT_WORKSPACE` |
 | Pi | `PI_AGENT_TOKEN` |
 | MCP | `MCP_SERVERS`、`MCP_CONNECT_TIMEOUT`、`MCP_LIST_TIMEOUT`、`MCP_CALL_TIMEOUT` |
