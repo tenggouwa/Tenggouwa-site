@@ -7,6 +7,7 @@ from db.models import (
     KBDocumentRow,
     KBEntityDocRow,
     KBEntityRow,
+    KBGraphReviewRow,
     KBRelationDocRow,
     KBRelationRow,
     KBSourceRow,
@@ -160,6 +161,65 @@ class KBRepository:
         await self.session.flush()
         return n1 + n2
 
+    async def create_graph_review(
+        self, *, target_kind: str, target_id: int, action: str, payload: dict[str, str], note: str, requested_by: str
+    ) -> KBGraphReviewRow:
+        if action == "rename_entity":
+            if target_kind != "entity" or not payload.get("name", "").strip():
+                raise ValueError("实体改名需要 entity 目标和非空 name")
+            if await self.session.get(KBEntityRow, target_id) is None:
+                raise ValueError("目标实体不存在")
+        elif action == "disable_relation":
+            if target_kind != "relation" or await self.session.get(KBRelationRow, target_id) is None:
+                raise ValueError("目标关系不存在")
+        else:
+            raise ValueError("不支持的图谱审核动作")
+        row = KBGraphReviewRow(
+            target_kind=target_kind,
+            target_id=target_id,
+            action=action,
+            payload=payload,
+            note=note,
+            requested_by=requested_by,
+            status="pending",
+        )
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    async def list_graph_reviews(self, *, status: str | None, limit: int) -> list[KBGraphReviewRow]:
+        query = select(KBGraphReviewRow).order_by(KBGraphReviewRow.created_at.desc()).limit(limit)
+        if status:
+            query = query.where(KBGraphReviewRow.status == status)
+        return list((await self.session.execute(query)).scalars().all())
+
+    async def resolve_graph_review(self, review_id: int, *, decision: str, resolved_by: str) -> KBGraphReviewRow:
+        row = await self.session.get(KBGraphReviewRow, review_id)
+        if row is None:
+            raise ValueError("审核记录不存在")
+        if row.status != "pending":
+            raise ValueError("审核记录已经处理")
+        if decision == "approve":
+            if row.action == "rename_entity":
+                entity = await self.session.get(KBEntityRow, row.target_id)
+                if entity is None:
+                    raise ValueError("目标实体不存在")
+                entity.name = row.payload["name"].strip()
+            elif row.action == "disable_relation":
+                relation = await self.session.get(KBRelationRow, row.target_id)
+                if relation is None:
+                    raise ValueError("目标关系不存在")
+                relation.disabled = True
+            row.status = "applied"
+        elif decision == "reject":
+            row.status = "rejected"
+        else:
+            raise ValueError("不支持的审核决定")
+        row.resolved_by = resolved_by
+        row.resolved_at = datetime.now(UTC)
+        await self.session.flush()
+        return row
+
     async def search_entities(self, q: str, *, limit: int = 4) -> list[dict]:
         """按名字找概念：查询里**直接出现**该名字算满分，否则退到 trigram 模糊匹配。
 
@@ -192,7 +252,7 @@ class KBRepository:
             FROM kb_relation r
             JOIN kb_entity es ON es.id = r.source_id
             JOIN kb_entity et ON et.id = r.target_id
-            WHERE r.source_id = ANY(:ids) OR r.target_id = ANY(:ids)
+            WHERE NOT r.disabled AND (r.source_id = ANY(:ids) OR r.target_id = ANY(:ids))
             LIMIT :limit
         """)
         rows = (await self.session.execute(sql, {"ids": ids, "limit": limit})).all()
@@ -221,7 +281,7 @@ class KBRepository:
                    count(DISTINCT r.id) AS rels
             FROM kb_entity e
             JOIN kb_entity_doc ed ON ed.entity_id = e.id
-            LEFT JOIN kb_relation r ON r.source_id = e.id OR r.target_id = e.id
+            LEFT JOIN kb_relation r ON (r.source_id = e.id OR r.target_id = e.id) AND NOT r.disabled
             GROUP BY e.id, e.name, e.type
             HAVING count(DISTINCT r.id) > 0
             ORDER BY docs DESC, rels DESC, length(e.name)
@@ -244,7 +304,7 @@ class KBRepository:
             FROM kb_relation r
             JOIN kb_entity es ON es.id = r.source_id
             JOIN kb_entity et ON et.id = r.target_id
-            WHERE r.source_id = :id OR r.target_id = :id
+            WHERE NOT r.disabled AND (r.source_id = :id OR r.target_id = :id)
         """)
         rels = (await self.session.execute(rel_sql, {"id": entity_id})).all()
         node_ids = {entity_id}
@@ -307,7 +367,7 @@ class KBRepository:
                    count(DISTINCT ed.document_id) AS docs,
                    count(DISTINCT r.id) AS deg
             FROM kb_entity e
-            JOIN kb_relation r ON r.source_id = e.id OR r.target_id = e.id
+            JOIN kb_relation r ON (r.source_id = e.id OR r.target_id = e.id) AND NOT r.disabled
             LEFT JOIN kb_entity_doc ed ON ed.entity_id = e.id
             GROUP BY e.id, e.name, e.type
         """)
@@ -324,13 +384,16 @@ class KBRepository:
             }
             for r in nrows
         ]
-        erows = (await self.session.execute(text("SELECT source_id, target_id, type FROM kb_relation"))).all()
-        edges = [{"source": r.source_id, "target": r.target_id, "type": r.type} for r in erows]
+        edge_sql = "SELECT id, source_id, target_id, type FROM kb_relation WHERE NOT disabled"
+        erows = (await self.session.execute(text(edge_sql))).all()
+        edges = [{"id": r.id, "source": r.source_id, "target": r.target_id, "type": r.type} for r in erows]
         return {"nodes": nodes, "edges": edges}
 
     async def graph_stats(self) -> dict:
         entities = (await self.session.execute(select(func.count(KBEntityRow.id)))).scalar() or 0
-        relations = (await self.session.execute(select(func.count(KBRelationRow.id)))).scalar() or 0
+        relations = (
+            await self.session.execute(select(func.count(KBRelationRow.id)).where(KBRelationRow.disabled.is_(False)))
+        ).scalar() or 0
         return {"entities": entities, "relations": relations}
 
     async def graph_coverage(self) -> dict:

@@ -9,7 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
 from .provider import chat_llm
-from .schema import AskRequest, GraphBuildResult, KBDocumentPage, KBSourceOverview, ReindexResult
+from .repository import KBRepository
+from .schema import (
+    AskRequest,
+    GraphBuildResult,
+    GraphReviewCreate,
+    GraphReviewItem,
+    GraphReviewResolve,
+    KBDocumentPage,
+    KBSourceOverview,
+    ReindexResult,
+)
 from .service import kb_service
 
 logger = logging.getLogger(__name__)
@@ -123,3 +133,40 @@ async def build_graph(
     """抽概念图谱（LLM，按 graph_hash 增量）。耗时随篇数线性增长，建议先 limit=3 试跑。"""
     result = await kb_service.build_graph(session, force=force, limit=limit)
     return ResponseModel(data=result)
+
+
+@admin_router.get("/graph/reviews", response_model=ResponseModel[list[GraphReviewItem]])
+async def graph_reviews(
+    status: str | None = Query(default=None, pattern="^(pending|applied|rejected)$"),
+    limit: int = Query(default=100, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[GraphReviewItem]]:
+    rows = await KBRepository(session).list_graph_reviews(status=status, limit=limit)
+    return ResponseModel(data=[GraphReviewItem.model_validate(row, from_attributes=True) for row in rows])
+
+
+@admin_router.post("/graph/reviews", response_model=ResponseModel[GraphReviewItem])
+async def create_graph_review(
+    payload: GraphReviewCreate,
+    admin: str = Depends(current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[GraphReviewItem]:
+    try:
+        row = await KBRepository(session).create_graph_review(**payload.model_dump(), requested_by=admin)
+        return ResponseModel(data=GraphReviewItem.model_validate(row, from_attributes=True))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@admin_router.post("/graph/reviews/{review_id}/resolve", response_model=ResponseModel[GraphReviewItem])
+async def resolve_graph_review(
+    review_id: int,
+    payload: GraphReviewResolve,
+    admin: str = Depends(current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[GraphReviewItem]:
+    try:
+        row = await KBRepository(session).resolve_graph_review(review_id, decision=payload.decision, resolved_by=admin)
+        return ResponseModel(data=GraphReviewItem.model_validate(row, from_attributes=True))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e

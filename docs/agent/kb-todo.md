@@ -60,13 +60,14 @@ KB_EMBED_API_KEY=<embedding provider key>
 
 ### 图谱质量与治理
 
-- [ ] 为概念合并、别名和错误关系建立可审阅/修正机制。
-- [ ] 建立 graph extraction golden fixture，防 provider 输出变化导致静默丢关系。
+- [x] 为概念改名和错误关系建立可审阅/修正机制：Admin 的提案必须经批准才生效；下线边不再进入公开图谱或 Agent 查询，审计记录与原始溯源保留。
+- [x] 建立 graph extraction golden fixture，防 provider 输出变化导致静默丢关系。
+- [ ] 别名合并：等出现跨文档重复概念的真实样本后，再以保留溯源的方式设计合并规则；不在无样本时猜测自动合并。
 - [ ] 数据量明显增长后再评估分层加载或图谱裁剪；当前全图方案保持简单。
 
 ## 已知约束
 
 - embedding 必须来自单独的 OpenAI-compatible endpoint；DeepSeek 官方生成端点不提供 embedding。
 - 图谱抽取依赖模型 JSON 输出，因此比普通 chunk ingestion 更需要可观测指纹和回归 fixture。
-- 当前只有 blog source 真正上线；数据模型“支持多源”不等于多源 ingester 已完成。
+- Notes source 已可部署但生产默认未配置目录，因而当前线上内容仍只有 blog；数据模型“支持多源”不等于已接入任意本机目录。
 - `deepseek-chat` 的具体后端版本可能由供应商调整；代码只依赖 OpenAI-compatible 行为，不在文档中绑定营销版本名。

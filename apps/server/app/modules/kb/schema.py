@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -54,3 +55,29 @@ class GraphBuildResult(BaseModel):
     pruned: int  # 清掉的孤儿实体/关系
     entities: int  # 库里现有总量
     relations: int
+
+
+class GraphReviewCreate(BaseModel):
+    target_kind: Literal["entity", "relation"]
+    target_id: int = Field(ge=1)
+    action: Literal["rename_entity", "disable_relation"]
+    payload: dict[str, str] = Field(default_factory=dict)
+    note: str = Field(default="", max_length=2000)
+
+
+class GraphReviewResolve(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+class GraphReviewItem(BaseModel):
+    id: int
+    target_kind: str
+    target_id: int
+    action: str
+    payload: dict[str, str]
+    note: str
+    status: str
+    requested_by: str
+    resolved_by: str | None = None
+    created_at: datetime
+    resolved_at: datetime | None = None

@@ -1126,6 +1126,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/kb/graph/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Graph Reviews */
+        get: operations["graph_reviews_api_admin_kb_graph_reviews_get"];
+        put?: never;
+        /** Create Graph Review */
+        post: operations["create_graph_review_api_admin_kb_graph_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/kb/graph/reviews/{review_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Graph Review */
+        post: operations["resolve_graph_review_api_admin_kb_graph_reviews__review_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/analytics/overview": {
         parameters: {
             query?: never;
@@ -2207,6 +2242,68 @@ export interface components {
             /** Relations */
             relations: number;
         };
+        /** GraphReviewCreate */
+        GraphReviewCreate: {
+            /**
+             * Target Kind
+             * @enum {string}
+             */
+            target_kind: "entity" | "relation";
+            /** Target Id */
+            target_id: number;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "rename_entity" | "disable_relation";
+            /** Payload */
+            payload?: {
+                [key: string]: string;
+            };
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** GraphReviewItem */
+        GraphReviewItem: {
+            /** Id */
+            id: number;
+            /** Target Kind */
+            target_kind: string;
+            /** Target Id */
+            target_id: number;
+            /** Action */
+            action: string;
+            /** Payload */
+            payload: {
+                [key: string]: string;
+            };
+            /** Note */
+            note: string;
+            /** Status */
+            status: string;
+            /** Requested By */
+            requested_by: string;
+            /** Resolved By */
+            resolved_by?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Resolved At */
+            resolved_at?: string | null;
+        };
+        /** GraphReviewResolve */
+        GraphReviewResolve: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2982,6 +3079,20 @@ export interface components {
             message: string;
             data?: components["schemas"]["GraphBuildResult"] | null;
         };
+        /** ResponseModel[GraphReviewItem] */
+        ResponseModel_GraphReviewItem_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["GraphReviewItem"] | null;
+        };
         /** ResponseModel[InspirationListPage] */
         ResponseModel_InspirationListPage_: {
             /**
@@ -3482,6 +3593,21 @@ export interface components {
             message: string;
             /** Data */
             data?: components["schemas"]["CountryStat"][] | null;
+        };
+        /** ResponseModel[list[GraphReviewItem]] */
+        ResponseModel_list_GraphReviewItem__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["GraphReviewItem"][] | null;
         };
         /** ResponseModel[list[IndexingStatus]] */
         ResponseModel_list_IndexingStatus__: {
@@ -5965,6 +6091,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_GraphBuildResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    graph_reviews_api_admin_kb_graph_reviews_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_GraphReviewItem__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_graph_review_api_admin_kb_graph_reviews_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphReviewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_GraphReviewItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_graph_review_api_admin_kb_graph_reviews__review_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                review_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphReviewResolve"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_GraphReviewItem_"];
                 };
             };
             /** @description Validation Error */

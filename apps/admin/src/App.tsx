@@ -11,6 +11,7 @@ import SettingsPage from './pages/SettingsPage';
 import TerminalPage from './pages/TerminalPage';
 import MailPage from './pages/MailPage';
 import OpsPage from './pages/OpsPage';
+import KnowledgeGraphPage from './pages/KnowledgeGraphPage';
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="terminal" element={<TerminalPage />} />
           <Route path="mail" element={<MailPage />} />
           <Route path="ops" element={<OpsPage />} />
+          <Route path="kb" element={<KnowledgeGraphPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

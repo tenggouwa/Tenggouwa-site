@@ -536,6 +536,7 @@ class KBRelationRow(Base):
     target_id: Mapped[int] = mapped_column(ForeignKey("kb_entity.id", ondelete="CASCADE"), nullable=False)
     type: Mapped[str] = mapped_column(String(32), nullable=False)  # 短动词短语：基于/前身/替代/属于/用于/对比
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    disabled: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="false")
 
     __table_args__ = (Index("uq_kb_relation_triple", "source_id", "target_id", "type", unique=True),)
 
@@ -547,6 +548,26 @@ class KBRelationDocRow(Base):
 
     relation_id: Mapped[int] = mapped_column(ForeignKey("kb_relation.id", ondelete="CASCADE"), primary_key=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("kb_document.id", ondelete="CASCADE"), primary_key=True)
+
+
+class KBGraphReviewRow(Base):
+    """图谱人工审核记录：先提案、后决议；已处理记录永远保留以便追溯。"""
+
+    __tablename__ = "kb_graph_review"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    target_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    target_id: Mapped[int] = mapped_column(nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending", server_default="pending")
+    requested_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    resolved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_kb_graph_review_status_created", "status", "created_at"),)
 
 
 # ---------- agent：对话会话（多轮记忆 + 恢复）----------
