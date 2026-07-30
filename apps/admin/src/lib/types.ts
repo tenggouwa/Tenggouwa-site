@@ -111,6 +111,13 @@ export interface OpsScheduler {
   jobs: OpsJob[];
 }
 
+export interface OpsLiveSmoke {
+  status: string;
+  completed_at: string | null;
+  summary: string;
+  url: string | null;
+}
+
 export interface OpsOverview {
   environment: string;
   alembic_revision: string | null;
@@ -118,6 +125,7 @@ export interface OpsOverview {
   mail_scheduler: OpsScheduler;
   mcp: { configured: number; connected: string[]; tool_count: number };
   pi: { online: boolean; last_seen: string | null; age_seconds: number | null };
+  live_smoke: OpsLiveSmoke;
 }
 
 export interface TotpEnrollStartResp {

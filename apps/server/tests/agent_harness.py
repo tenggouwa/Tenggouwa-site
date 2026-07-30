@@ -93,6 +93,7 @@ async def run_agent(
     privileged=False,
     auto_approve=False,
     owner=None,
+    llm=None,
 ):
     """跑一次 answer_stream，返回 (events, repo)。mock 掉 LLM / skills / repo，全程不联网。
 
@@ -114,7 +115,7 @@ async def run_agent(
     async def _invoke_adapter(session, name, args, **_kw):  # 吞掉 privileged=；真过滤在 test_skills_channel
         return await _invoke(session, name, args)
 
-    monkeypatch.setattr(svc, "chat_llm", ScriptedLLM(rounds))
+    monkeypatch.setattr(svc, "chat_llm", llm or ScriptedLLM(rounds))
     monkeypatch.setattr(svc, "AgentRepository", lambda _session: repo)
     monkeypatch.setattr(svc.skills_service, "tools", _tools)
     monkeypatch.setattr(svc.skills_service, "invoke", _invoke_adapter)

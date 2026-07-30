@@ -1,6 +1,7 @@
 """Ops overview only aggregates safe metadata."""
 
 import modules.ops.service as ops
+from modules.ops.schema import OpsLiveSmoke
 from modules.pi.schema import PiStatus
 
 
@@ -23,6 +24,16 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
     )
     monkeypatch.setattr(ops.config, "get", lambda _key, _default=None: "prod")
 
+    async def live_smoke():
+        return OpsLiveSmoke(
+            status="failure",
+            completed_at="2026-07-30T00:00:00+00:00",
+            summary="最近一次夜间冒烟未通过，请查看运行详情。",
+            url="https://github.com/tenggouwa/Tenggouwa-site/actions/runs/1",
+        )
+
+    monkeypatch.setattr(ops.ops_service, "_latest_live_smoke", live_smoke)
+
     data = await ops.ops_service.overview(_Session())
     assert data.model_dump() == {
         "environment": "prod",
@@ -31,4 +42,10 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
         "mail_scheduler": {"running": True, "jobs": [{"id": "mail", "next_run": None}]},
         "mcp": {"configured": 2, "connected": ["tools"], "tool_count": 1},
         "pi": {"online": True, "last_seen": "2026-07-28T00:00:00+00:00", "age_seconds": 12.5},
+        "live_smoke": {
+            "status": "failure",
+            "completed_at": "2026-07-30T00:00:00+00:00",
+            "summary": "最近一次夜间冒烟未通过，请查看运行详情。",
+            "url": "https://github.com/tenggouwa/Tenggouwa-site/actions/runs/1",
+        },
     }

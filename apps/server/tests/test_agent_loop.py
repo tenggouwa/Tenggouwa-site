@@ -43,6 +43,26 @@ async def test_multi_tool_parallel_then_answer(monkeypatch):
     assert_no_leak(tokens(events))
 
 
+async def test_direct_kb_definition_forces_answer_after_first_hit(monkeypatch):
+    class _LLM:
+        def __init__(self):
+            self.tools = []
+
+        async def stream_step(self, _messages, *, tools=None, **_kw):
+            self.tools.append(tools)
+            if tools is None:
+                yield {"type": "content", "delta": "RAG 是检索增强生成。"}
+            else:
+                yield {"type": "tool_calls", "tool_calls": [tool_call("kb_search", '{"query":"RAG 定义"}')]}
+
+    llm = _LLM()
+    events, repo = await run_agent(monkeypatch, [], llm=llm, q="站里那篇讲 RAG 的文章是怎么定义 RAG 的？")
+    assert [tool["name"] for tool in of_type(events, "tool")] == ["kb_search"]
+    assert llm.tools[1] is None
+    assert tokens(events).endswith("RAG 是检索增强生成。")
+    assert_paired(repo.rows)
+
+
 async def test_ask_user_ends_turn(monkeypatch):
     """ask_user：发 ask 事件、结束本轮（不再流式作答），且 tool 结果已落库配对。"""
     rounds = [
