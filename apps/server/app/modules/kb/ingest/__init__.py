@@ -2,9 +2,11 @@
 
 from .base import Ingester, KBDoc, chunk_markdown, content_hash
 from .blog import BlogIngester
+from .notes import NotesIngester
 
 INGESTERS: dict[str, Ingester] = {
     "blog": BlogIngester(),
+    "notes": NotesIngester(),
 }
 
 __all__ = ["INGESTERS", "Ingester", "KBDoc", "chunk_markdown", "content_hash"]

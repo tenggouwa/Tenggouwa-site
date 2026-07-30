@@ -47,7 +47,7 @@ KB_EMBED_API_KEY=<embedding provider key>
 
 ### 多源
 
-- [ ] `NotesIngester`：Markdown/Obsidian vault。
+- [x] `NotesIngester`：Markdown/Obsidian vault。设置 `KB_NOTES_DIR` 为受控目录后，通过 admin reindex 的 `source=notes` 增量灌入；未设置时安全空跑，不读取本机任意目录。
 - [ ] `CodeIngester`：Git repository。
 - [ ] `WebIngester`：受控 URL 抓取。
 - [ ] 前端按 source 过滤/加权；后端已经保留 sources 参数空间。
