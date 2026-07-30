@@ -1,0 +1,17 @@
+{
+  "payload": {
+    "entities": [
+      {"name": "Transformer", "type": "技术", "description": "并行处理序列的架构"},
+      {"name": " Attention ", "type": "概念", "description": "注意力机制"},
+      {"name": "transformer", "type": "技术", "description": "重复实体"}
+    ],
+    "relations": [
+      {"source": "Transformer", "target": "Attention", "type": "基于", "description": "文章说明 Transformer 使用注意力机制"},
+      {"source": "Transformer", "target": "不存在", "type": "用于", "description": "必须过滤的悬空边"}
+    ]
+  },
+  "expected": {
+    "entities": ["transformer", "attention"],
+    "relations": [{"source": "transformer", "target": "attention", "type": "基于"}]
+  }
+}

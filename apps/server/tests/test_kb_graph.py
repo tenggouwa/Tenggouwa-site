@@ -1,8 +1,18 @@
 """概念图谱抽取：两趟（概念 → 关系）+ JSON 模式 + 清洗（脏边比没边更坏，这里是把关的地方）。"""
 
 import json
+from pathlib import Path
 
 import modules.kb.graph as g
+
+
+def test_graph_golden_fixture_preserves_normalized_structure():
+    golden = json.loads((Path(__file__).parent / "fixtures" / "kb_graph_golden.json").read_text())
+    entities, relations = g._parse(golden["payload"])
+    assert [entity["norm_key"] for entity in entities] == golden["expected"]["entities"]
+    assert [
+        {"source": relation["source"], "target": relation["target"], "type": relation["type"]} for relation in relations
+    ] == golden["expected"]["relations"]
 
 
 def _payload(entities, relations):
