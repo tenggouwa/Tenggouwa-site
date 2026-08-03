@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { API_BASE, getTranscript, revokeAgent, unlockAgent } from '../lib/api';
+import { API_BASE, forkSession, getTranscript, revokeAgent, unlockAgent } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
 import { parseSSEFrame } from '../lib/sse';
 import AskPanel, { type AskQuestion } from '../components/AskPanel';
@@ -124,6 +124,7 @@ export default function Ask() {
   const [reflect, setReflect] = useState(false); // 反思：答完自评→按需改写（evaluator-optimizer）
   const [autoModel, setAutoModel] = useState(false); // 模型路由：判题难易自动选快模型/reasoner
   const [sessionRevision, setSessionRevision] = useState(0); // 新建/更新会话后刷新私有侧栏
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -170,6 +171,7 @@ export default function Ask() {
     setTokenExp(0);
     setAutoRun(false); // auto 模式每次解锁重新 opt-in，别跨会话悄悄留着
     sessionId.current = null; // 别把私有会话续到公开通道
+    setActiveSessionId(null);
     if (opts?.reset) setTurns([]);
   }
 
@@ -186,6 +188,7 @@ export default function Ask() {
       setShowUnlock(false);
       abortRef.current?.abort(); // 中止在途公开流，切私有前清干净
       sessionId.current = null; // 进私有模式开一段新会话（工具集不同）
+      setActiveSessionId(null);
       setTurns([]);
     } catch (e) {
       setUnlockError(e instanceof Error ? e.message : '解锁失败');
@@ -240,6 +243,7 @@ export default function Ask() {
       const next = obj.session_id ?? sessionId.current;
       if (next !== sessionId.current) setSessionRevision((v) => v + 1);
       sessionId.current = next;
+      setActiveSessionId(next);
     }
     else if (event === 'usage') updateTurn(idx, (t) => ({ ...t, usage: obj }));
     else if (event === 'plan') updateTurn(idx, (t) => ({ ...t, plan: obj.plan ?? [] }));
@@ -340,6 +344,7 @@ export default function Ask() {
     try {
       const t = await getTranscript(agentToken, sid);
       sessionId.current = sid;
+      setActiveSessionId(sid);
       setTurns(
         t.turns.map((turn) => ({
           q: turn.q,
@@ -352,6 +357,34 @@ export default function Ask() {
     } catch {
       /* 拉取失败：保持当前上下文不动 */
     }
+  }
+
+  async function forkFromSession(sid: string) {
+    if (busy || !agentToken) return;
+    try {
+      const t = await forkSession(agentToken, sid);
+      sessionId.current = t.id;
+      setActiveSessionId(t.id);
+      setTurns(
+        t.turns.map((turn) => ({
+          q: turn.q,
+          tools: turn.tools.map((tc) => ({ name: tc.name, args: tc.args })),
+          plan: [],
+          answer: turn.answer,
+          done: true,
+        })),
+      );
+      setSessionRevision((v) => v + 1);
+    } catch {
+      /* 分叉失败时保留当前会话，避免把用户带到无上下文的新会话 */
+    }
+  }
+
+  function newSession() {
+    if (busy) return;
+    sessionId.current = null;
+    setActiveSessionId(null);
+    setTurns([]);
   }
 
   // 审批决策回后端续跑：清掉本轮审批卡、置回"进行中"，续跑事件（工具执行 + 后续作答）回填同一轮。
@@ -424,19 +457,23 @@ export default function Ask() {
       </div>
 
       <div className="relative">
-        {/* 私有模式常驻侧栏：会话 + 记忆。绝对定位进左侧留白，不占聊天区宽度；窄屏无留白则收起 */}
+        {/* 私有模式：宽屏进左侧留白；窄屏保留会话入口，次级面板收起。 */}
         {agentToken && (
-          <aside className="hidden min-[1360px]:flex flex-col gap-3 absolute top-0 right-full mr-4 w-52 z-10">
+          <aside className="flex flex-col gap-3 mb-3 min-[1360px]:mb-0 min-[1360px]:absolute min-[1360px]:top-0 min-[1360px]:right-full min-[1360px]:mr-4 min-[1360px]:w-52 min-[1360px]:z-10">
             <SessionList
               token={agentToken}
-              currentId={sessionId.current}
+              currentId={activeSessionId}
               onOpen={loadSession}
+              onFork={forkFromSession}
+              onNew={newSession}
               busy={busy}
               refreshKey={sessionRevision}
             />
-            <MemoryList token={agentToken} />
-            <InboxPanel token={agentToken} />
-            <RunList token={agentToken} refreshKey={sessionRevision} />
+            <div className="hidden min-[1360px]:flex flex-col gap-3">
+              <MemoryList token={agentToken} />
+              <InboxPanel token={agentToken} />
+              <RunList token={agentToken} refreshKey={sessionRevision} />
+            </div>
           </aside>
         )}
 
@@ -531,9 +568,7 @@ export default function Ask() {
               <button
                 type="button"
                 onClick={() => {
-                  if (busy) return;
-                  sessionId.current = null;
-                  setTurns([]);
+                  newSession();
                 }}
                 className="text-[11px] text-terminal-gray/60 hover:text-terminal-green transition-colors disabled:opacity-40"
                 disabled={busy}

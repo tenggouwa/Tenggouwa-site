@@ -74,6 +74,8 @@ async function agentApi<T>(path: string, token: string, init?: RequestInit): Pro
 
 export const listSessions = (token: string) => agentApi<SessionInfo[]>('/sessions', token);
 export const getTranscript = (token: string, sid: string) => agentApi<Transcript>(`/sessions/${sid}`, token);
+export const forkSession = (token: string, sid: string) =>
+  agentApi<Transcript>(`/sessions/${sid}/fork`, token, { method: 'POST' });
 export const deleteSession = (token: string, sid: string) =>
   agentApi<{ deleted: boolean }>(`/sessions/${sid}`, token, { method: 'DELETE' });
 

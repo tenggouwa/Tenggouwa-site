@@ -23,7 +23,10 @@ describe('Ask 会话列表 + 续聊', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () => Promise.resolve(env([{ id: 's-old', title: '上次的活儿', updated_at: '2026-07-14T10:00:00+00:00' }])),
+          json: () => Promise.resolve(env([
+            { id: 's-old', title: '上次的活儿', updated_at: '2026-07-14T10:00:00+00:00' },
+            { id: 's-other', title: '另一个项目', updated_at: '2026-07-13T10:00:00+00:00' },
+          ])),
         });
       }
       if (url.endsWith('/api/agent/sessions/s-old')) {
@@ -38,6 +41,13 @@ describe('Ask 会话列表 + 续聊', () => {
                 turns: [{ q: '写个脚本', tools: [{ name: 'file_write', args: { path: 'a.sh' } }], answer: '写好了' }],
               }),
             ),
+        });
+      }
+      if (url.endsWith('/api/agent/sessions/s-old/fork')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(env({ id: 's-fork', title: '上次的活儿（分叉）', turns: [{ q: '写个脚本', tools: [], answer: '写好了' }] })),
         });
       }
       return Promise.resolve({ ok: true, status: 200, body: null });
@@ -58,5 +68,38 @@ describe('Ask 会话列表 + 续聊', () => {
     await waitFor(() => expect(screen.getByText('写个脚本')).toBeTruthy());
     expect(screen.getByText('写好了')).toBeTruthy();
     expect(screen.getByText(/path="a\.sh"/)).toBeTruthy(); // 工具行的参数（唯一，避开页脚工具清单）
+
+    fireEvent.change(screen.getByPlaceholderText('grep sessions…'), { target: { value: '另一个' } });
+    expect(screen.queryByText('上次的活儿')).toBeNull();
+    expect(screen.getByText('另一个项目')).toBeTruthy();
+  });
+
+  it('从历史会话分叉时切到新会话，并请求 owner-only fork API', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/public/agent/unlock')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(env({ token: 'T1', ttl_seconds: 3600 })) });
+      }
+      if (url.endsWith('/api/agent/sessions')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(env([{ id: 's-old', title: '上次的活儿', updated_at: '2026-07-14T10:00:00+00:00' }])) });
+      }
+      if (url.endsWith('/api/agent/sessions/s-old/fork')) {
+        expect(init?.method).toBe('POST');
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(env({ id: 's-fork', title: '上次的活儿（分叉）', turns: [{ q: '旧问题', tools: [], answer: '旧答案' }] })) });
+      }
+      return Promise.resolve({ ok: true, status: 200, body: null });
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    render(<Ask />);
+    fireEvent.click(screen.getByTitle(/TOTP 解锁私有模式/));
+    fireEvent.change(screen.getByPlaceholderText('6 位 TOTP 码'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByText('↵ 解锁'));
+    await waitFor(() => expect(screen.getByText('上次的活儿')).toBeTruthy());
+    fireEvent.click(screen.getByTitle(/从此会话分叉/));
+    await waitFor(() => expect(screen.getByText('旧问题')).toBeTruthy());
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/agent\/sessions\/s-old\/fork$/),
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 });

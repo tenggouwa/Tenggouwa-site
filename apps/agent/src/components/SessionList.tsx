@@ -21,17 +21,22 @@ export default function SessionList({
   token,
   currentId,
   onOpen,
+  onFork,
+  onNew,
   busy,
   refreshKey,
 }: {
   token: string;
   currentId: string | null;
   onOpen: (sid: string) => void;
+  onFork: (sid: string) => void;
+  onNew: () => void;
   busy: boolean;
   refreshKey: number;
 }) {
   const [items, setItems] = useState<SessionInfo[] | null>(null);
   const [error, setError] = useState<string | undefined>();
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -53,16 +58,32 @@ export default function SessionList({
     }
   }
 
+  const filtered = items?.filter((s) => s.title?.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) ?? [];
+
   return (
     <div className="sticky top-4 rounded-lg border border-terminal-line/70 bg-terminal-bg/95 p-2 text-xs">
-      <div className="px-1 pb-2 mb-1 border-b border-terminal-line/50 text-terminal-gray/60">
-        <span className="text-terminal-pink">~$</span> <span className="text-terminal-green">ls</span> ~/sessions
+      <div className="flex items-center gap-2 px-1 pb-2 mb-1 border-b border-terminal-line/50 text-terminal-gray/60">
+        <span className="flex-1">
+          <span className="text-terminal-pink">~$</span> <span className="text-terminal-green">ls</span> ~/sessions
+        </span>
+        <button type="button" onClick={onNew} disabled={busy} className="text-terminal-cyan hover:text-terminal-green disabled:opacity-40" title="新建会话">
+          + new
+        </button>
       </div>
+      <label className="sr-only" htmlFor="session-search">搜索会话</label>
+      <input
+        id="session-search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="grep sessions…"
+        className="w-full mb-2 rounded border border-terminal-line/60 bg-terminal-panel/40 px-2 py-1 text-terminal-gray outline-none placeholder:text-terminal-gray/35 focus:border-terminal-green/60"
+      />
       {error && <div className="px-1 py-2 text-terminal-red">加载失败：{error}</div>}
       {!error && items === null && <div className="px-1 py-2 text-terminal-gray/50">加载中…</div>}
       {!error && items?.length === 0 && <div className="px-1 py-2 text-terminal-gray/50">还没有历史会话。</div>}
+      {!error && items && items.length > 0 && filtered.length === 0 && <div className="px-1 py-2 text-terminal-gray/50">没有匹配会话。</div>}
       <div className="max-h-[60vh] overflow-y-auto">
-        {items?.map((s) => (
+        {filtered.map((s) => (
           <div
             key={s.id}
             role="button"
@@ -79,6 +100,17 @@ export default function SessionList({
             <span className="text-terminal-gray/40">{s.id === currentId ? '›' : ' '}</span>
             <span className="flex-1 truncate">{s.title || '（未命名）'}</span>
             <span className="text-terminal-gray/40 shrink-0">{fmtWhen(s.updated_at)}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!busy) onFork(s.id);
+              }}
+              title="从此会话分叉；不会复制待审批动作"
+              className="shrink-0 text-terminal-gray/30 hover:text-terminal-cyan opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              fork
+            </button>
             <button
               type="button"
               onClick={(e) => del(e, s.id)}

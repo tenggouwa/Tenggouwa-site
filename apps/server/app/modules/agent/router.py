@@ -193,6 +193,19 @@ async def get_transcript(
     return ResponseModel(data=AgentTranscript(id=sid, title=row.title if row else None, turns=turns))
 
 
+@private_router.post("/sessions/{sid}/fork", response_model=ResponseModel[AgentTranscript])
+async def fork_session(
+    sid: str,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[AgentTranscript]:
+    """从该 owner 的会话分叉上下文；未决审批不会复制到新分支。"""
+    repo = await _owned_session(sid, owner, session)
+    fork = await repo.fork_session(sid)
+    turns = [AgentTranscriptTurn(**t) for t in await repo.transcript(fork.id)]
+    return ResponseModel(data=AgentTranscript(id=fork.id, title=fork.title, turns=turns))
+
+
 @private_router.delete("/sessions/{sid}", response_model=ResponseModel[dict])
 async def delete_session(
     sid: str,

@@ -170,6 +170,43 @@ class AgentRepository:
                     turns[-1]["tools"].append({"name": fn.get("name", ""), "args": args})
         return turns
 
+    async def fork_session(self, sid: str) -> AgentSessionRow:
+        """复制一个已完成的会话上下文到新会话，不携带待审批动作或运行审计记录。"""
+        source = await self.session.get(AgentSessionRow, sid)
+        if source is None:
+            raise ValueError("session not found")
+        rows = (
+            (
+                await self.session.execute(
+                    select(AgentMessageRow).where(AgentMessageRow.session_id == sid).order_by(AgentMessageRow.seq.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        fork = AgentSessionRow(
+            id=uuid4().hex,
+            owner=source.owner,
+            title=f"{source.title or '未命名会话'}（分叉）"[:200],
+            summary=source.summary,
+            summarized_upto_seq=source.summarized_upto_seq,
+            pending=None,
+        )
+        self.session.add(fork)
+        for row in rows:
+            self.session.add(
+                AgentMessageRow(
+                    session_id=fork.id,
+                    seq=row.seq,
+                    role=row.role,
+                    content=row.content,
+                    tool_calls=row.tool_calls,
+                    tool_call_id=row.tool_call_id,
+                )
+            )
+        await self.session.flush()
+        return fork
+
     async def delete_session(self, sid: str) -> None:
         """删除会话及其消息（message 表有 ON DELETE CASCADE，删 session 即连带清）。"""
         await self.session.execute(delete(AgentSessionRow).where(AgentSessionRow.id == sid))
