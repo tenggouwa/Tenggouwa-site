@@ -1,6 +1,6 @@
 # apps/agent → 「像 Claude/Codex」的分阶段 roadmap（细化版）
 
-> ## ✅ 收官状态（2026-07-20 复盘，PR #139–#208）
+> ## ✅ 收官状态（2026-08-03 更新，PR #139–#208）
 >
 > **A–F 主线已落地**：五层测试地基与 nightly live eval、重试/截断/取消/用量、MCP 客户端、
 > 权限分级与审批、Pi + bwrap 沙箱、文件/shell/git、子代理与 readonly 并发、会话续聊、reasoner 和思维过程。
@@ -14,7 +14,7 @@
 > - **C3 execpolicy**：Codex 需要它是因为跑在你真机上；我们跑在一次性 bwrap 沙箱 + C2 审批，命令规范化收益不抵复杂度。
 > - **B1 skill 开关 / B3 完整管理页**：原生 skill 仍由代码 registry 管理；现有 skills 页和 MCP 状态端点只读。
 > - **F1 多模态**：探针确认 deepseek-chat 纯文本、现有 OpenRouter key 调视觉模型 404，需单独接可用视觉模型+key，不值当。
-> - **F2 fork(分叉)**：resume 已够用。
+> - **F2 会话历史界面**：服务端已具备 owner 隔离的列表、详情和删除 API；前端的历史列表、继续、分叉与搜索是下一项确认排期，见下文 F2。
 > - **D0 原选项(FC/独立 VM)**：最终选了树莓派 + bwrap，原选型作废。
 >
 > **追不平**：模型质量(DeepSeek vs GPT-5-Codex/Opus)——F3 切 reasoner 只能缓解。
@@ -207,7 +207,7 @@
 ## Phase F — 打磨 / parity（穿插着做）
 
 - **F1 多模态输入**:图片/PDF。**注意**:`deepseek-chat` 是文本模型,视觉要换 `deepseek-vl` 或多模态端点——先确认模型支持再做。你调试一直贴截图,这个很实用。工作量 M。
-- **F2 会话 resume / fork UI**:已落库(agent_session/agent_message),缺"历史会话列表 + 继续 + 分叉"界面。工作量 M。
+- **F2 会话历史 UI**:已落库(`agent_session`/`agent_message`)，且后端已有 owner 隔离的列表、详情、删除 API；补齐历史列表、继续、分叉与关键词搜索界面。分叉不得继承私有工具批准状态。工作量 M。
 - **F3 模型选择 / reasoner**:hard 任务切 `deepseek-reasoner`(带 reasoning_content),或让用户选模型。工作量 S。
 - **F4 extended thinking 露出**:把推理过程可选折叠展示。工作量 S。
 
@@ -227,6 +227,6 @@
 2. **Phase C** 起草(与 A 并行)——权限模型先定
 3. **Phase B2 MCP**(扩展性核心)——一次性接入工具生态
 4. **Phase D0 沙箱选型**(拍板 FC vs VM,最大不确定性)→ D1/D2
-5. **E / F** 穿插
+5. **F2 会话历史 UI**：当前确认的下一项用户可见能力；E / 其他 F 按实际需求穿插
 
 关联 [[project_agent_app]]。沙箱与 MCP 的完整调研在本次会话的两个子 agent 输出里(要落到单独文档可再说)。

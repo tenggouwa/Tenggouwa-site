@@ -1,6 +1,6 @@
 # KB / 概念图谱现状与 Roadmap
 
-> 状态日期：2026-07-20。设计取舍见 [kb-design.md](kb-design.md)，系统位置见
+> 状态日期：2026-08-03。设计取舍见 [kb-design.md](kb-design.md)，系统位置见
 > [当前架构](../architecture.md)。
 
 ## 已上线
@@ -26,6 +26,7 @@
 - 公开 hubs/full/entity 图谱 API 和 `kb_graph` skill。
 - Agent Graph 页面为全量力导向图，支持关键词、邻域放大、拖拽固定和系列过滤。
 - 独立 Knowledge Base 页面已删除，有用的 overview 信息收敛到 Graph。
+- Admin 图谱审核已上线：概念改名、关系下线先形成提案，批准后才影响公开图谱与 Agent GraphRAG；原始关系和审核记录仍保留。
 
 ## 生产配置
 
@@ -45,14 +46,14 @@ KB_EMBED_API_KEY=<embedding provider key>
 
 这些是候选方向，不是已经承诺的排期：
 
-### 多源
+### 多源（有真实受控数据源后再接）
 
 - [x] `NotesIngester`：Markdown/Obsidian vault。设置 `KB_NOTES_DIR` 为受控目录后，通过 admin reindex 的 `source=notes` 增量灌入；未设置时安全空跑，不读取本机任意目录。
-- [ ] `CodeIngester`：Git repository。
-- [ ] `WebIngester`：受控 URL 抓取。
+- [ ] `CodeIngester`：Git repository；必须固定 repository allowlist、分支和路径规则，不能让公开请求任意拉取代码。
+- [ ] `WebIngester`：受控 URL 抓取；复用 SSRF 防护、站点 allowlist、抓取频率和内容版本指纹。
 - [ ] 前端按 source 过滤/加权；后端已经保留 sources 参数空间。
 
-### 检索质量
+### 检索质量（以 eval 结果驱动）
 
 - [x] 建立离线 retrieval eval corpus（`apps/server/tests/fixtures/kb_retrieval_eval.json`）和 nDCG/Recall 指标；新增/改写文章时补同类 query，再用它比较 RRF 权重。
 - [ ] 根据 eval 决定是否加入 reranker 或 Contextual Retrieval。
@@ -64,6 +65,12 @@ KB_EMBED_API_KEY=<embedding provider key>
 - [x] 建立 graph extraction golden fixture，防 provider 输出变化导致静默丢关系。
 - [ ] 别名合并：等出现跨文档重复概念的真实样本后，再以保留溯源的方式设计合并规则；不在无样本时猜测自动合并。
 - [ ] 数据量明显增长后再评估分层加载或图谱裁剪；当前全图方案保持简单。
+
+### 当前优先级
+
+1. 先维护 retrieval / graph golden fixture，所有线上问题先沉淀为可复现样本。
+2. 当 Notes 有正式受控目录和真实内容后，补来源筛选与 source 级检索权重。
+3. 有明确业务 repository 或 URL 清单后，再分别启用 CodeIngester / WebIngester；二者不共享“任意本机目录或任意 URL”的权限。
 
 ## 已知约束
 
