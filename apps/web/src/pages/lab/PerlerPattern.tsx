@@ -13,6 +13,7 @@ import {
   type PatternResult,
   type Rgb,
 } from '../../lib/perlerPattern';
+import { MARD_STANDARD_PALETTE } from '../../lib/mardPalette';
 
 const BOARD_PRESETS = [
   { width: 14, height: 14, label: '14 × 14 · mini' },
@@ -99,7 +100,7 @@ export default function PerlerPattern() {
   const [future, setFuture] = useState<PatternResult[]>([]);
   const [selectedColor, setSelectedColor] = useState(0);
   const [zoom, setZoom] = useState(100);
-  const [paletteName, setPaletteName] = useState('智能量化');
+  const [paletteName, setPaletteName] = useState('Mard 标准 221 色');
   const [customPalette, setCustomPalette] = useState<typeof STARTER_PALETTES['通用基础']>([]);
   const [stockOnly, setStockOnly] = useState(false);
   const [error, setError] = useState('');
@@ -136,7 +137,7 @@ export default function PerlerPattern() {
     }
     const draft = makePattern(pixels, gridWidth, gridHeight, colorCount);
     if (paletteName === '智能量化' && !customPalette.length) return draft;
-    const sourcePalette = customPalette.length ? customPalette : STARTER_PALETTES[paletteName];
+    const sourcePalette = customPalette.length ? customPalette : paletteName === 'Mard 标准 221 色' ? MARD_STANDARD_PALETTE : STARTER_PALETTES[paletteName];
     const available = sourcePalette.filter((color) => !stockOnly || color.inStock !== false);
     return mapPatternToBeads(draft, available);
   }, [colorCount, customPalette, filters, fitMode, gridHeight, gridWidth, image, paletteName, stockOnly]);
@@ -301,7 +302,8 @@ export default function PerlerPattern() {
             </label>
             <label className="block text-xs text-terminal-gray" htmlFor="palette-name">色板
               <select id="palette-name" value={paletteName} onChange={(event) => { setPaletteName(event.target.value); setCustomPalette([]); }} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray">
-                <option value="智能量化">智能量化（保留所选色数）</option>
+                <option value="Mard 标准 221 色">Mard 标准 221 色（真实色号）</option>
+                <option value="智能量化">智能量化（仅预览，不可采购）</option>
                 {Object.keys(STARTER_PALETTES).map((name) => <option key={name}>{name}</option>)}
                 {customPalette.length > 0 && <option value="自定义">自定义导入</option>}
               </select>
