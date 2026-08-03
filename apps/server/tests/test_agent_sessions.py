@@ -76,6 +76,28 @@ def _msg(seq, role, content, tool_calls=None):
     return SimpleNamespace(seq=seq, role=role, content=content, tool_calls=tool_calls, tool_call_id=None)
 
 
+async def test_finish_run_persists_provider_cache_usage_keys():
+    row = SimpleNamespace()
+
+    class _RunSession:
+        async def get(self, _model, _run_id):
+            return row
+
+        async def flush(self):
+            return None
+
+    await AgentRepository(_RunSession()).finish_run(
+        1,
+        status="completed",
+        duration_ms=12,
+        tool_names=["web_search"],
+        usage={"prompt_cache_hit_tokens": 8, "prompt_cache_miss_tokens": 2},
+        external_research_count=1,
+    )
+    assert row.cache_hit_tokens == 8 and row.cache_miss_tokens == 2
+    assert row.external_research_count == 1 and row.external_research_capped is False
+
+
 async def test_transcript_rebuilds_turns():
     rows = [
         _msg(1, "user", "写个脚本"),

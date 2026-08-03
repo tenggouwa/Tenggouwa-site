@@ -2545,6 +2545,36 @@ export interface components {
             /** Pv */
             pv: number;
         };
+        /**
+         * OpsAgentMetrics
+         * @description Recent aggregate Agent behavior without owner or conversation data.
+         */
+        OpsAgentMetrics: {
+            /** Window Hours */
+            window_hours: number;
+            /** Total Runs */
+            total_runs: number;
+            /** Completed Runs */
+            completed_runs: number;
+            /** Awaiting Approval Runs */
+            awaiting_approval_runs: number;
+            /** Avg Duration Ms */
+            avg_duration_ms: number;
+            /** Tool Calls */
+            tool_calls: number;
+            /** Prompt Tokens */
+            prompt_tokens: number;
+            /** Completion Tokens */
+            completion_tokens: number;
+            /** Cache Hit Tokens */
+            cache_hit_tokens: number;
+            /** Cache Miss Tokens */
+            cache_miss_tokens: number;
+            /** External Research Calls */
+            external_research_calls: number;
+            /** External Research Capped Runs */
+            external_research_capped_runs: number;
+        };
         /** OpsJob */
         OpsJob: {
             /** Id */
@@ -2585,6 +2615,7 @@ export interface components {
             mail_scheduler: components["schemas"]["OpsScheduler"];
             mcp: components["schemas"]["OpsMcp"];
             pi: components["schemas"]["OpsPi"];
+            agent_metrics: components["schemas"]["OpsAgentMetrics"];
             live_smoke: components["schemas"]["OpsLiveSmoke"];
             /** Live Smoke History */
             live_smoke_history?: components["schemas"]["OpsLiveSmoke"][];

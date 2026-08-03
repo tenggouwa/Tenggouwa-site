@@ -619,10 +619,15 @@ class AgentRunRow(Base):
     completion_tokens: Mapped[int | None] = mapped_column(nullable=True)
     cache_hit_tokens: Mapped[int | None] = mapped_column(nullable=True)
     cache_miss_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    external_research_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    external_research_capped: Mapped[bool] = mapped_column(nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (Index("ix_agent_run_owner_created", "owner", "created_at"),)
+    __table_args__ = (
+        Index("ix_agent_run_owner_created", "owner", "created_at"),
+        Index("ix_agent_run_created", "created_at"),
+    )
 
 
 class AgentCustomSkillRow(Base):

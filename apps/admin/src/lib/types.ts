@@ -118,6 +118,21 @@ export interface OpsLiveSmoke {
   url: string | null;
 }
 
+export interface OpsAgentMetrics {
+  window_hours: number;
+  total_runs: number;
+  completed_runs: number;
+  awaiting_approval_runs: number;
+  avg_duration_ms: number;
+  tool_calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cache_hit_tokens: number;
+  cache_miss_tokens: number;
+  external_research_calls: number;
+  external_research_capped_runs: number;
+}
+
 export interface OpsOverview {
   environment: string;
   alembic_revision: string | null;
@@ -125,6 +140,7 @@ export interface OpsOverview {
   mail_scheduler: OpsScheduler;
   mcp: { configured: number; connected: string[]; tool_count: number };
   pi: { online: boolean; last_seen: string | null; age_seconds: number | null };
+  agent_metrics: OpsAgentMetrics;
   live_smoke: OpsLiveSmoke;
   live_smoke_history: OpsLiveSmoke[];
 }

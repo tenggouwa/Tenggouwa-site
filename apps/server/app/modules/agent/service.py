@@ -271,6 +271,8 @@ class AgentService:
             yield {"type": "route", "model": "reasoner" if model else "chat", "reason": reason}
 
         usage_total: dict = {}  # 累计本轮 token 用量，收尾发 event: usage
+        # 提前初始化，保证无效审批/空问题这类早退运行也能留下安全的零值摘要。
+        turn_state: dict = {"external_research": 0}
         run_started = time.perf_counter()
         create_run = getattr(repo, "create_run", None)
         run_id = (
@@ -297,19 +299,23 @@ class AgentService:
                 duration_ms=int((time.perf_counter() - run_started) * 1000),
                 tool_names=run_tools,
                 usage=usage_total,
+                external_research_count=turn_state["external_research"],
+                external_research_capped=turn_state["external_research"] >= MAX_EXTERNAL_RESEARCH_PER_TURN,
             )
 
         # 本轮状态：收敛闸（子代理计数 + 检索去重）+ 渐进披露已加载的 MCP 工具名
-        turn_state: dict = {
-            "subagents": 0,
-            "searched": set(),
-            "external_research": 0,
-            "external_research_closed": False,
-            "loaded": set(),
-            "custom": [],
-            "direct_kb_question": _is_direct_kb_question(q),
-            "direct_kb_ready": False,
-        }
+        turn_state.update(
+            {
+                "subagents": 0,
+                "searched": set(),
+                "external_research": 0,
+                "external_research_closed": False,
+                "loaded": set(),
+                "custom": [],
+                "direct_kb_question": _is_direct_kb_question(q),
+                "direct_kb_ready": False,
+            }
+        )
         if privileged and owner and session is not None:
             try:  # owner 的自定义 skill（页面上加的），拉一次进本轮，暴露给模型 + 供 invoke 分派
                 turn_state["custom"] = await CustomSkillStore(session).list_enabled(owner)

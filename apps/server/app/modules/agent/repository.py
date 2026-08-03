@@ -5,7 +5,7 @@ summarized_upto_seq 之后的窗口，配合 sessions.summary 重建 LLM message
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from db.models import AgentInboxRow, AgentMessageRow, AgentRunRow, AgentSessionRow
@@ -72,6 +72,8 @@ class AgentRepository:
         duration_ms: int,
         tool_names: list[str],
         usage: dict,
+        external_research_count: int = 0,
+        external_research_capped: bool = False,
     ) -> None:
         row = await self.session.get(AgentRunRow, run_id)
         if row is None:
@@ -82,8 +84,10 @@ class AgentRepository:
         row.tool_count = len(tool_names)
         row.prompt_tokens = usage.get("prompt_tokens")
         row.completion_tokens = usage.get("completion_tokens")
-        row.cache_hit_tokens = usage.get("cache_hit_tokens")
-        row.cache_miss_tokens = usage.get("cache_miss_tokens")
+        row.cache_hit_tokens = usage.get("prompt_cache_hit_tokens")
+        row.cache_miss_tokens = usage.get("prompt_cache_miss_tokens")
+        row.external_research_count = external_research_count
+        row.external_research_capped = external_research_capped
         row.completed_at = func.now()
         await self.session.flush()
 
@@ -100,6 +104,41 @@ class AgentRepository:
             .scalars()
             .all()
         )
+
+    async def ops_metrics(self, hours: int = 24) -> dict:
+        """Aggregate only global, content-free run metadata for the admin Ops screen."""
+        since = datetime.now(UTC) - timedelta(hours=hours)
+        row = (
+            await self.session.execute(
+                select(
+                    func.count(AgentRunRow.id),
+                    func.count(AgentRunRow.id).filter(AgentRunRow.status == "completed"),
+                    func.count(AgentRunRow.id).filter(AgentRunRow.status == "awaiting_approval"),
+                    func.avg(AgentRunRow.duration_ms),
+                    func.coalesce(func.sum(AgentRunRow.tool_count), 0),
+                    func.coalesce(func.sum(AgentRunRow.prompt_tokens), 0),
+                    func.coalesce(func.sum(AgentRunRow.completion_tokens), 0),
+                    func.coalesce(func.sum(AgentRunRow.cache_hit_tokens), 0),
+                    func.coalesce(func.sum(AgentRunRow.cache_miss_tokens), 0),
+                    func.coalesce(func.sum(AgentRunRow.external_research_count), 0),
+                    func.count(AgentRunRow.id).filter(AgentRunRow.external_research_capped.is_(True)),
+                ).where(AgentRunRow.created_at >= since)
+            )
+        ).one()
+        return {
+            "window_hours": hours,
+            "total_runs": int(row[0] or 0),
+            "completed_runs": int(row[1] or 0),
+            "awaiting_approval_runs": int(row[2] or 0),
+            "avg_duration_ms": round(float(row[3] or 0)),
+            "tool_calls": int(row[4] or 0),
+            "prompt_tokens": int(row[5] or 0),
+            "completion_tokens": int(row[6] or 0),
+            "cache_hit_tokens": int(row[7] or 0),
+            "cache_miss_tokens": int(row[8] or 0),
+            "external_research_calls": int(row[9] or 0),
+            "external_research_capped_runs": int(row[10] or 0),
+        }
 
     async def transcript(self, sid: str) -> list[dict]:
         """把 append-only 消息重建成前端可渲染的轮次 [{q, tools:[{name,args}], answer}]。

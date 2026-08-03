@@ -32,6 +32,23 @@ class OpsLiveSmoke(BaseModel):
     url: str | None = None
 
 
+class OpsAgentMetrics(BaseModel):
+    """Recent aggregate Agent behavior without owner or conversation data."""
+
+    window_hours: int
+    total_runs: int
+    completed_runs: int
+    awaiting_approval_runs: int
+    avg_duration_ms: int
+    tool_calls: int
+    prompt_tokens: int
+    completion_tokens: int
+    cache_hit_tokens: int
+    cache_miss_tokens: int
+    external_research_calls: int
+    external_research_capped_runs: int
+
+
 class OpsOverview(BaseModel):
     environment: str
     alembic_revision: str | None = None
@@ -39,5 +56,6 @@ class OpsOverview(BaseModel):
     mail_scheduler: OpsScheduler
     mcp: OpsMcp
     pi: OpsPi
+    agent_metrics: OpsAgentMetrics
     live_smoke: OpsLiveSmoke
     live_smoke_history: list[OpsLiveSmoke] = Field(default_factory=list)
