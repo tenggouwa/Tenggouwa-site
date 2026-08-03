@@ -105,31 +105,26 @@ function distance(a: Rgb, b: Rgb): number {
 }
 
 function initialCentroids(pixels: Rgb[], colorCount: number): Rgb[] {
-  const centroids: Rgb[] = [pixels[0]];
-  while (centroids.length < colorCount) {
-    let next = pixels[0];
-    let farthest = -1;
-    for (const pixel of pixels) {
-      const nearest = Math.min(...centroids.map((centroid) => distance(pixel, centroid)));
-      if (nearest > farthest) {
-        farthest = nearest;
-        next = pixel;
-      }
-    }
-    centroids.push(next);
-  }
-  return centroids.map((pixel) => ({ ...pixel }));
+  return Array.from({ length: colorCount }, (_, index) => ({
+    ...pixels[Math.floor(((index * 0.61803398875) % 1) * pixels.length)],
+  }));
+}
+
+function trainingSample(pixels: Rgb[], maxSize = 10_000): Rgb[] {
+  if (pixels.length <= maxSize) return pixels;
+  const step = pixels.length / maxSize;
+  return Array.from({ length: maxSize }, (_, index) => pixels[Math.floor(index * step)]);
 }
 
 export function makePattern(pixels: Rgb[], width: number, height: number, requestedColors: number): PatternResult {
   if (pixels.length !== width * height || pixels.length === 0) throw new Error('图片像素数据无效');
   const colorCount = Math.min(requestedColors, pixels.length);
-  let palette = initialCentroids(pixels, colorCount);
-  let assignments = new Array<number>(pixels.length).fill(0);
+  const sample = trainingSample(pixels);
+  let palette = initialCentroids(sample, colorCount);
 
   for (let iteration = 0; iteration < 8; iteration += 1) {
     const sums = palette.map(() => ({ r: 0, g: 0, b: 0, count: 0 }));
-    assignments = pixels.map((pixel) => {
+    sample.forEach((pixel) => {
       let closest = 0;
       let closestDistance = Infinity;
       palette.forEach((color, index) => {
@@ -144,7 +139,6 @@ export function makePattern(pixels: Rgb[], width: number, height: number, reques
       sum.g += pixel.g;
       sum.b += pixel.b;
       sum.count += 1;
-      return closest;
     });
     palette = palette.map((color, index) => {
       const sum = sums[index];
@@ -153,7 +147,16 @@ export function makePattern(pixels: Rgb[], width: number, height: number, reques
   }
 
   const counts = palette.map(() => 0);
-  const cells = assignments.map((colorId) => {
+  const cells = pixels.map((pixel) => {
+    let colorId = 0;
+    let closestDistance = Infinity;
+    palette.forEach((color, index) => {
+      const candidate = distance(pixel, color);
+      if (candidate < closestDistance) {
+        closestDistance = candidate;
+        colorId = index;
+      }
+    });
     counts[colorId] += 1;
     return { ...palette[colorId], colorId };
   });
