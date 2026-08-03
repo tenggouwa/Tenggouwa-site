@@ -14,8 +14,20 @@ import {
   type Rgb,
 } from '../../lib/perlerPattern';
 
-const BOARD_SIZES = [14, 29, 58] as const;
+const BOARD_PRESETS = [
+  { width: 14, height: 14, label: '14 × 14 · mini' },
+  { width: 19, height: 19, label: '19 × 19 · 小方板' },
+  { width: 29, height: 29, label: '29 × 29 · 标准方板' },
+  { width: 29, height: 58, label: '29 × 58 · 双板竖向' },
+  { width: 58, height: 29, label: '58 × 29 · 双板横向' },
+  { width: 58, height: 58, label: '58 × 58 · 四板拼接' },
+] as const;
 const MAX_FILE_SIZE = 12 * 1024 * 1024;
+const MAX_GRID_DIMENSION = 120;
+
+function toGridDimension(value: string): number {
+  return Math.max(1, Math.min(MAX_GRID_DIMENSION, Number.parseInt(value, 10) || 1));
+}
 
 function rgbCss(color: Rgb): string {
   return `rgb(${color.r} ${color.g} ${color.b})`;
@@ -71,7 +83,8 @@ export default function PerlerPattern() {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [fileName, setFileName] = useState('');
-  const [board, setBoard] = useState<number>(29);
+  const [gridWidth, setGridWidth] = useState(29);
+  const [gridHeight, setGridHeight] = useState(29);
   const [colorCount, setColorCount] = useState<(typeof COLOR_COUNTS)[number]>(48);
   const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover');
   const [filters, setFilters] = useState<FilterOptions>({ preset: 'original', ...presetOptions('original') });
@@ -99,29 +112,29 @@ export default function PerlerPattern() {
   const createPattern = useCallback(() => {
     if (!image) return null;
     const source = document.createElement('canvas');
-    source.width = board;
-    source.height = board;
+    source.width = gridWidth;
+    source.height = gridHeight;
     const ctx = source.getContext('2d', { willReadFrequently: true });
     if (!ctx) throw new Error('Canvas 不可用');
     if (fitMode === 'contain') {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, board, board);
+      ctx.fillRect(0, 0, gridWidth, gridHeight);
     }
-    const scale = (fitMode === 'cover' ? Math.max : Math.min)(board / image.naturalWidth, board / image.naturalHeight);
+    const scale = (fitMode === 'cover' ? Math.max : Math.min)(gridWidth / image.naturalWidth, gridHeight / image.naturalHeight);
     const width = image.naturalWidth * scale;
     const height = image.naturalHeight * scale;
-    ctx.drawImage(image, (board - width) / 2, (board - height) / 2, width, height);
-    const data = ctx.getImageData(0, 0, board, board).data;
+    ctx.drawImage(image, (gridWidth - width) / 2, (gridHeight - height) / 2, width, height);
+    const data = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
     const pixels: Rgb[] = [];
     for (let index = 0; index < data.length; index += 4) {
       pixels.push(applyFilters({ r: data[index], g: data[index + 1], b: data[index + 2] }, filters));
     }
-    const draft = makePattern(pixels, board, board, colorCount);
+    const draft = makePattern(pixels, gridWidth, gridHeight, colorCount);
     if (paletteName === '智能量化' && !customPalette.length) return draft;
     const sourcePalette = customPalette.length ? customPalette : STARTER_PALETTES[paletteName];
     const available = sourcePalette.filter((color) => !stockOnly || color.inStock !== false);
     return mapPatternToBeads(draft, available);
-  }, [board, colorCount, customPalette, filters, fitMode, image, paletteName, stockOnly]);
+  }, [colorCount, customPalette, filters, fitMode, gridHeight, gridWidth, image, paletteName, stockOnly]);
 
   useEffect(() => {
     if (!image) return;
@@ -243,11 +256,21 @@ export default function PerlerPattern() {
 
           <section className="space-y-4" aria-labelledby="settings-heading">
             <h2 id="settings-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>configure</h2>
-            <label className="block text-xs text-terminal-gray" htmlFor="board-size">豆板尺寸（格）
-              <select id="board-size" value={board} onChange={(event) => setBoard(Number(event.target.value))} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green">
-                {BOARD_SIZES.map((size) => <option key={size} value={size}>{size} × {size} {size === 14 ? 'mini' : size === 29 ? 'standard' : 'large'}</option>)}
+            <label className="block text-xs text-terminal-gray" htmlFor="board-size">常用豆板尺寸（格）
+              <select id="board-size" value={`${gridWidth}x${gridHeight}`} onChange={(event) => { const [width, height] = event.target.value.split('x').map(Number); setGridWidth(width); setGridHeight(height); }} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green">
+                {BOARD_PRESETS.map(({ width, height, label }) => <option key={`${width}x${height}`} value={`${width}x${height}`}>{label}</option>)}
+                {!BOARD_PRESETS.some(({ width, height }) => width === gridWidth && height === gridHeight) && <option value={`${gridWidth}x${gridHeight}`}>自定义 · {gridWidth} × {gridHeight}</option>}
               </select>
             </label>
+            <fieldset className="grid grid-cols-2 gap-2 text-xs text-terminal-gray">
+              <legend className="mb-1.5">自定义尺寸（1–{MAX_GRID_DIMENSION} 格）</legend>
+              <label htmlFor="grid-width">列数
+                <input id="grid-width" type="number" min="1" max={MAX_GRID_DIMENSION} value={gridWidth} onChange={(event) => setGridWidth(toGridDimension(event.target.value))} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green" />
+              </label>
+              <label htmlFor="grid-height">行数
+                <input id="grid-height" type="number" min="1" max={MAX_GRID_DIMENSION} value={gridHeight} onChange={(event) => setGridHeight(toGridDimension(event.target.value))} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green" />
+              </label>
+            </fieldset>
             <label className="block text-xs text-terminal-gray" htmlFor="color-count">颜色数量
               <select id="color-count" value={colorCount} onChange={(event) => setColorCount(Number(event.target.value) as (typeof COLOR_COUNTS)[number])} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green">
                 {COLOR_COUNTS.map((count) => <option key={count} value={count}>{count} 色</option>)}
