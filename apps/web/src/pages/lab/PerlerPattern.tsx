@@ -45,8 +45,8 @@ function drawPattern(canvas: HTMLCanvasElement, pattern: PatternResult, withNumb
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const showNumbers = withNumbers && cellSize >= 10;
-  ctx.font = `${Math.max(8, Math.floor(cellSize * 0.42))}px monospace`;
+  const showCodes = withNumbers && cellSize >= 16;
+  ctx.font = `${Math.max(8, Math.floor(cellSize * 0.35))}px monospace`;
   pattern.cells.forEach((cell, index) => {
     const x = (index % pattern.width) * cellSize;
     const y = Math.floor(index / pattern.width) * cellSize;
@@ -56,10 +56,10 @@ function drawPattern(canvas: HTMLCanvasElement, pattern: PatternResult, withNumb
       ctx.strokeStyle = 'rgba(11, 15, 16, 0.45)';
       ctx.strokeRect(x, y, cellSize, cellSize);
     }
-    if (showNumbers) {
+    if (showCodes) {
       const lightness = cell.r * 0.299 + cell.g * 0.587 + cell.b * 0.114;
       ctx.fillStyle = lightness > 150 ? '#0b0f10' : '#ffffff';
-      ctx.fillText(String(cell.colorId + 1), x + cellSize / 2, y + cellSize / 2 + 0.5);
+      ctx.fillText(pattern.palette[cell.colorId]?.code ?? String(cell.colorId + 1), x + cellSize / 2, y + cellSize / 2 + 0.5);
     }
   });
 }
