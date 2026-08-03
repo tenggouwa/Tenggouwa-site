@@ -23,7 +23,7 @@ const BOARD_PRESETS = [
   { width: 58, height: 58, label: '58 × 58 · 四板拼接' },
 ] as const;
 const MAX_FILE_SIZE = 12 * 1024 * 1024;
-const MAX_GRID_DIMENSION = 120;
+const MAX_GRID_DIMENSION = 1000;
 
 function toGridDimension(value: string): number {
   return Math.max(1, Math.min(MAX_GRID_DIMENSION, Number.parseInt(value, 10) || 1));
@@ -34,7 +34,7 @@ function rgbCss(color: Rgb): string {
 }
 
 function drawPattern(canvas: HTMLCanvasElement, pattern: PatternResult, withNumbers: boolean) {
-  const cellSize = Math.max(20, Math.min(36, Math.floor(1440 / Math.max(pattern.width, pattern.height))));
+  const cellSize = Math.max(1, Math.min(36, Math.floor(1440 / Math.max(pattern.width, pattern.height))));
   canvas.width = pattern.width * cellSize;
   canvas.height = pattern.height * cellSize;
   const ctx = canvas.getContext('2d');
@@ -44,15 +44,18 @@ function drawPattern(canvas: HTMLCanvasElement, pattern: PatternResult, withNumb
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const showNumbers = withNumbers && cellSize >= 10;
   ctx.font = `${Math.max(8, Math.floor(cellSize * 0.42))}px monospace`;
   pattern.cells.forEach((cell, index) => {
     const x = (index % pattern.width) * cellSize;
     const y = Math.floor(index / pattern.width) * cellSize;
     ctx.fillStyle = rgbCss(cell);
     ctx.fillRect(x, y, cellSize, cellSize);
-    ctx.strokeStyle = 'rgba(11, 15, 16, 0.45)';
-    ctx.strokeRect(x, y, cellSize, cellSize);
-    if (withNumbers) {
+    if (cellSize >= 3) {
+      ctx.strokeStyle = 'rgba(11, 15, 16, 0.45)';
+      ctx.strokeRect(x, y, cellSize, cellSize);
+    }
+    if (showNumbers) {
       const lightness = cell.r * 0.299 + cell.g * 0.587 + cell.b * 0.114;
       ctx.fillStyle = lightness > 150 ? '#0b0f10' : '#ffffff';
       ctx.fillText(String(cell.colorId + 1), x + cellSize / 2, y + cellSize / 2 + 0.5);
