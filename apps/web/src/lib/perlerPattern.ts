@@ -27,6 +27,20 @@ export interface PatternResult {
   counts: number[];
 }
 
+export interface BeadColor extends Rgb { code: string; name: string; brand: string; inStock?: boolean }
+
+export const STARTER_PALETTES: Record<string, BeadColor[]> = {
+  '通用基础': [
+    ['W01', '白', 255, 255, 255], ['K01', '黑', 20, 22, 24], ['R01', '红', 213, 13, 33], ['Y01', '黄', 255, 218, 69],
+    ['B01', '蓝', 15, 84, 192], ['G01', '绿', 53, 199, 91], ['P01', '粉', 253, 111, 180], ['O01', '橙', 253, 131, 36],
+    ['N01', '肤', 255, 209, 186], ['BR1', '棕', 122, 76, 48], ['GY1', '灰', 140, 146, 153], ['C01', '青', 80, 210, 210],
+  ].map(([code, name, r, g, b]) => ({ code: String(code), name: String(name), r: Number(r), g: Number(g), b: Number(b), brand: '通用基础' })),
+};
+
+export function nearestBead(color: Rgb, palette: BeadColor[]): BeadColor {
+  return palette.reduce((best, candidate) => distance(color, candidate) < distance(color, best) ? candidate : best, palette[0]);
+}
+
 const PRESETS: Record<FilterPreset, Pick<FilterOptions, 'brightness' | 'contrast' | 'saturation'>> = {
   original: { brightness: 0, contrast: 0, saturation: 0 },
   vivid: { brightness: 4, contrast: 10, saturation: 24 },
