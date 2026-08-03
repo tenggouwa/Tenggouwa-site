@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import LabFrame from './LabFrame';
 import {
   COLOR_COUNTS,
@@ -46,16 +46,11 @@ function drawPattern(canvas: HTMLCanvasElement, pattern: PatternResult, withNumb
   });
 }
 
-async function readImage(file: File): Promise<HTMLImageElement> {
-  const url = URL.createObjectURL(file);
-  try {
-    const image = new Image();
-    image.src = url;
-    await image.decode();
-    return image;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+async function readImage(url: string): Promise<HTMLImageElement> {
+  const image = new Image();
+  image.src = url;
+  await image.decode();
+  return image;
 }
 
 function IconUpload() {
@@ -72,6 +67,7 @@ export default function PerlerPattern() {
   const fileRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [fileName, setFileName] = useState('');
   const [board, setBoard] = useState<number>(29);
   const [colorCount, setColorCount] = useState<(typeof COLOR_COUNTS)[number]>(48);
@@ -85,6 +81,46 @@ export default function PerlerPattern() {
     if (canvasRef.current && pattern) drawPattern(canvasRef.current, pattern, numbers);
   }, [numbers, pattern]);
 
+  useEffect(() => {
+    if (!imagePreviewUrl) return;
+    return () => URL.revokeObjectURL(imagePreviewUrl);
+  }, [imagePreviewUrl]);
+
+  const createPattern = useCallback(() => {
+    if (!image) return null;
+    const source = document.createElement('canvas');
+    source.width = board;
+    source.height = board;
+    const ctx = source.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('Canvas 不可用');
+    const scale = Math.max(board / image.naturalWidth, board / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    ctx.drawImage(image, (board - width) / 2, (board - height) / 2, width, height);
+    const data = ctx.getImageData(0, 0, board, board).data;
+    const pixels: Rgb[] = [];
+    for (let index = 0; index < data.length; index += 4) {
+      pixels.push(applyFilters({ r: data[index], g: data[index + 1], b: data[index + 2] }, filters));
+    }
+    return makePattern(pixels, board, board, colorCount);
+  }, [board, colorCount, filters, image]);
+
+  useEffect(() => {
+    if (!image) return;
+    setProcessing(true);
+    const id = window.setTimeout(() => {
+      try {
+        setPattern(createPattern());
+        setError('');
+      } catch {
+        setError('生成预览失败。请刷新页面后换一张较小的图片重试。');
+      } finally {
+        setProcessing(false);
+      }
+    }, 180);
+    return () => window.clearTimeout(id);
+  }, [createPattern, image]);
+
   const selectFile = async (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -95,50 +131,23 @@ export default function PerlerPattern() {
       setError('图片请控制在 12MB 内；图纸只会在本机浏览器生成。');
       return;
     }
+    let previewUrl = '';
     try {
-      setImage(await readImage(file));
+      previewUrl = URL.createObjectURL(file);
+      const uploadedImage = await readImage(previewUrl);
+      setImage(uploadedImage);
+      setImagePreviewUrl(previewUrl);
       setFileName(file.name);
       setPattern(null);
       setError('');
     } catch {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setError('图片无法读取，请换一张图片后重试。');
     }
   };
 
   const choosePreset = (preset: FilterPreset) => {
     setFilters({ preset, ...presetOptions(preset) });
-  };
-
-  const generate = () => {
-    if (!image) {
-      setError('先上传一张图片，再生成拼豆图纸。');
-      return;
-    }
-    setProcessing(true);
-    setError('');
-    window.setTimeout(() => {
-      try {
-        const source = document.createElement('canvas');
-        source.width = board;
-        source.height = board;
-        const ctx = source.getContext('2d', { willReadFrequently: true });
-        if (!ctx) throw new Error('Canvas 不可用');
-        const scale = Math.max(board / image.naturalWidth, board / image.naturalHeight);
-        const width = image.naturalWidth * scale;
-        const height = image.naturalHeight * scale;
-        ctx.drawImage(image, (board - width) / 2, (board - height) / 2, width, height);
-        const data = ctx.getImageData(0, 0, board, board).data;
-        const pixels: Rgb[] = [];
-        for (let index = 0; index < data.length; index += 4) {
-          pixels.push(applyFilters({ r: data[index], g: data[index + 1], b: data[index + 2] }, filters));
-        }
-        setPattern(makePattern(pixels, board, board, colorCount));
-      } catch {
-        setError('生成失败。请刷新页面后换一张较小的图片重试。');
-      } finally {
-        setProcessing(false);
-      }
-    }, 0);
   };
 
   const download = () => {
@@ -168,6 +177,14 @@ export default function PerlerPattern() {
               <span className="mt-3 block text-sm text-terminal-gray">{fileName || '点击或拖入一张图片'}</span>
               <span className="mt-1 block text-xs text-terminal-gray/60">JPG / PNG / WebP · 最大 12MB · 不会上传至服务器</span>
             </button>
+            {imagePreviewUrl && (
+              <figure className="overflow-hidden rounded border border-terminal-line bg-terminal-bg/60">
+                <figcaption className="border-b border-terminal-line/60 px-3 py-2 text-xs text-terminal-cyan">
+                  <span className="text-terminal-pink">$ </span>preview ./original
+                </figcaption>
+                <img src={imagePreviewUrl} alt={`原图预览：${fileName}`} className="block aspect-video w-full object-contain" />
+              </figure>
+            )}
             {error && <p className="text-sm text-terminal-pink" role="alert">{error}</p>}
           </section>
 
@@ -204,10 +221,8 @@ export default function PerlerPattern() {
         </section>
 
         <div className="flex flex-wrap items-center gap-3 border-t border-terminal-line/60 pt-5">
-          <button type="button" disabled={processing} onClick={generate} className="min-h-11 rounded border border-terminal-pink bg-terminal-pink/15 px-4 text-sm text-terminal-pink transition-colors hover:bg-terminal-pink/25 disabled:cursor-not-allowed disabled:opacity-50">
-            {processing ? '正在量化…' : '生成拼豆图纸'}
-          </button>
           {pattern && <button type="button" onClick={download} className="min-h-11 rounded border border-terminal-green/70 px-4 text-sm text-terminal-green transition-colors hover:bg-terminal-green/10">下载 PNG 图纸</button>}
+          <span className="text-xs text-terminal-gray/60" aria-live="polite">{processing ? '正在更新预览…' : image ? '调整参数后会自动更新预览。' : '上传图片后会自动生成预览。'}</span>
           <span className="text-xs text-terminal-gray/60">图片会按中心裁切填满豆板；成图的数字对应下方色卡编号。</span>
         </div>
 
