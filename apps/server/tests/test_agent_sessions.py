@@ -71,9 +71,35 @@ class _Session:
     async def execute(self, _q):
         return _Result(self._rows)
 
+    def add(self, row):
+        self.added.append(row)
+
+    async def get(self, _model, _sid):
+        return self.source
+
+    async def flush(self):
+        return None
+
 
 def _msg(seq, role, content, tool_calls=None):
     return SimpleNamespace(seq=seq, role=role, content=content, tool_calls=tool_calls, tool_call_id=None)
+
+
+async def test_fork_session_copies_context_but_not_pending_approval():
+    rows = [_msg(1, "user", "q"), _msg(2, "assistant", "a")]
+    session = _Session(rows)
+    session.added = []
+    session.source = SimpleNamespace(
+        owner="alice", title="原会话", summary="旧摘要", summarized_upto_seq=1, pending={"danger": True}
+    )
+    fork = await AgentRepository(session).fork_session("old")
+    assert fork.owner == "alice" and fork.title == "原会话（分叉）"
+    assert fork.summary == "旧摘要" and fork.summarized_upto_seq == 1 and fork.pending is None
+    copies = session.added[1:]
+    assert [(r.session_id, r.seq, r.role, r.content) for r in copies] == [
+        (fork.id, 1, "user", "q"),
+        (fork.id, 2, "assistant", "a"),
+    ]
 
 
 async def test_finish_run_persists_provider_cache_usage_keys():

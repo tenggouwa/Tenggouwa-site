@@ -1418,6 +1418,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent/sessions/{sid}/fork": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fork Session
+         * @description 从该 owner 的会话分叉上下文；未决审批不会复制到新分支。
+         */
+        post: operations["fork_session_api_agent_sessions__sid__fork_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/memories": {
         parameters: {
             query?: never;
@@ -6725,6 +6745,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fork_session_api_agent_sessions__sid__fork_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_AgentTranscript_"];
                 };
             };
             /** @description Validation Error */

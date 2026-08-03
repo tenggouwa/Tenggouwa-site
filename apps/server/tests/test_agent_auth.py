@@ -53,6 +53,7 @@ def _stub_epoch(monkeypatch, current: int = 0) -> None:
 
 def test_private_channel_requires_bearer():
     assert _post_chat().status_code == 401
+    assert _client().post("/api/agent/sessions/unknown/fork").status_code == 401
 
 
 def test_private_channel_rejects_bad_token():
