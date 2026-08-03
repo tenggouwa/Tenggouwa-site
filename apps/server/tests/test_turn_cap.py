@@ -1,6 +1,7 @@
 """本轮收敛闸 _turn_cap：检索归一化去重 + 每轮硬上限 + 子代理上限（纯函数，不联网不碰 DB）。"""
 
 from modules.agent.service import (
+    MAX_EXTERNAL_RESEARCH_PER_TURN,
     MAX_SEARCHES_PER_TURN,
     MAX_SUBAGENTS_PER_TURN,
     _norm_query,
@@ -10,7 +11,7 @@ from modules.skills.subagent import SUBAGENT_SKILL
 
 
 def _fresh() -> dict:
-    return {"subagents": 0, "searched": set(), "loaded": set()}
+    return {"subagents": 0, "searched": set(), "loaded": set(), "external_research": 0}
 
 
 def test_norm_query_collapses_punct_space_case():
@@ -37,9 +38,9 @@ def test_near_duplicate_query_blocked():
 def test_hard_cap_after_max_distinct_searches():
     state = _fresh()
     for i in range(MAX_SEARCHES_PER_TURN):
-        assert _turn_cap("web_search", {"query": f"实质不同的问题{i}"}, state) is None
+        assert _turn_cap("kb_search", {"query": f"实质不同的问题{i}"}, state) is None
     # 第 MAX+1 个「实质不同」的检索也被拦——挡归一化抓不住的换角度重搜
-    over = _turn_cap("web_search", {"query": "又一个不同的问题"}, state)
+    over = _turn_cap("kb_search", {"query": "又一个不同的问题"}, state)
     assert over is not None and "上限" in over
     assert len(state["searched"]) == MAX_SEARCHES_PER_TURN
 
@@ -48,6 +49,14 @@ def test_empty_query_not_counted():
     state = _fresh()
     assert _turn_cap("web_search", {"query": "   "}, state) is None
     assert len(state["searched"]) == 0
+
+
+def test_external_research_has_its_own_cap():
+    state = _fresh()
+    for i in range(MAX_EXTERNAL_RESEARCH_PER_TURN):
+        name = "web_search" if i % 2 == 0 else "web_fetch"
+        assert _turn_cap(name, {"query": str(i), "url": f"https://example.com/{i}"}, state) is None
+    assert "额度" in _turn_cap("web_fetch", {"url": "https://example.com/overflow"}, state)
 
 
 def test_subagent_cap():

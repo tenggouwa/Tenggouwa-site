@@ -9,6 +9,40 @@ from types import SimpleNamespace
 from agent_harness import assert_no_leak, assert_paired, of_type, run_agent, tokens, tool_call
 
 
+async def test_external_research_cap_trims_tool_calls_and_forces_answer(monkeypatch):
+    """真模型偶尔一口气排出很多搜抓；超额调用不能落轨迹，也不能让它继续绕路。"""
+
+    def tool_schema(name: str) -> dict:
+        return {"type": "function", "function": {"name": name}}
+
+    class _LLM:
+        def __init__(self):
+            self.tool_sets: list[set[str]] = []
+
+        async def stream_step(self, _messages, *, tools=None, **_kw):
+            names = {tool["function"]["name"] for tool in tools or []}
+            self.tool_sets.append(names)
+            if "web_search" in names:
+                yield {
+                    "type": "tool_calls",
+                    "tool_calls": [tool_call("web_search", f'{{"query":"q{i}"}}', tid=f"s{i}") for i in range(6)],
+                }
+            else:
+                yield {"type": "content", "delta": "基于已找到的来源，这就是结论。"}
+
+    llm = _LLM()
+    events, repo = await run_agent(
+        monkeypatch,
+        [],
+        llm=llm,
+        tools=[tool_schema("web_search"), tool_schema("web_fetch"), tool_schema("kb_search")],
+    )
+    assert [tool["name"] for tool in of_type(events, "tool")] == ["web_search"] * 4
+    assert "web_search" not in llm.tool_sets[1] and "web_fetch" not in llm.tool_sets[1]
+    assert tokens(events).endswith("基于已找到的来源，这就是结论。")
+    assert_paired(repo.rows)
+
+
 async def test_plain_answer_no_tools(monkeypatch):
     """无工具调用：正文即最终答案，落库一条 user + 一条 assistant。"""
     events, repo = await run_agent(monkeypatch, [[{"type": "content", "delta": "你好世界"}]])

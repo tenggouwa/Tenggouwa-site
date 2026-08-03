@@ -93,6 +93,8 @@ MAX_SUBAGENTS_PER_TURN = 2  # 每个用户轮最多派几个子代理，防主�
 MAX_PARALLEL_TOOLS = 6  # 同一批 parallel-safe 工具的并发上限（对齐 Codex max_threads=6）
 _SEARCH_SKILLS = {"web_search", "kb_search"}  # 按 query 去重的检索类工具，挡反复换措辞搜同一件事
 MAX_SEARCHES_PER_TURN = 6  # 每轮不同检索的硬上限——归一化去重挡不住的换角度重搜，靠它兜底（实测能搜 13 次）
+_EXTERNAL_RESEARCH_SKILLS = {"web_search", "web_fetch"}
+MAX_EXTERNAL_RESEARCH_PER_TURN = 4  # 搜→抓一条主证据 + 少量交叉验证，之后必须收口
 
 LEAK_TOKEN = "｜"  # ｜ DeepSeek tool-call 特殊 token 分隔符；正常文本/代码不会出现，用作泄漏起点
 
@@ -168,21 +170,51 @@ def _is_direct_kb_question(q: str) -> bool:
     )
 
 
+def _trim_external_research_calls(tool_calls: list[dict], state: dict) -> list[dict]:
+    """保留本轮尚可执行的网页研究调用，避免模型一口气展开多轮搜抓。
+
+    不能只在执行层返回“已达上限”：那样多余 tool_call 已落库，轨迹仍会被计为绕路。
+    因此在把 assistant/tool_call 写入会话前裁掉超额的 web_search/web_fetch，下一轮再移除其 schema。
+    """
+    remaining = MAX_EXTERNAL_RESEARCH_PER_TURN - state.get("external_research", 0)
+    if remaining <= 0:
+        return [tc for tc in tool_calls if _tc_name(tc) not in _EXTERNAL_RESEARCH_SKILLS]
+    kept: list[dict] = []
+    for tc in tool_calls:
+        if _tc_name(tc) in _EXTERNAL_RESEARCH_SKILLS:
+            if remaining <= 0:
+                continue
+            remaining -= 1
+        kept.append(tc)
+    return kept
+
+
+def _without_exhausted_external_tools(tools: list[dict], state: dict) -> list[dict]:
+    """网页研究额度耗尽后不再把对应 schema 给模型，强制它基于已有证据回答。"""
+    if state.get("external_research", 0) < MAX_EXTERNAL_RESEARCH_PER_TURN:
+        return tools
+    return [tool for tool in tools if tool.get("function", {}).get("name") not in _EXTERNAL_RESEARCH_SKILLS]
+
+
 def _turn_cap(name: str, args: dict, state: dict) -> str | None:
     """本轮收敛闸：返回非 None 表示这次工具调用被拦（子代理超限 / 检索重复或超量），用返回文案当结果、不真执行。"""
     if name == SUBAGENT_SKILL and state["subagents"] >= MAX_SUBAGENTS_PER_TURN:
         return f"（本轮子代理已达上限 {MAX_SUBAGENTS_PER_TURN} 个，别再派了，用现有信息直接作答。）"
     if name == SUBAGENT_SKILL:
         state["subagents"] += 1  # 计数后穿过下面的检索/浏览器判定（都不匹配）到末尾 return None
+    if name in _EXTERNAL_RESEARCH_SKILLS:
+        used = state.setdefault("external_research", 0)
+        if used >= MAX_EXTERNAL_RESEARCH_PER_TURN:
+            return "（网页研究额度已用完，请基于已拿到的搜索结果和正文直接作答，不要继续搜抓。）"
+        state["external_research"] = used + 1
     if name in _SEARCH_SKILLS:
         q = _norm_query(str(args.get("query", "")))
-        if not q:
-            return None
-        if q in state["searched"]:
+        if q and q in state["searched"]:
             return "（这个查询本轮已经搜过了，别重复搜同一件事；用已有结果，或换一个实质不同的角度。）"
-        if len(state["searched"]) >= MAX_SEARCHES_PER_TURN:
+        if q and len(state["searched"]) >= MAX_SEARCHES_PER_TURN:
             return f"（本轮检索已达上限 {MAX_SEARCHES_PER_TURN} 次，别再搜了，用已经拿到的结果作答。）"
-        state["searched"].add(q)
+        if q:
+            state["searched"].add(q)
     if name == "browser" and str(args.get("action", "")).strip() == "navigate":
         # 同一 URL 本轮别反复 navigate：浏览器连续没响应通常是 Pi 网络在抖，重试同一页只是烧 token。
         url = str(args.get("url", "")).strip().lower()
@@ -271,6 +303,8 @@ class AgentService:
         turn_state: dict = {
             "subagents": 0,
             "searched": set(),
+            "external_research": 0,
+            "external_research_closed": False,
             "loaded": set(),
             "custom": [],
             "direct_kb_question": _is_direct_kb_question(q),
@@ -339,6 +373,8 @@ class AgentService:
                     privileged=privileged, loaded=turn_state["loaded"], custom=turn_state["custom"]
                 )
             )
+            if tools is not None:
+                tools = _without_exhausted_external_tools(tools, turn_state)
             async for ev in chat_llm.stream_step(messages, tools=tools, model=model):
                 if ev["type"] == "reasoning":  # 深度思考的思维链：实时转发给前端单独展示，不进正文/不落库
                     yield {"type": "reasoning", "delta": ev["delta"]}
@@ -374,6 +410,12 @@ class AgentService:
                 answered = True
                 break
 
+            tool_calls = _trim_external_research_calls(tool_calls, turn_state)
+            if not tool_calls:
+                # 模型只提出了被网页研究预算裁掉的调用；不给空 assistant/tool pair，直接要求收口。
+                messages.append({"role": "system", "content": "网页研究额度已用完，请基于现有证据直接作答。"})
+                continue
+
             # C2 权限闸（仅私有通道、非 auto 模式）：这批含需批准的工具（write 原生 / 非 auto MCP）→ 暂停，
             # 存 pending（不落 assistant 以免孤儿 tool_call），发 approval 事件收尾，等用户批/拒后带 approvals 续跑。
             # auto 模式：用户在沙箱里选了自动执行 → 不暂停、直接跑（沙箱 bwrap 是安全边界）。
@@ -404,6 +446,13 @@ class AgentService:
             ):
                 yield ev
             seq += len(tool_calls)
+
+            if (
+                turn_state["external_research"] >= MAX_EXTERNAL_RESEARCH_PER_TURN
+                and not turn_state["external_research_closed"]
+            ):
+                messages.append({"role": "system", "content": "网页研究额度已用完，请基于现有搜索结果和正文直接作答。"})
+                turn_state["external_research_closed"] = True
 
             if asked:  # 抛完选择题即停，等用户点选（此前已把所有 tool_call 配上结果）
                 answered = True
