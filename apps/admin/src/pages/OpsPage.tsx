@@ -119,6 +119,19 @@ export default function OpsPage() {
         </Card>
       </div>
 
+      <Card title={`Agent 运行指标（近 ${data.agent_metrics.window_hours} 小时）`}>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Statistic title="运行 / 完成" value={data.agent_metrics.total_runs} suffix={`/ ${data.agent_metrics.completed_runs}`} />
+          <Statistic title="平均耗时" value={data.agent_metrics.avg_duration_ms} suffix="ms" />
+          <Statistic title="工具调用" value={data.agent_metrics.tool_calls} />
+          <Statistic title="待审批" value={data.agent_metrics.awaiting_approval_runs} />
+          <Statistic title="Prompt / Completion" value={data.agent_metrics.prompt_tokens} suffix={`/ ${data.agent_metrics.completion_tokens}`} />
+          <Statistic title="Cache 命中 / Miss" value={data.agent_metrics.cache_hit_tokens} suffix={`/ ${data.agent_metrics.cache_miss_tokens}`} />
+          <Statistic title="网页研究调用" value={data.agent_metrics.external_research_calls} />
+          <Statistic title="网页研究额度耗尽" value={data.agent_metrics.external_research_capped_runs} />
+        </div>
+      </Card>
+
       <Card
         title="Nightly Live Smoke"
         extra={<StateTag ok={data.live_smoke.status === 'success'}>{data.live_smoke.status === 'success' ? '通过' : '需要关注'}</StateTag>}

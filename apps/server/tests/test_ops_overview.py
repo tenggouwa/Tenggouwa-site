@@ -24,6 +24,24 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
     )
     monkeypatch.setattr(ops.config, "get", lambda _key, _default=None: "prod")
 
+    async def agent_metrics(_session):
+        return ops.OpsAgentMetrics(
+            window_hours=24,
+            total_runs=12,
+            completed_runs=10,
+            awaiting_approval_runs=1,
+            avg_duration_ms=850,
+            tool_calls=18,
+            prompt_tokens=1200,
+            completion_tokens=500,
+            cache_hit_tokens=900,
+            cache_miss_tokens=300,
+            external_research_calls=4,
+            external_research_capped_runs=1,
+        )
+
+    monkeypatch.setattr(ops.ops_service, "_agent_metrics", agent_metrics)
+
     async def live_smoke_history():
         return [
             OpsLiveSmoke(
@@ -44,6 +62,20 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
         "mail_scheduler": {"running": True, "jobs": [{"id": "mail", "next_run": None}]},
         "mcp": {"configured": 2, "connected": ["tools"], "tool_count": 1},
         "pi": {"online": True, "last_seen": "2026-07-28T00:00:00+00:00", "age_seconds": 12.5},
+        "agent_metrics": {
+            "window_hours": 24,
+            "total_runs": 12,
+            "completed_runs": 10,
+            "awaiting_approval_runs": 1,
+            "avg_duration_ms": 850,
+            "tool_calls": 18,
+            "prompt_tokens": 1200,
+            "completion_tokens": 500,
+            "cache_hit_tokens": 900,
+            "cache_miss_tokens": 300,
+            "external_research_calls": 4,
+            "external_research_capped_runs": 1,
+        },
         "live_smoke": {
             "status": "failure",
             "completed_at": "2026-07-30T00:00:00+00:00",

@@ -8,10 +8,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agent import scheduler as agent_scheduler
+from ..agent.repository import AgentRepository
 from ..mail import scheduler as mail_scheduler
 from ..mcp.manager import mcp_manager
 from ..pi.service import pi_service
-from .schema import OpsLiveSmoke, OpsMcp, OpsOverview, OpsPi, OpsScheduler
+from .schema import OpsAgentMetrics, OpsLiveSmoke, OpsMcp, OpsOverview, OpsPi, OpsScheduler
 
 _LIVE_SMOKE_URL = (
     "https://api.github.com/repos/tenggouwa/Tenggouwa-site/actions/workflows/live-smoke.yml/runs?per_page=30"
@@ -21,6 +22,10 @@ _live_smoke_cache: tuple[float, list[OpsLiveSmoke]] | None = None
 
 
 class OpsService:
+    @staticmethod
+    async def _agent_metrics(session: AsyncSession) -> OpsAgentMetrics:
+        return OpsAgentMetrics(**await AgentRepository(session).ops_metrics())
+
     @staticmethod
     def _live_smoke(run: dict) -> OpsLiveSmoke:
         status = str(run.get("conclusion") or run.get("status") or "unknown")
@@ -54,6 +59,7 @@ class OpsService:
     async def overview(self, session: AsyncSession) -> OpsOverview:
         revision = await session.scalar(text("select version_num from alembic_version limit 1"))
         pi = await pi_service.status(session)
+        agent_metrics = await self._agent_metrics(session)
         mcp = mcp_manager.status()
         history = await self._live_smoke_history()
         latest = history[0] if history else OpsLiveSmoke(status="unknown", summary="暂时无法读取夜间冒烟状态。")
@@ -68,6 +74,7 @@ class OpsService:
                 tool_count=len(mcp["tools"]),
             ),
             pi=OpsPi(online=pi.online, last_seen=pi.last_seen, age_seconds=pi.age_seconds),
+            agent_metrics=agent_metrics,
             live_smoke=latest,
             live_smoke_history=history,
         )
