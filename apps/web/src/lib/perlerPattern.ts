@@ -19,15 +19,22 @@ export interface PatternCell extends Rgb {
   colorId: number;
 }
 
+export interface PatternColor extends Rgb {
+  code: string;
+  name: string;
+  brand: string;
+  inStock?: boolean;
+}
+
 export interface PatternResult {
   width: number;
   height: number;
   cells: PatternCell[];
-  palette: Rgb[];
+  palette: PatternColor[];
   counts: number[];
 }
 
-export interface BeadColor extends Rgb { code: string; name: string; brand: string; inStock?: boolean }
+export type BeadColor = PatternColor;
 
 export const STARTER_PALETTES: Record<string, BeadColor[]> = {
   '通用基础': [
@@ -39,6 +46,27 @@ export const STARTER_PALETTES: Record<string, BeadColor[]> = {
 
 export function nearestBead(color: Rgb, palette: BeadColor[]): BeadColor {
   return palette.reduce((best, candidate) => distance(color, candidate) < distance(color, best) ? candidate : best, palette[0]);
+}
+
+/** Remap a generated design to a purchasable palette without leaving stale colour IDs. */
+export function mapPatternToBeads(pattern: PatternResult, available: BeadColor[]): PatternResult {
+  if (!available.length) return pattern;
+  const palette: BeadColor[] = [];
+  const cells = pattern.cells.map((cell) => {
+    const color = nearestBead(cell, available);
+    let colorId = palette.findIndex((candidate) => candidate.code === color.code);
+    if (colorId < 0) {
+      colorId = palette.length;
+      palette.push(color);
+    }
+    return { r: color.r, g: color.g, b: color.b, colorId };
+  });
+  return {
+    ...pattern,
+    palette,
+    cells,
+    counts: palette.map((_, colorId) => cells.filter((cell) => cell.colorId === colorId).length),
+  };
 }
 
 const PRESETS: Record<FilterPreset, Pick<FilterOptions, 'brightness' | 'contrast' | 'saturation'>> = {
@@ -136,7 +164,7 @@ export function makePattern(pixels: Rgb[], width: number, height: number, reques
   return {
     width,
     height,
-    palette: ordered.map(({ color }) => color),
+    palette: ordered.map(({ color }, index) => ({ ...color, code: `Q${String(index + 1).padStart(3, '0')}`, name: `量化色 ${index + 1}`, brand: '智能量化' })),
     counts: ordered.map(({ count }) => count),
     cells: cells.map((cell) => ({ ...cell, colorId: remap.get(cell.colorId) ?? cell.colorId })),
   };
