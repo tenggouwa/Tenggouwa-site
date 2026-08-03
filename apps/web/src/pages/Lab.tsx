@@ -10,6 +10,13 @@ interface Toy {
 
 const TOYS: Toy[] = [
   {
+    slug: 'perler',
+    title: 'perler.pattern',
+    desc: '图片转拼豆图纸。滤镜、色数、豆板格数与编号色卡都在浏览器完成。',
+    tag: 'maker',
+    accent: 'pink',
+  },
+  {
     slug: 'matrix',
     title: 'matrix-rain',
     desc: '经典数字雨。半角假名 + ASCII，自带 bloom。',
