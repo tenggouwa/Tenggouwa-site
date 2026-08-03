@@ -83,6 +83,8 @@ function IconUpload() {
 export default function PerlerPattern() {
   const fileRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pinchDistanceRef = useRef<number | null>(null);
+  const pinchZoomRef = useRef(100);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
   const [fileName, setFileName] = useState('');
@@ -208,6 +210,24 @@ export default function PerlerPattern() {
     setPattern(next);
   };
 
+  const pinchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2) return;
+    const first = event.touches.item(0);
+    const second = event.touches.item(1);
+    if (!first || !second) return;
+    pinchDistanceRef.current = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+    pinchZoomRef.current = zoom;
+  };
+
+  const pinchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2 || !pinchDistanceRef.current) return;
+    const first = event.touches.item(0);
+    const second = event.touches.item(1);
+    if (!first || !second) return;
+    const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+    setZoom(Math.max(60, Math.min(240, Math.round(pinchZoomRef.current * distance / pinchDistanceRef.current))));
+  };
+
   const exportCsv = () => {
     if (!pattern) return;
     const rows = ['编号,色号,色名,品牌,色值,颗数,建议备量'];
@@ -328,13 +348,14 @@ export default function PerlerPattern() {
           <section className="grid gap-6 border-t border-terminal-line/60 pt-6 lg:grid-cols-[minmax(0,1fr)_260px]" aria-labelledby="result-heading">
             <div className="min-w-0">
               <div className="mb-3 flex items-baseline justify-between gap-3"><h2 id="result-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>print ./pattern.png</h2><span className="text-xs text-terminal-gray/60">{pattern.width} × {pattern.height} · 已用 {pattern.palette.length} 色</span></div>
-              <div className="overflow-auto rounded border border-terminal-line bg-terminal-bg p-3">
-                <canvas ref={canvasRef} onPointerDown={editCell} className="mx-auto block max-w-none cursor-crosshair" style={{ width: `${zoom}%` }} aria-label={`${pattern.width} × ${pattern.height} 拼豆图纸，点击格子改色`} />
+              <div onTouchStart={pinchStart} onTouchMove={pinchMove} onTouchEnd={() => { pinchDistanceRef.current = null; }} className="overflow-auto rounded border border-terminal-line bg-terminal-bg p-3 touch-none">
+                <canvas ref={canvasRef} onDoubleClick={() => setZoom((current) => current === 100 ? 180 : 100)} onPointerDown={editCell} className="mx-auto block max-w-none cursor-crosshair" style={{ width: `${zoom}%` }} aria-label={`${pattern.width} × ${pattern.height} 拼豆图纸。双击或双指缩放，点击格子改色`} />
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-terminal-gray">
                 <button type="button" disabled={!history.length} onClick={() => { const previous = history.at(-1); if (!previous || !pattern) return; setHistory((items) => items.slice(0, -1)); setFuture((items) => [pattern, ...items]); setPattern(previous); }} className="min-h-9 rounded border border-terminal-line px-2 disabled:opacity-40">撤销</button>
                 <button type="button" disabled={!future.length} onClick={() => { const next = future[0]; if (!next || !pattern) return; setFuture((items) => items.slice(1)); setHistory((items) => [...items, pattern]); setPattern(next); }} className="min-h-9 rounded border border-terminal-line px-2 disabled:opacity-40">重做</button>
-                <label>缩放 <input type="range" min="60" max="180" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="accent-terminal-green" /></label>
+                <label>缩放 <input type="range" min="60" max="240" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="accent-terminal-green" /></label>
+                <span className="text-terminal-gray/60">双击放大 / 还原；触屏可双指缩放</span>
               </div>
             </div>
             <aside className="min-w-0" aria-label="颜色编号色卡">
