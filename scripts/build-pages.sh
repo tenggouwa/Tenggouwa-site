@@ -133,4 +133,15 @@ open(p, 'w').write(s)
 # 防止 GitHub Pages 用 Jekyll 处理（会过滤 _ 开头的目录）
 touch "$DIST/.nojekyll"
 
+# Cloudflare Pages 不会把 404.html 自动作为 SPA fallback，并会保留 404 状态码。
+# 仅 canonical 根域产物写 Pages 的 rewrite 规则；子应用必须优先回到自己的入口。
+if [ "$TARGET" = "root" ]; then
+  cat > "$DIST/_redirects" <<EOF
+/admin/* /admin/index.html 200
+/casino/* /casino/index.html 200
+/agent/* /agent/index.html 200
+/* /index.html 200
+EOF
+fi
+
 echo "==> 完成。产物在 $DIST/"
