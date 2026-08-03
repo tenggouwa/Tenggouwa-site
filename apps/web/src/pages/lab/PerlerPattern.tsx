@@ -4,8 +4,10 @@ import {
   COLOR_COUNTS,
   applyFilters,
   makePattern,
+  nearestBead,
   presetOptions,
   rgbHex,
+  STARTER_PALETTES,
   type FilterOptions,
   type FilterPreset,
   type PatternResult,
@@ -74,6 +76,13 @@ export default function PerlerPattern() {
   const [filters, setFilters] = useState<FilterOptions>({ preset: 'original', ...presetOptions('original') });
   const [numbers, setNumbers] = useState(true);
   const [pattern, setPattern] = useState<PatternResult | null>(null);
+  const [history, setHistory] = useState<PatternResult[]>([]);
+  const [future, setFuture] = useState<PatternResult[]>([]);
+  const [selectedColor, setSelectedColor] = useState(0);
+  const [zoom, setZoom] = useState(100);
+  const [paletteName, setPaletteName] = useState('通用基础');
+  const [customPalette, setCustomPalette] = useState<typeof STARTER_PALETTES['通用基础']>([]);
+  const [stockOnly, setStockOnly] = useState(false);
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState(false);
 
@@ -102,8 +111,17 @@ export default function PerlerPattern() {
     for (let index = 0; index < data.length; index += 4) {
       pixels.push(applyFilters({ r: data[index], g: data[index + 1], b: data[index + 2] }, filters));
     }
-    return makePattern(pixels, board, board, colorCount);
-  }, [board, colorCount, filters, image]);
+    const draft = makePattern(pixels, board, board, colorCount);
+    const available = (customPalette.length ? customPalette : STARTER_PALETTES[paletteName]).filter((color) => !stockOnly || color.inStock !== false);
+    if (!available?.length) return draft;
+    const palette = draft.palette.map((color) => nearestBead(color, available));
+    const cells = draft.cells.map((cell) => {
+      const matched = nearestBead(cell, available);
+      return { ...matched, colorId: palette.findIndex((color) => color.code === matched.code) };
+    });
+    const used = palette.filter((color, index) => palette.findIndex((candidate) => candidate.code === color.code) === index);
+    return { ...draft, palette: used, cells: cells.map((cell) => ({ ...cell, colorId: used.findIndex((color) => color.code === palette[cell.colorId]?.code) })), counts: used.map((_, i) => cells.filter((cell) => cell.colorId === i).length) };
+  }, [board, colorCount, customPalette, filters, image, paletteName, stockOnly]);
 
   useEffect(() => {
     if (!image) return;
@@ -159,6 +177,40 @@ export default function PerlerPattern() {
     link.click();
   };
 
+  const editCell = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!pattern || !canvasRef.current || selectedColor >= pattern.palette.length) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const column = Math.floor(((event.clientX - rect.left) / rect.width) * pattern.width);
+    const row = Math.floor(((event.clientY - rect.top) / rect.height) * pattern.height);
+    const index = row * pattern.width + column;
+    if (index < 0 || index >= pattern.cells.length || pattern.cells[index].colorId === selectedColor) return;
+    const next = structuredClone(pattern);
+    next.cells[index] = { ...next.palette[selectedColor], colorId: selectedColor };
+    next.counts = next.palette.map((_, colorId) => next.cells.filter((cell) => cell.colorId === colorId).length);
+    setHistory((items) => [...items.slice(-49), pattern]);
+    setFuture([]);
+    setPattern(next);
+  };
+
+  const exportCsv = () => {
+    if (!pattern) return;
+    const rows = ['编号,色值,颗数,建议备量'];
+    pattern.palette.forEach((color, index) => rows.push(`${index + 1},${rgbHex(color)},${pattern.counts[index]},${Math.ceil(pattern.counts[index] * 1.05)}`));
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([`\uFEFF${rows.join('\n')}`], { type: 'text/csv;charset=utf-8' }));
+    link.download = `${fileName.replace(/\.[^.]+$/, '') || 'perler'}-shopping-list.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const printPdf = () => {
+    if (!canvasRef.current) return;
+    const popup = window.open('', '_blank', 'noopener,noreferrer');
+    if (!popup) return;
+    popup.document.write(`<img alt="拼豆图纸" style="max-width:100%" src="${canvasRef.current.toDataURL('image/png')}" onload="print()">`);
+    popup.document.close();
+  };
+
   return (
     <LabFrame slug="perler" title="perler.pattern" accent="pink" desc="上传图片，量化成可照着拼的格子图；处理全程只在你的浏览器内完成。">
       <div className="p-4 sm:p-6 space-y-6">
@@ -200,7 +252,17 @@ export default function PerlerPattern() {
                 {COLOR_COUNTS.map((count) => <option key={count} value={count}>{count} 色</option>)}
               </select>
             </label>
+            <label className="block text-xs text-terminal-gray" htmlFor="palette-name">色板
+              <select id="palette-name" value={paletteName} onChange={(event) => { setPaletteName(event.target.value); setCustomPalette([]); }} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray">
+                {Object.keys(STARTER_PALETTES).map((name) => <option key={name}>{name}</option>)}
+                {customPalette.length > 0 && <option value="自定义">自定义导入</option>}
+              </select>
+            </label>
+            <label className="block text-xs text-terminal-gray">导入色板 JSON
+              <input type="file" accept="application/json" className="mt-1.5 block w-full text-xs text-terminal-gray" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; void file.text().then((text) => { const parsed = JSON.parse(text) as Array<{ code: string; name?: string; hex: string; inStock?: boolean }>; setCustomPalette(parsed.map((item) => ({ code: item.code, name: item.name ?? item.code, brand: '自定义', inStock: item.inStock, r: Number.parseInt(item.hex.slice(1, 3), 16), g: Number.parseInt(item.hex.slice(3, 5), 16), b: Number.parseInt(item.hex.slice(5, 7), 16) }))); setPaletteName('自定义'); }).catch(() => setError('色板 JSON 格式无效。')); }} />
+            </label>
             <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-terminal-gray"><input checked={numbers} onChange={(event) => setNumbers(event.target.checked)} type="checkbox" className="accent-terminal-green" /> 每格印颜色编号</label>
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-terminal-gray"><input checked={stockOnly} onChange={(event) => setStockOnly(event.target.checked)} type="checkbox" className="accent-terminal-green" /> 仅使用库存色（导入色板可扩展库存字段）</label>
           </section>
         </div>
 
@@ -222,6 +284,8 @@ export default function PerlerPattern() {
 
         <div className="flex flex-wrap items-center gap-3 border-t border-terminal-line/60 pt-5">
           {pattern && <button type="button" onClick={download} className="min-h-11 rounded border border-terminal-green/70 px-4 text-sm text-terminal-green transition-colors hover:bg-terminal-green/10">下载 PNG 图纸</button>}
+          {pattern && <button type="button" onClick={exportCsv} className="min-h-11 rounded border border-terminal-cyan/70 px-4 text-sm text-terminal-cyan transition-colors hover:bg-terminal-cyan/10">导出 CSV 清单</button>}
+          {pattern && <button type="button" onClick={printPdf} className="min-h-11 rounded border border-terminal-yellow/70 px-4 text-sm text-terminal-yellow transition-colors hover:bg-terminal-yellow/10">打印 / 存为 PDF</button>}
           <span className="text-xs text-terminal-gray/60" aria-live="polite">{processing ? '正在更新预览…' : image ? '调整参数后会自动更新预览。' : '上传图片后会自动生成预览。'}</span>
           <span className="text-xs text-terminal-gray/60">图片会按中心裁切填满豆板；成图的数字对应下方色卡编号。</span>
         </div>
@@ -231,14 +295,19 @@ export default function PerlerPattern() {
             <div className="min-w-0">
               <div className="mb-3 flex items-baseline justify-between gap-3"><h2 id="result-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>print ./pattern.png</h2><span className="text-xs text-terminal-gray/60">{pattern.width} × {pattern.height} · 已用 {pattern.palette.length} 色</span></div>
               <div className="overflow-auto rounded border border-terminal-line bg-terminal-bg p-3">
-                <canvas ref={canvasRef} className="mx-auto block max-w-none" aria-label={`${pattern.width} × ${pattern.height} 拼豆图纸，含颜色编号`} />
+                <canvas ref={canvasRef} onPointerDown={editCell} className="mx-auto block max-w-none cursor-crosshair" style={{ width: `${zoom}%` }} aria-label={`${pattern.width} × ${pattern.height} 拼豆图纸，点击格子改色`} />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-terminal-gray">
+                <button type="button" disabled={!history.length} onClick={() => { const previous = history.at(-1); if (!previous || !pattern) return; setHistory((items) => items.slice(0, -1)); setFuture((items) => [pattern, ...items]); setPattern(previous); }} className="min-h-9 rounded border border-terminal-line px-2 disabled:opacity-40">撤销</button>
+                <button type="button" disabled={!future.length} onClick={() => { const next = future[0]; if (!next || !pattern) return; setFuture((items) => items.slice(1)); setHistory((items) => [...items, pattern]); setPattern(next); }} className="min-h-9 rounded border border-terminal-line px-2 disabled:opacity-40">重做</button>
+                <label>缩放 <input type="range" min="60" max="180" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="accent-terminal-green" /></label>
               </div>
             </div>
             <aside className="min-w-0" aria-label="颜色编号色卡">
               <h2 className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>cat ./palette</h2>
               <p className="mt-2 text-xs leading-relaxed text-terminal-gray/60">按编号取豆；数量是该颜色所需的颗数，建议多备 5%。</p>
               <ol className="mt-3 grid max-h-[580px] grid-cols-1 gap-1 overflow-y-auto pr-1 text-xs">
-                {pattern.palette.map((color, index) => <li key={rgbHex(color)} className="flex min-h-9 items-center gap-2 rounded border border-terminal-line/60 bg-terminal-bg/50 px-2 text-terminal-gray"><span className="h-5 w-5 shrink-0 rounded-sm border border-terminal-line" style={{ backgroundColor: rgbCss(color) }} /><span className="w-7 text-terminal-cyan">#{index + 1}</span><span className="font-mono">{rgbHex(color)}</span><span className="ml-auto text-terminal-yellow">×{pattern.counts[index]}</span></li>)}
+                {pattern.palette.map((color, index) => <li key={rgbHex(color)}><button type="button" onClick={() => setSelectedColor(index)} className={`flex min-h-9 w-full items-center gap-2 rounded border px-2 text-left text-terminal-gray ${selectedColor === index ? 'border-terminal-green bg-terminal-green/10' : 'border-terminal-line/60 bg-terminal-bg/50'}`}><span className="h-5 w-5 shrink-0 rounded-sm border border-terminal-line" style={{ backgroundColor: rgbCss(color) }} /><span className="w-7 text-terminal-cyan">#{index + 1}</span><span className="font-mono">{rgbHex(color)}</span><span className="ml-auto text-terminal-yellow">×{pattern.counts[index]}</span></button></li>)}
               </ol>
             </aside>
           </section>
