@@ -35,7 +35,7 @@ function rgbCss(color: Rgb): string {
 }
 
 function drawPattern(canvas: HTMLCanvasElement, pattern: PatternResult, withNumbers: boolean) {
-  const cellSize = Math.max(1, Math.min(36, Math.floor(1440 / Math.max(pattern.width, pattern.height))));
+  const cellSize = Math.max(1, Math.min(36, Math.floor(2048 / Math.max(pattern.width, pattern.height))));
   canvas.width = pattern.width * cellSize;
   canvas.height = pattern.height * cellSize;
   const ctx = canvas.getContext('2d');
@@ -45,8 +45,8 @@ function drawPattern(canvas: HTMLCanvasElement, pattern: PatternResult, withNumb
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const showCodes = withNumbers && cellSize >= 16;
-  ctx.font = `${Math.max(8, Math.floor(cellSize * 0.35))}px monospace`;
+  const showCodes = withNumbers && cellSize >= 12;
+  ctx.font = `${Math.max(7, Math.floor(cellSize * 0.42))}px monospace`;
   pattern.cells.forEach((cell, index) => {
     const x = (index % pattern.width) * cellSize;
     const y = Math.floor(index / pattern.width) * cellSize;
