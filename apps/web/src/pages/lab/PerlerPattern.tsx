@@ -252,7 +252,15 @@ export default function PerlerPattern() {
   return (
     <LabFrame slug="perler" title="perler.pattern" accent="pink" desc="上传图片，量化成可照着拼的格子图；处理全程只在你的浏览器内完成。">
       <div className="p-4 sm:p-6 space-y-6">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <ol className="grid gap-2 border-b border-terminal-line/60 pb-5 text-xs sm:grid-cols-4" aria-label="制作步骤">
+          {[
+            ['01', '导入图片', Boolean(image)],
+            ['02', '设置图纸', Boolean(image)],
+            ['03', '核对色号', Boolean(pattern)],
+            ['04', '导出制作', Boolean(pattern)],
+          ].map(([step, label, done]) => <li key={String(step)} className={`flex min-h-11 items-center gap-2 rounded border px-3 ${done ? 'border-terminal-green/60 bg-terminal-green/10 text-terminal-green' : 'border-terminal-line/60 bg-terminal-bg/40 text-terminal-gray/65'}`}><span className="text-terminal-pink">{step}</span><span>{label}</span>{done && <span className="ml-auto text-terminal-cyan">ready</span>}</li>)}
+        </ol>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,.85fr)]">
           <section className="space-y-4" aria-labelledby="source-heading">
             <h2 id="source-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>load ./image</h2>
             <input ref={fileRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void selectFile(event.target.files?.[0])} />
@@ -278,8 +286,8 @@ export default function PerlerPattern() {
             {error && <p className="text-sm text-terminal-pink" role="alert">{error}</p>}
           </section>
 
-          <section className="space-y-4" aria-labelledby="settings-heading">
-            <h2 id="settings-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>configure</h2>
+          <section className="space-y-4 self-start rounded border border-terminal-line bg-terminal-panel/30 p-4 lg:sticky lg:top-5" aria-labelledby="settings-heading">
+            <div><h2 id="settings-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>configure ./pattern</h2><p className="mt-1 text-xs leading-relaxed text-terminal-gray/60">从豆板、实体色号到构图依次设置；每次调整会自动刷新下方图纸。</p></div>
             <label className="block text-xs text-terminal-gray" htmlFor="board-size">常用豆板尺寸（格）
               <select id="board-size" value={`${gridWidth}x${gridHeight}`} onChange={(event) => { const [width, height] = event.target.value.split('x').map(Number); setGridWidth(width); setGridHeight(height); }} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green">
                 {BOARD_PRESETS.map(({ width, height, label }) => <option key={`${width}x${height}`} value={`${width}x${height}`}>{label}</option>)}
@@ -295,19 +303,21 @@ export default function PerlerPattern() {
                 <input id="grid-height" type="number" min="1" max={MAX_GRID_DIMENSION} value={gridHeight} onChange={(event) => setGridHeight(toGridDimension(event.target.value))} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green" />
               </label>
             </fieldset>
-            <label className="block text-xs text-terminal-gray" htmlFor="color-count">颜色数量
-              <select id="color-count" value={colorCount} onChange={(event) => setColorCount(Number(event.target.value) as (typeof COLOR_COUNTS)[number])} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green">
-                {COLOR_COUNTS.map((count) => <option key={count} value={count}>{count} 色</option>)}
-              </select>
-            </label>
-            <label className="block text-xs text-terminal-gray" htmlFor="palette-name">色板
-              <select id="palette-name" value={paletteName} onChange={(event) => { setPaletteName(event.target.value); setCustomPalette([]); }} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray">
-                <option value="Mard 标准 221 色">Mard 标准 221 色（真实色号）</option>
-                <option value="智能量化">智能量化（仅预览，不可采购）</option>
-                {Object.keys(STARTER_PALETTES).map((name) => <option key={name}>{name}</option>)}
-                {customPalette.length > 0 && <option value="自定义">自定义导入</option>}
-              </select>
-            </label>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              <label className="block text-xs text-terminal-gray" htmlFor="palette-name">实体色板
+                <select id="palette-name" value={paletteName} onChange={(event) => { setPaletteName(event.target.value); setCustomPalette([]); }} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray">
+                  <option value="Mard 标准 221 色">Mard 标准 221 色</option>
+                  <option value="智能量化">智能量化（预览）</option>
+                  {Object.keys(STARTER_PALETTES).map((name) => <option key={name}>{name}</option>)}
+                  {customPalette.length > 0 && <option value="自定义">自定义导入</option>}
+                </select>
+              </label>
+              <label className="block text-xs text-terminal-gray" htmlFor="color-count">最终用色上限
+                <select id="color-count" value={colorCount} onChange={(event) => setColorCount(Number(event.target.value) as (typeof COLOR_COUNTS)[number])} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green">
+                  {COLOR_COUNTS.map((count) => <option key={count} value={count}>{count} 色</option>)}
+                </select>
+              </label>
+            </div>
             <label className="block text-xs text-terminal-gray" htmlFor="fit-mode">构图
               <select id="fit-mode" value={fitMode} onChange={(event) => setFitMode(event.target.value as 'cover' | 'contain')} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray">
                 <option value="cover">铺满豆板（中心裁切）</option>
@@ -338,18 +348,12 @@ export default function PerlerPattern() {
           </div>
         </section>
 
-        <div className="flex flex-wrap items-center gap-3 border-t border-terminal-line/60 pt-5">
-          {pattern && <button type="button" onClick={download} className="min-h-11 rounded border border-terminal-green/70 px-4 text-sm text-terminal-green transition-colors hover:bg-terminal-green/10">下载 PNG 图纸</button>}
-          {pattern && <button type="button" onClick={exportCsv} className="min-h-11 rounded border border-terminal-cyan/70 px-4 text-sm text-terminal-cyan transition-colors hover:bg-terminal-cyan/10">导出 CSV 清单</button>}
-          {pattern && <button type="button" onClick={printPdf} className="min-h-11 rounded border border-terminal-yellow/70 px-4 text-sm text-terminal-yellow transition-colors hover:bg-terminal-yellow/10">打印 / 存为 PDF</button>}
-          <span className="text-xs text-terminal-gray/60" aria-live="polite">{processing ? '正在更新预览…' : image ? '调整参数后会自动更新预览。' : '上传图片后会自动生成预览。'}</span>
-          <span className="text-xs text-terminal-gray/60">成图数字对应下方色卡编号；可切换构图以保留完整照片。</span>
-        </div>
+        <p className="border-t border-terminal-line/60 pt-5 text-xs text-terminal-gray/60" aria-live="polite">{processing ? '正在更新预览…' : image ? '已生成预览：核对图纸与 Mard 色号后再导出。' : '上传图片后会自动生成预览。'}</p>
 
         {pattern && (
           <section className="grid gap-6 border-t border-terminal-line/60 pt-6 lg:grid-cols-[minmax(0,1fr)_260px]" aria-labelledby="result-heading">
             <div className="min-w-0">
-              <div className="mb-3 flex items-baseline justify-between gap-3"><h2 id="result-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>print ./pattern.png</h2><span className="text-xs text-terminal-gray/60">{pattern.width} × {pattern.height} · 已用 {pattern.palette.length} 色</span></div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><h2 id="result-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>review ./pattern.png</h2><span className="text-xs text-terminal-gray/60">{pattern.width} × {pattern.height} · 已用 {pattern.palette.length} 色</span></div>
               <div onTouchStart={pinchStart} onTouchMove={pinchMove} onTouchEnd={() => { pinchDistanceRef.current = null; }} className="overflow-auto rounded border border-terminal-line bg-terminal-bg p-3 touch-none">
                 <canvas ref={canvasRef} onDoubleClick={() => setZoom((current) => current === 100 ? 180 : 100)} onPointerDown={editCell} className="mx-auto block max-w-none cursor-crosshair" style={{ width: `${zoom}%` }} aria-label={`${pattern.width} × ${pattern.height} 拼豆图纸。双击或双指缩放，点击格子改色`} />
               </div>
@@ -358,6 +362,11 @@ export default function PerlerPattern() {
                 <button type="button" disabled={!future.length} onClick={() => { const next = future[0]; if (!next || !pattern) return; setFuture((items) => items.slice(1)); setHistory((items) => [...items, pattern]); setPattern(next); }} className="min-h-9 rounded border border-terminal-line px-2 disabled:opacity-40">重做</button>
                 <label>缩放 <input type="range" min="60" max="240" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="accent-terminal-green" /></label>
                 <span className="text-terminal-gray/60">双击放大 / 还原；触屏可双指缩放</span>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-terminal-line/60 pt-4">
+                <button type="button" onClick={download} className="min-h-11 rounded border border-terminal-green/70 px-4 text-sm text-terminal-green transition-colors hover:bg-terminal-green/10">下载 PNG 图纸</button>
+                <button type="button" onClick={exportCsv} className="min-h-11 rounded border border-terminal-cyan/70 px-4 text-sm text-terminal-cyan transition-colors hover:bg-terminal-cyan/10">导出 CSV 清单</button>
+                <button type="button" onClick={printPdf} className="min-h-11 rounded border border-terminal-yellow/70 px-4 text-sm text-terminal-yellow transition-colors hover:bg-terminal-yellow/10">打印 / 存为 PDF</button>
               </div>
             </div>
             <aside className="min-w-0" aria-label="颜色编号色卡">
