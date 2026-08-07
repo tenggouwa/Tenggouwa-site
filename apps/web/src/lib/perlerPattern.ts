@@ -15,6 +15,52 @@ export interface Rgb {
   b: number;
 }
 
+/**
+ * Simplifies photographic detail before bead quantisation. It is deliberately
+ * CPU-only so source images never leave the browser.
+ */
+export function cartoonizePixels(pixels: Rgb[], width: number, height: number, strength: number): Rgb[] {
+  if (!pixels.length || pixels.length !== width * height || strength <= 0) return pixels;
+  const amount = Math.max(0, Math.min(100, strength)) / 100;
+  const radius = amount > 0.66 ? 2 : 1;
+  const smoothed = pixels.map((_, index) => {
+    const x = index % width;
+    const y = Math.floor(index / width);
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let count = 0;
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        const candidate = pixels[ny * width + nx];
+        r += candidate.r;
+        g += candidate.g;
+        b += candidate.b;
+        count += 1;
+      }
+    }
+    return { r: r / count, g: g / count, b: b / count };
+  });
+  const levels = Math.max(5, Math.round(16 - amount * 8));
+  const step = 255 / (levels - 1);
+  return smoothed.map((pixel, index) => {
+    const left = smoothed[Math.max(0, index - (index % width)) + Math.max(0, (index % width) - 1)];
+    const right = smoothed[Math.max(0, index - (index % width)) + Math.min(width - 1, (index % width) + 1)];
+    const up = smoothed[Math.max(0, index - width)];
+    const down = smoothed[Math.min(smoothed.length - 1, index + width)];
+    const edge = Math.min(1, (Math.abs(right.r - left.r) + Math.abs(right.g - left.g) + Math.abs(right.b - left.b) + Math.abs(down.r - up.r) + Math.abs(down.g - up.g) + Math.abs(down.b - up.b)) / 420);
+    const darken = edge * amount * 0.45;
+    return {
+      r: clamp(Math.round(pixel.r / step) * step * (1 - darken)),
+      g: clamp(Math.round(pixel.g / step) * step * (1 - darken)),
+      b: clamp(Math.round(pixel.b / step) * step * (1 - darken)),
+    };
+  });
+}
+
 export interface PatternCell extends Rgb {
   colorId: number;
 }

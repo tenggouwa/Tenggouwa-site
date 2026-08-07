@@ -3,6 +3,7 @@ import LabFrame from './LabFrame';
 import {
   COLOR_COUNTS,
   applyFilters,
+  cartoonizePixels,
   makePattern,
   mapPatternToBeads,
   presetOptions,
@@ -94,6 +95,9 @@ export default function PerlerPattern() {
   const [colorCount, setColorCount] = useState<(typeof COLOR_COUNTS)[number]>(48);
   const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover');
   const [filters, setFilters] = useState<FilterOptions>({ preset: 'original', ...presetOptions('original') });
+  const [cartoonize, setCartoonize] = useState(false);
+  const [cartoonStrength, setCartoonStrength] = useState(65);
+  const [processedPreviewUrl, setProcessedPreviewUrl] = useState('');
   const [numbers, setNumbers] = useState(true);
   const [pattern, setPattern] = useState<PatternResult | null>(null);
   const [history, setHistory] = useState<PatternResult[]>([]);
@@ -115,32 +119,43 @@ export default function PerlerPattern() {
     return () => URL.revokeObjectURL(imagePreviewUrl);
   }, [imagePreviewUrl]);
 
-  const createPattern = useCallback(() => {
+  useEffect(() => {
+    if (!processedPreviewUrl) return;
+    return () => URL.revokeObjectURL(processedPreviewUrl);
+  }, [processedPreviewUrl]);
+
+  const processedPixels = useCallback((width: number, height: number): Rgb[] | null => {
     if (!image) return null;
     const source = document.createElement('canvas');
-    source.width = gridWidth;
-    source.height = gridHeight;
+    source.width = width;
+    source.height = height;
     const ctx = source.getContext('2d', { willReadFrequently: true });
     if (!ctx) throw new Error('Canvas 不可用');
     if (fitMode === 'contain') {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, gridWidth, gridHeight);
+      ctx.fillRect(0, 0, width, height);
     }
-    const scale = (fitMode === 'cover' ? Math.max : Math.min)(gridWidth / image.naturalWidth, gridHeight / image.naturalHeight);
-    const width = image.naturalWidth * scale;
-    const height = image.naturalHeight * scale;
-    ctx.drawImage(image, (gridWidth - width) / 2, (gridHeight - height) / 2, width, height);
-    const data = ctx.getImageData(0, 0, gridWidth, gridHeight).data;
+    const scale = (fitMode === 'cover' ? Math.max : Math.min)(width / image.naturalWidth, height / image.naturalHeight);
+    const scaledWidth = image.naturalWidth * scale;
+    const scaledHeight = image.naturalHeight * scale;
+    ctx.drawImage(image, (source.width - scaledWidth) / 2, (source.height - scaledHeight) / 2, scaledWidth, scaledHeight);
+    const data = ctx.getImageData(0, 0, source.width, source.height).data;
     const pixels: Rgb[] = [];
     for (let index = 0; index < data.length; index += 4) {
       pixels.push(applyFilters({ r: data[index], g: data[index + 1], b: data[index + 2] }, filters));
     }
+    return cartoonize ? cartoonizePixels(pixels, source.width, source.height, cartoonStrength) : pixels;
+  }, [cartoonStrength, cartoonize, filters, fitMode, image]);
+
+  const createPattern = useCallback(() => {
+    const pixels = processedPixels(gridWidth, gridHeight);
+    if (!pixels) return null;
     const draft = makePattern(pixels, gridWidth, gridHeight, colorCount);
     if (paletteName === '智能量化' && !customPalette.length) return draft;
     const sourcePalette = customPalette.length ? customPalette : paletteName === 'Mard 标准 221 色' ? MARD_STANDARD_PALETTE : STARTER_PALETTES[paletteName];
     const available = sourcePalette.filter((color) => !stockOnly || color.inStock !== false);
     return mapPatternToBeads(draft, available);
-  }, [colorCount, customPalette, filters, fitMode, gridHeight, gridWidth, image, paletteName, stockOnly]);
+  }, [colorCount, customPalette, gridHeight, gridWidth, paletteName, processedPixels, stockOnly]);
 
   useEffect(() => {
     if (!image) return;
@@ -148,6 +163,27 @@ export default function PerlerPattern() {
     const id = window.setTimeout(() => {
       try {
         setPattern(createPattern());
+        const previewMax = 640;
+        const previewWidth = gridWidth >= gridHeight ? previewMax : Math.max(1, Math.round(previewMax * gridWidth / gridHeight));
+        const previewHeight = gridHeight > gridWidth ? previewMax : Math.max(1, Math.round(previewMax * gridHeight / gridWidth));
+        const pixels = processedPixels(previewWidth, previewHeight);
+        if (pixels) {
+          const canvas = document.createElement('canvas');
+          canvas.width = previewWidth;
+          canvas.height = previewHeight;
+          const previewContext = canvas.getContext('2d');
+          if (previewContext) {
+            const data = new ImageData(previewWidth, previewHeight);
+            pixels.forEach((pixel, index) => {
+              data.data[index * 4] = pixel.r;
+              data.data[index * 4 + 1] = pixel.g;
+              data.data[index * 4 + 2] = pixel.b;
+              data.data[index * 4 + 3] = 255;
+            });
+            previewContext.putImageData(data, 0, 0);
+            canvas.toBlob((blob) => { if (blob) setProcessedPreviewUrl(URL.createObjectURL(blob)); }, 'image/png');
+          }
+        }
         setError('');
       } catch {
         setError('生成预览失败。请刷新页面后换一张较小的图片重试。');
@@ -156,7 +192,7 @@ export default function PerlerPattern() {
       }
     }, 180);
     return () => window.clearTimeout(id);
-  }, [createPattern, image]);
+  }, [createPattern, gridHeight, gridWidth, image, processedPixels]);
 
   const selectFile = async (file: File | undefined) => {
     if (!file) return;
@@ -174,6 +210,7 @@ export default function PerlerPattern() {
       const uploadedImage = await readImage(previewUrl);
       setImage(uploadedImage);
       setImagePreviewUrl(previewUrl);
+      setProcessedPreviewUrl('');
       setFileName(file.name);
       setPattern(null);
       setError('');
@@ -185,6 +222,7 @@ export default function PerlerPattern() {
 
   const choosePreset = (preset: FilterPreset) => {
     setFilters({ preset, ...presetOptions(preset) });
+    if (preset === 'cartoon') setCartoonize(true);
   };
 
   const download = () => {
@@ -276,18 +314,31 @@ export default function PerlerPattern() {
               <span className="mt-1 block text-xs text-terminal-gray/60">JPG / PNG / WebP · 最大 12MB · 不会上传至服务器</span>
             </button>
             {imagePreviewUrl && (
-              <figure className="overflow-hidden rounded border border-terminal-line bg-terminal-bg/60">
-                <figcaption className="border-b border-terminal-line/60 px-3 py-2 text-xs text-terminal-cyan">
-                  <span className="text-terminal-pink">$ </span>preview ./original
-                </figcaption>
-                <img src={imagePreviewUrl} alt={`原图预览：${fileName}`} className="block aspect-video w-full object-contain" />
-              </figure>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                <figure className="overflow-hidden rounded border border-terminal-line bg-terminal-bg/60">
+                  <figcaption className="border-b border-terminal-line/60 px-3 py-2 text-xs text-terminal-cyan"><span className="text-terminal-pink">$ </span>preview ./original</figcaption>
+                  <img src={imagePreviewUrl} alt={`原图预览：${fileName}`} className="block aspect-video w-full object-contain" />
+                </figure>
+                <figure className="overflow-hidden rounded border border-terminal-green/50 bg-terminal-bg/60">
+                  <figcaption className="border-b border-terminal-line/60 px-3 py-2 text-xs text-terminal-green"><span className="text-terminal-pink">$ </span>preview ./processed</figcaption>
+                  {processedPreviewUrl ? <img src={processedPreviewUrl} alt={`处理后预览：${fileName}`} className="block aspect-video w-full object-contain" /> : <div className="flex aspect-video items-center justify-center text-xs text-terminal-gray/60">正在生成处理预览…</div>}
+                </figure>
+              </div>
             )}
             {error && <p className="text-sm text-terminal-pink" role="alert">{error}</p>}
           </section>
 
           <section className="space-y-4 self-start rounded border border-terminal-line bg-terminal-panel/30 p-4 lg:sticky lg:top-5" aria-labelledby="settings-heading">
             <div><h2 id="settings-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>configure ./pattern</h2><p className="mt-1 text-xs leading-relaxed text-terminal-gray/60">从豆板、实体色号到构图依次设置；每次调整会自动刷新下方图纸。</p></div>
+            <fieldset className="rounded border border-terminal-line/70 p-3 text-xs text-terminal-gray">
+              <legend className="px-1 text-terminal-cyan">照片处理</legend>
+              <p className="leading-relaxed text-terminal-gray/60">照片纹理多时，先转卡通可减少碎色，让成图更清晰。</p>
+              <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="照片处理方式">
+                <button type="button" onClick={() => setCartoonize(false)} className={`min-h-11 rounded border px-2 text-xs transition-colors ${!cartoonize ? 'border-terminal-green bg-terminal-green/10 text-terminal-green' : 'border-terminal-line hover:border-terminal-cyan'}`}>保留照片</button>
+                <button type="button" onClick={() => setCartoonize(true)} className={`min-h-11 rounded border px-2 text-xs transition-colors ${cartoonize ? 'border-terminal-green bg-terminal-green/10 text-terminal-green' : 'border-terminal-line hover:border-terminal-cyan'}`}>转卡通</button>
+              </div>
+              {cartoonize && <label className="mt-3 block" htmlFor="cartoon-strength">卡通强度 <span className="text-terminal-cyan">{cartoonStrength}</span><input id="cartoon-strength" className="mt-2 w-full accent-terminal-green" type="range" min="20" max="100" value={cartoonStrength} onChange={(event) => setCartoonStrength(Number(event.target.value))} /></label>}
+            </fieldset>
             <label className="block text-xs text-terminal-gray" htmlFor="board-size">常用豆板尺寸（格）
               <select id="board-size" value={`${gridWidth}x${gridHeight}`} onChange={(event) => { const [width, height] = event.target.value.split('x').map(Number); setGridWidth(width); setGridHeight(height); }} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green">
                 {BOARD_PRESETS.map(({ width, height, label }) => <option key={`${width}x${height}`} value={`${width}x${height}`}>{label}</option>)}
@@ -335,7 +386,7 @@ export default function PerlerPattern() {
         <section className="border-t border-terminal-line/60 pt-5" aria-labelledby="filter-heading">
           <h2 id="filter-heading" className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>apply --filter</h2>
           <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="滤镜风格">
-            {([['original', '原图'], ['vivid', '鲜明'], ['warm', '暖色'], ['cartoon', '卡通'], ['mono', '黑白']] as const).map(([preset, label]) => (
+            {([['original', '原图'], ['vivid', '鲜明'], ['warm', '暖色'], ['cartoon', '卡通色调'], ['mono', '黑白']] as const).map(([preset, label]) => (
               <button key={preset} type="button" onClick={() => choosePreset(preset)} className={`min-h-10 rounded border px-3 text-xs transition-colors ${filters.preset === preset ? 'border-terminal-green bg-terminal-green/10 text-terminal-green' : 'border-terminal-line text-terminal-gray hover:border-terminal-cyan hover:text-terminal-cyan'}`}>{label}</button>
             ))}
           </div>
@@ -348,7 +399,7 @@ export default function PerlerPattern() {
           </div>
         </section>
 
-        <p className="border-t border-terminal-line/60 pt-5 text-xs text-terminal-gray/60" aria-live="polite">{processing ? '正在更新预览…' : image ? '已生成预览：核对图纸与 Mard 色号后再导出。' : '上传图片后会自动生成预览。'}</p>
+        <p className="border-t border-terminal-line/60 pt-5 text-xs text-terminal-gray/60" aria-live="polite">{processing ? '正在更新原图处理与图纸预览…' : image ? `已生成${cartoonize ? '卡通' : '照片'}预览：核对图纸与 Mard 色号后再导出。` : '上传图片后会自动生成预览。'}</p>
 
         {pattern && (
           <section className="grid gap-6 border-t border-terminal-line/60 pt-6 lg:grid-cols-[minmax(0,1fr)_260px]" aria-labelledby="result-heading">
