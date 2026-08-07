@@ -968,7 +968,14 @@ async function main() {
     throw new Error(`dist not found: ${DIST}`);
   }
   console.log(`==> prerender into ${DIST} (base=${BASE}, origin=${ORIGIN}, api=${API_BASE}, noindex=${NOINDEX})`);
-  const posts = await collectPosts();
+  // 前端静态产物必须能在博客 API 短暂不可用时发布；运行时 SPA 仍会在
+  // API 恢复后加载文章。这里不伪造或缓存文章，只有本次的静态 SEO 页面会缺席。
+  let posts = [];
+  try {
+    posts = await collectPosts();
+  } catch (error) {
+    console.warn(`==> skip post prerender: ${error instanceof Error ? error.message : String(error)}`);
+  }
   console.log(`==> ${posts.length} posts`);
   const inspirations = await collectInspirations();
   console.log(`==> ${inspirations.length} inspirations`);
