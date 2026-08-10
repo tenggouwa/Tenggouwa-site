@@ -80,6 +80,61 @@ export interface PatternResult {
   counts: number[];
 }
 
+export interface PatternQualityIssue {
+  tone: 'info' | 'warning';
+  text: string;
+}
+
+export function assessPatternQuality(pattern: PatternResult, requestedColors: number, cartoonized: boolean): PatternQualityIssue[] {
+  const issues: PatternQualityIssue[] = [];
+  const total = pattern.cells.length;
+  const dominant = Math.max(...pattern.counts, 0) / Math.max(total, 1);
+  if (pattern.palette.length >= Math.max(12, requestedColors * 0.85)) {
+    issues.push({ tone: 'warning', text: '用色接近上限，画面可能出现碎色；可降低色数或开启卡通化。' });
+  }
+  if (total >= 2500 && Math.min(pattern.width, pattern.height) < 24) {
+    issues.push({ tone: 'warning', text: '豆板比例过窄，主体容易被压扁；建议增加短边格数。' });
+  }
+  if (dominant > 0.72) {
+    issues.push({ tone: 'info', text: '单一背景占比很高；可用“铺满豆板”并拖动主体到画面中心。' });
+  }
+  if (!cartoonized && pattern.palette.length > 32) {
+    issues.push({ tone: 'info', text: '照片细节较多，开启卡通化通常能让边缘和色块更清楚。' });
+  }
+  if (!issues.length) issues.push({ tone: 'info', text: '图纸色彩与尺寸均衡，可以开始核对色号和打印。' });
+  return issues;
+}
+
+export function recolorCell(pattern: PatternResult, index: number, colorId: number): PatternResult {
+  if (index < 0 || index >= pattern.cells.length || colorId < 0 || colorId >= pattern.palette.length) return pattern;
+  const next = structuredClone(pattern);
+  next.cells[index] = { ...next.palette[colorId], colorId };
+  next.counts = next.palette.map((_, id) => next.cells.filter((cell) => cell.colorId === id).length);
+  return next;
+}
+
+export function floodFill(pattern: PatternResult, startIndex: number, colorId: number): PatternResult {
+  if (startIndex < 0 || startIndex >= pattern.cells.length || colorId < 0 || colorId >= pattern.palette.length) return pattern;
+  const original = pattern.cells[startIndex].colorId;
+  if (original === colorId) return pattern;
+  const next = structuredClone(pattern);
+  const pending = [startIndex];
+  const seen = new Set<number>();
+  while (pending.length) {
+    const index = pending.pop();
+    if (index === undefined || seen.has(index) || next.cells[index].colorId !== original) continue;
+    seen.add(index);
+    next.cells[index] = { ...next.palette[colorId], colorId };
+    const column = index % next.width;
+    if (column > 0) pending.push(index - 1);
+    if (column < next.width - 1) pending.push(index + 1);
+    if (index >= next.width) pending.push(index - next.width);
+    if (index < next.cells.length - next.width) pending.push(index + next.width);
+  }
+  next.counts = next.palette.map((_, id) => next.cells.filter((cell) => cell.colorId === id).length);
+  return next;
+}
+
 export type BeadColor = PatternColor;
 
 export const STARTER_PALETTES: Record<string, BeadColor[]> = {
