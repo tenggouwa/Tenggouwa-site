@@ -3,10 +3,13 @@ import LabFrame from './LabFrame';
 import {
   COLOR_COUNTS,
   applyFilters,
+  assessPatternQuality,
   cartoonizePixels,
+  floodFill,
   makePattern,
   mapPatternToBeads,
   presetOptions,
+  recolorCell,
   rgbHex,
   STARTER_PALETTES,
   type FilterOptions,
@@ -15,6 +18,7 @@ import {
   type Rgb,
 } from '../../lib/perlerPattern';
 import { MARD_STANDARD_PALETTE } from '../../lib/mardPalette';
+import { loadLatestPerlerProject, saveLatestPerlerProject } from '../../lib/perlerProject';
 
 const BOARD_PRESETS = [
   { width: 14, height: 14, label: '14 × 14 · mini' },
@@ -72,6 +76,58 @@ async function readImage(url: string): Promise<HTMLImageElement> {
   return image;
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('图片编码失败'));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function tilePatternDataUrl(pattern: PatternResult, withNumbers: boolean, startColumn: number, startRow: number, tileSize: number): string {
+  const columns = Math.min(tileSize, pattern.width - startColumn);
+  const rows = Math.min(tileSize, pattern.height - startRow);
+  const cellSize = 26;
+  const gutter = 46;
+  const canvas = document.createElement('canvas');
+  canvas.width = gutter + columns * cellSize + 18;
+  canvas.height = gutter + rows * cellSize + 18;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '10px monospace';
+  for (let column = 0; column < columns; column += 1) {
+    ctx.fillStyle = '#182125';
+    ctx.fillText(String(startColumn + column + 1), gutter + column * cellSize + cellSize / 2, 22);
+  }
+  for (let row = 0; row < rows; row += 1) {
+    ctx.fillStyle = '#182125';
+    ctx.fillText(String(startRow + row + 1), 22, gutter + row * cellSize + cellSize / 2);
+  }
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const cell = pattern.cells[(startRow + row) * pattern.width + startColumn + column];
+      const x = gutter + column * cellSize;
+      const y = gutter + row * cellSize;
+      ctx.fillStyle = rgbCss(cell);
+      ctx.fillRect(x, y, cellSize, cellSize);
+      ctx.strokeStyle = '#4a555b';
+      ctx.strokeRect(x, y, cellSize, cellSize);
+      if (withNumbers) {
+        const lightness = cell.r * 0.299 + cell.g * 0.587 + cell.b * 0.114;
+        ctx.fillStyle = lightness > 150 ? '#0b0f10' : '#ffffff';
+        ctx.font = '8px monospace';
+        ctx.fillText(pattern.palette[cell.colorId]?.code ?? String(cell.colorId + 1), x + cellSize / 2, y + cellSize / 2);
+      }
+    }
+  }
+  return canvas.toDataURL('image/png');
+}
+
 function IconUpload() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
@@ -87,13 +143,18 @@ export default function PerlerPattern() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pinchDistanceRef = useRef<number | null>(null);
   const pinchZoomRef = useRef(100);
+  const cropDragRef = useRef<{ x: number; y: number; cropX: number; cropY: number } | null>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState('');
   const [fileName, setFileName] = useState('');
   const [gridWidth, setGridWidth] = useState(29);
   const [gridHeight, setGridHeight] = useState(29);
   const [colorCount, setColorCount] = useState<(typeof COLOR_COUNTS)[number]>(48);
   const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover');
+  const [cropX, setCropX] = useState(0);
+  const [cropY, setCropY] = useState(0);
+  const [cropZoom, setCropZoom] = useState(100);
   const [filters, setFilters] = useState<FilterOptions>({ preset: 'original', ...presetOptions('original') });
   const [cartoonize, setCartoonize] = useState(false);
   const [cartoonStrength, setCartoonStrength] = useState(65);
@@ -102,6 +163,8 @@ export default function PerlerPattern() {
   const [pattern, setPattern] = useState<PatternResult | null>(null);
   const [history, setHistory] = useState<PatternResult[]>([]);
   const [future, setFuture] = useState<PatternResult[]>([]);
+  const [editMode, setEditMode] = useState<'brush' | 'eyedropper' | 'fill'>('brush');
+  const [printTileSize, setPrintTileSize] = useState(29);
   const [selectedColor, setSelectedColor] = useState(0);
   const [zoom, setZoom] = useState(100);
   const [paletteName, setPaletteName] = useState('Mard 标准 221 色');
@@ -109,6 +172,7 @@ export default function PerlerPattern() {
   const [stockOnly, setStockOnly] = useState(false);
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [projectStatus, setProjectStatus] = useState('');
 
   useEffect(() => {
     if (canvasRef.current && pattern) drawPattern(canvasRef.current, pattern, numbers);
@@ -135,17 +199,19 @@ export default function PerlerPattern() {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
     }
-    const scale = (fitMode === 'cover' ? Math.max : Math.min)(width / image.naturalWidth, height / image.naturalHeight);
+    const scale = (fitMode === 'cover' ? Math.max : Math.min)(width / image.naturalWidth, height / image.naturalHeight) * cropZoom / 100;
     const scaledWidth = image.naturalWidth * scale;
     const scaledHeight = image.naturalHeight * scale;
-    ctx.drawImage(image, (source.width - scaledWidth) / 2, (source.height - scaledHeight) / 2, scaledWidth, scaledHeight);
+    const offsetX = (source.width - scaledWidth) / 2 + cropX / 100 * source.width * 0.5;
+    const offsetY = (source.height - scaledHeight) / 2 + cropY / 100 * source.height * 0.5;
+    ctx.drawImage(image, offsetX, offsetY, scaledWidth, scaledHeight);
     const data = ctx.getImageData(0, 0, source.width, source.height).data;
     const pixels: Rgb[] = [];
     for (let index = 0; index < data.length; index += 4) {
       pixels.push(applyFilters({ r: data[index], g: data[index + 1], b: data[index + 2] }, filters));
     }
     return cartoonize ? cartoonizePixels(pixels, source.width, source.height, cartoonStrength) : pixels;
-  }, [cartoonStrength, cartoonize, filters, fitMode, image]);
+  }, [cartoonStrength, cartoonize, cropX, cropY, cropZoom, filters, fitMode, image]);
 
   const createPattern = useCallback(() => {
     const pixels = processedPixels(gridWidth, gridHeight);
@@ -210,9 +276,13 @@ export default function PerlerPattern() {
       const uploadedImage = await readImage(previewUrl);
       setImage(uploadedImage);
       setImagePreviewUrl(previewUrl);
+      setImageDataUrl(await readFileAsDataUrl(file));
       setProcessedPreviewUrl('');
       setFileName(file.name);
       setPattern(null);
+      setCropX(0);
+      setCropY(0);
+      setCropZoom(100);
       setError('');
     } catch {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -240,10 +310,13 @@ export default function PerlerPattern() {
     const column = Math.floor(((event.clientX - rect.left) / rect.width) * pattern.width);
     const row = Math.floor(((event.clientY - rect.top) / rect.height) * pattern.height);
     const index = row * pattern.width + column;
-    if (index < 0 || index >= pattern.cells.length || pattern.cells[index].colorId === selectedColor) return;
-    const next = structuredClone(pattern);
-    next.cells[index] = { ...next.palette[selectedColor], colorId: selectedColor };
-    next.counts = next.palette.map((_, colorId) => next.cells.filter((cell) => cell.colorId === colorId).length);
+    if (index < 0 || index >= pattern.cells.length) return;
+    if (editMode === 'eyedropper') {
+      setSelectedColor(pattern.cells[index].colorId);
+      return;
+    }
+    const next = editMode === 'fill' ? floodFill(pattern, index, selectedColor) : recolorCell(pattern, index, selectedColor);
+    if (next === pattern) return;
     setHistory((items) => [...items.slice(-49), pattern]);
     setFuture([]);
     setPattern(next);
@@ -279,12 +352,75 @@ export default function PerlerPattern() {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
+  const downloadPaletteTemplate = () => {
+    const template = [{ code: '品牌色号', name: '颜色名', hex: '#RRGGBB', inStock: true }];
+    const url = URL.createObjectURL(new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'perler-palette-template.json';
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
   const printPdf = () => {
-    if (!canvasRef.current) return;
-    const popup = window.open('', '_blank', 'noopener,noreferrer');
+    if (!pattern) return;
+    const popup = window.open('', '_blank');
     if (!popup) return;
-    popup.document.write(`<img alt="拼豆图纸" style="max-width:100%" src="${canvasRef.current.toDataURL('image/png')}" onload="print()">`);
+    const pages: string[] = [];
+    for (let row = 0; row < pattern.height; row += printTileSize) {
+      for (let column = 0; column < pattern.width; column += printTileSize) {
+        const image = tilePatternDataUrl(pattern, numbers, column, row, printTileSize);
+        pages.push(`<section><h1>${fileName || '拼豆图纸'} · 列 ${column + 1}–${Math.min(pattern.width, column + printTileSize)} / 行 ${row + 1}–${Math.min(pattern.height, row + printTileSize)}</h1><img alt="拼豆分页图纸" src="${image}"><p>色号以色卡中的 Mard 编码为准。</p></section>`);
+      }
+    }
+    popup.document.write(`<style>body{font-family:monospace;color:#111}section{break-after:page;text-align:center}img{max-width:100%;max-height:88vh}h1{font-size:14px}p{font-size:11px}</style>${pages.join('')}<script>onload=()=>print()<\/script>`);
     popup.document.close();
+  };
+
+  const saveProject = async () => {
+    if (!imageDataUrl) return;
+    try {
+      await saveLatestPerlerProject({ fileName, imageDataUrl, gridWidth, gridHeight, colorCount, fitMode, cropX, cropY, cropZoom, filters, cartoonize, cartoonStrength, paletteName, customPalette, stockOnly, numbers });
+      setProjectStatus('项目已保存在此浏览器，可随时继续。');
+    } catch {
+      setProjectStatus('项目保存失败：浏览器存储不可用或空间不足。');
+    }
+  };
+
+  const restoreProject = async () => {
+    try {
+      const project = await loadLatestPerlerProject();
+      if (!project) {
+        setProjectStatus('还没有已保存的项目。');
+        return;
+      }
+      const restoredImage = await readImage(project.imageDataUrl);
+      setImage(restoredImage);
+      setImagePreviewUrl(project.imageDataUrl);
+      setImageDataUrl(project.imageDataUrl);
+      setFileName(project.fileName);
+      setGridWidth(project.gridWidth); setGridHeight(project.gridHeight); setColorCount(project.colorCount as (typeof COLOR_COUNTS)[number]);
+      setFitMode(project.fitMode); setCropX(project.cropX); setCropY(project.cropY); setCropZoom(project.cropZoom);
+      setFilters(project.filters); setCartoonize(project.cartoonize); setCartoonStrength(project.cartoonStrength);
+      setPaletteName(project.paletteName); setCustomPalette(project.customPalette); setStockOnly(project.stockOnly); setNumbers(project.numbers);
+      setProjectStatus(`已恢复 ${new Date(project.savedAt).toLocaleString()} 保存的项目。`);
+    } catch {
+      setProjectStatus('项目恢复失败：保存内容已损坏或浏览器不支持。');
+    }
+  };
+
+  const startCropDrag = (event: React.PointerEvent<HTMLImageElement>) => {
+    if (fitMode !== 'cover') return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    cropDragRef.current = { x: event.clientX, y: event.clientY, cropX, cropY };
+  };
+
+  const moveCropDrag = (event: React.PointerEvent<HTMLImageElement>) => {
+    const drag = cropDragRef.current;
+    if (!drag) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCropX(Math.max(-100, Math.min(100, drag.cropX + (event.clientX - drag.x) / rect.width * 180)));
+    setCropY(Math.max(-100, Math.min(100, drag.cropY + (event.clientY - drag.y) / rect.height * 180)));
   };
 
   return (
@@ -321,7 +457,7 @@ export default function PerlerPattern() {
                 </figure>
                 <figure className="overflow-hidden rounded border border-terminal-green/50 bg-terminal-bg/60">
                   <figcaption className="border-b border-terminal-line/60 px-3 py-2 text-xs text-terminal-green"><span className="text-terminal-pink">$ </span>preview ./processed</figcaption>
-                  {processedPreviewUrl ? <img src={processedPreviewUrl} alt={`处理后预览：${fileName}`} className="block aspect-video w-full object-contain" /> : <div className="flex aspect-video items-center justify-center text-xs text-terminal-gray/60">正在生成处理预览…</div>}
+                  {processedPreviewUrl ? <img src={processedPreviewUrl} alt={`处理后预览：${fileName}；铺满模式下可拖动定位主体`} onPointerDown={startCropDrag} onPointerMove={moveCropDrag} onPointerUp={() => { cropDragRef.current = null; }} className={`block aspect-video w-full object-contain ${fitMode === 'cover' ? 'cursor-move touch-none' : ''}`} /> : <div className="flex aspect-video items-center justify-center text-xs text-terminal-gray/60">正在生成处理预览…</div>}
                 </figure>
               </div>
             )}
@@ -338,6 +474,17 @@ export default function PerlerPattern() {
                 <button type="button" onClick={() => setCartoonize(true)} className={`min-h-11 rounded border px-2 text-xs transition-colors ${cartoonize ? 'border-terminal-green bg-terminal-green/10 text-terminal-green' : 'border-terminal-line hover:border-terminal-cyan'}`}>转卡通</button>
               </div>
               {cartoonize && <label className="mt-3 block" htmlFor="cartoon-strength">卡通强度 <span className="text-terminal-cyan">{cartoonStrength}</span><input id="cartoon-strength" className="mt-2 w-full accent-terminal-green" type="range" min="20" max="100" value={cartoonStrength} onChange={(event) => setCartoonStrength(Number(event.target.value))} /></label>}
+            </fieldset>
+            <fieldset className="rounded border border-terminal-line/70 p-3 text-xs text-terminal-gray">
+              <legend className="px-1 text-terminal-cyan">裁切与项目</legend>
+              <p className="leading-relaxed text-terminal-gray/60">铺满模式下可直接拖动右侧处理预览移动主体；下方调整精度更高。</p>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <label htmlFor="crop-x">横移 <span className="text-terminal-cyan">{Math.round(cropX)}</span><input id="crop-x" className="mt-1 w-full accent-terminal-green" type="range" min="-100" max="100" value={cropX} onChange={(event) => setCropX(Number(event.target.value))} /></label>
+                <label htmlFor="crop-y">纵移 <span className="text-terminal-cyan">{Math.round(cropY)}</span><input id="crop-y" className="mt-1 w-full accent-terminal-green" type="range" min="-100" max="100" value={cropY} onChange={(event) => setCropY(Number(event.target.value))} /></label>
+                <label htmlFor="crop-zoom">缩放 <span className="text-terminal-cyan">{cropZoom}%</span><input id="crop-zoom" className="mt-1 w-full accent-terminal-green" type="range" min="100" max="220" value={cropZoom} onChange={(event) => setCropZoom(Number(event.target.value))} /></label>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={!imageDataUrl} onClick={() => void saveProject()} className="min-h-11 rounded border border-terminal-cyan/70 px-2 text-terminal-cyan disabled:opacity-40">保存本项目</button><button type="button" onClick={() => void restoreProject()} className="min-h-11 rounded border border-terminal-line px-2 hover:border-terminal-green">恢复已保存项目</button></div>
+              {projectStatus && <p className="mt-2 text-terminal-gray/60" aria-live="polite">{projectStatus}</p>}
             </fieldset>
             <label className="block text-xs text-terminal-gray" htmlFor="board-size">常用豆板尺寸（格）
               <select id="board-size" value={`${gridWidth}x${gridHeight}`} onChange={(event) => { const [width, height] = event.target.value.split('x').map(Number); setGridWidth(width); setGridHeight(height); }} className="mt-1.5 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-sm text-terminal-gray outline-none focus:border-terminal-green">
@@ -375,9 +522,10 @@ export default function PerlerPattern() {
                 <option value="contain">完整保留（可能留边）</option>
               </select>
             </label>
-            <label className="block text-xs text-terminal-gray">导入色板 JSON
+            <label className="block text-xs text-terminal-gray">扩展品牌色板 JSON
               <input type="file" accept="application/json" className="mt-1.5 block w-full text-xs text-terminal-gray" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; void file.text().then((text) => { const parsed = JSON.parse(text) as Array<{ code: string; name?: string; hex: string; inStock?: boolean }>; setCustomPalette(parsed.map((item) => ({ code: item.code, name: item.name ?? item.code, brand: '自定义', inStock: item.inStock, r: Number.parseInt(item.hex.slice(1, 3), 16), g: Number.parseInt(item.hex.slice(3, 5), 16), b: Number.parseInt(item.hex.slice(5, 7), 16) }))); setPaletteName('自定义'); }).catch(() => setError('色板 JSON 格式无效。')); }} />
             </label>
+            <button type="button" onClick={downloadPaletteTemplate} className="min-h-9 w-full rounded border border-terminal-line px-2 text-left text-xs text-terminal-cyan hover:border-terminal-cyan">下载品牌色板 JSON 模板（色板会随项目一起保存）</button>
             <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-terminal-gray"><input checked={numbers} onChange={(event) => setNumbers(event.target.checked)} type="checkbox" className="accent-terminal-green" /> 每格印颜色编号</label>
             <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-terminal-gray"><input checked={stockOnly} onChange={(event) => setStockOnly(event.target.checked)} type="checkbox" className="accent-terminal-green" /> 仅使用库存色（导入色板可扩展库存字段）</label>
           </section>
@@ -414,10 +562,19 @@ export default function PerlerPattern() {
                 <label>缩放 <input type="range" min="60" max="240" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="accent-terminal-green" /></label>
                 <span className="text-terminal-gray/60">双击放大 / 还原；触屏可双指缩放</span>
               </div>
+              <div className="mt-3 rounded border border-terminal-line/60 bg-terminal-panel/20 p-3 text-xs" aria-label="图纸编辑工具">
+                <div className="flex flex-wrap items-center gap-2"><span className="text-terminal-cyan">编辑工具</span>{([['brush', '画笔'], ['eyedropper', '吸管'], ['fill', '填充']] as const).map(([mode, label]) => <button key={mode} type="button" onClick={() => setEditMode(mode)} className={`min-h-9 rounded border px-2 ${editMode === mode ? 'border-terminal-green bg-terminal-green/10 text-terminal-green' : 'border-terminal-line hover:border-terminal-cyan'}`}>{label}</button>)}</div>
+                <p className="mt-2 text-terminal-gray/60">{editMode === 'brush' ? '画笔：点击格子替换为右侧已选色。' : editMode === 'eyedropper' ? '吸管：点击格子以选取它的色号。' : '填充：点击一片相连的同色区域，一次替换为已选色。'}</p>
+              </div>
+              <section className="mt-3 rounded border border-terminal-line/60 bg-terminal-panel/20 p-3 text-xs" aria-label="图纸质量提示">
+                <h3 className="text-terminal-cyan">质量提示</h3>
+                <ul className="mt-2 space-y-1 text-terminal-gray/70">{assessPatternQuality(pattern, colorCount, cartoonize).map((issue) => <li key={issue.text} className={issue.tone === 'warning' ? 'text-terminal-yellow' : ''}>- {issue.text}</li>)}</ul>
+              </section>
               <div className="mt-4 flex flex-wrap gap-2 border-t border-terminal-line/60 pt-4">
                 <button type="button" onClick={download} className="min-h-11 rounded border border-terminal-green/70 px-4 text-sm text-terminal-green transition-colors hover:bg-terminal-green/10">下载 PNG 图纸</button>
                 <button type="button" onClick={exportCsv} className="min-h-11 rounded border border-terminal-cyan/70 px-4 text-sm text-terminal-cyan transition-colors hover:bg-terminal-cyan/10">导出 CSV 清单</button>
-                <button type="button" onClick={printPdf} className="min-h-11 rounded border border-terminal-yellow/70 px-4 text-sm text-terminal-yellow transition-colors hover:bg-terminal-yellow/10">打印 / 存为 PDF</button>
+                <label className="flex min-h-11 items-center gap-2 rounded border border-terminal-line px-2 text-terminal-gray">分页 <select value={printTileSize} onChange={(event) => setPrintTileSize(Number(event.target.value))} className="bg-terminal-bg text-terminal-gray"><option value={29}>29 × 29</option><option value={58}>58 × 58</option></select></label>
+                <button type="button" onClick={printPdf} className="min-h-11 rounded border border-terminal-yellow/70 px-4 text-sm text-terminal-yellow transition-colors hover:bg-terminal-yellow/10">分页打印 / PDF</button>
               </div>
             </div>
             <aside className="min-w-0" aria-label="颜色编号色卡">

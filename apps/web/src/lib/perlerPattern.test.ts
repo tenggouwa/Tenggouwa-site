@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyFilters, cartoonizePixels, makePattern, mapPatternToBeads, presetOptions, rgbHex, type BeadColor } from './perlerPattern';
+import { applyFilters, assessPatternQuality, cartoonizePixels, floodFill, makePattern, mapPatternToBeads, presetOptions, recolorCell, rgbHex, type BeadColor } from './perlerPattern';
 
 describe('perler pattern', () => {
   it('量化后每个格子都引用调色板中的颜色编号', () => {
@@ -46,5 +46,17 @@ describe('perler pattern', () => {
     expect(result.palette.map((color) => color.code)).toEqual(['RED', 'BLUE']);
     expect(result.counts).toEqual([2, 2]);
     expect(result.cells.map((cell) => cell.colorId)).toEqual([0, 0, 1, 1]);
+  });
+
+  it('支持画笔、连续区域填充和质量诊断', () => {
+    const pattern = makePattern(
+      [{ r: 255, g: 0, b: 0 }, { r: 255, g: 0, b: 0 }, { r: 0, g: 0, b: 255 }, { r: 0, g: 0, b: 255 }],
+      2, 2, 2,
+    );
+    const painted = recolorCell(pattern, 0, 1);
+    expect(painted.cells[0].colorId).toBe(1);
+    const filled = floodFill(pattern, 0, 1);
+    expect(filled.cells.map((cell) => cell.colorId)).toEqual([1, 1, 1, 1]);
+    expect(assessPatternQuality(pattern, 2, false)).not.toHaveLength(0);
   });
 });
