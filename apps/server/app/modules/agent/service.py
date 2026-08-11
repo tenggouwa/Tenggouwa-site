@@ -310,6 +310,7 @@ class AgentService:
                 "searched": set(),
                 "external_research": 0,
                 "external_research_closed": False,
+                "force_final": False,
                 "loaded": set(),
                 "custom": [],
                 "direct_kb_question": _is_direct_kb_question(q),
@@ -374,7 +375,7 @@ class AgentService:
             leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
             tools = (
                 None
-                if turn_state["direct_kb_ready"]
+                if turn_state["direct_kb_ready"] or turn_state["force_final"]
                 else skills_service.tools(
                     privileged=privileged, loaded=turn_state["loaded"], custom=turn_state["custom"]
                 )
@@ -412,6 +413,16 @@ class AgentService:
                         else:
                             yield ev
                 await repo.append(sid, seq, "assistant", final_answer)
+                seq += 1
+                answered = True
+                break
+
+            if turn_state["force_final"]:
+                # 供应商偶发会在 tools=None 时仍幻觉出 tool_calls；不能再让这类调用把本轮烧到 MAX_STEPS。
+                fallback = content.strip() or "已完成资料收集，但本轮未能生成可靠结论；请继续追问或重试。"
+                await repo.append(sid, seq, "assistant", fallback)
+                if not content.strip():
+                    yield {"type": "token", "delta": fallback}
                 seq += 1
                 answered = True
                 break
@@ -459,13 +470,21 @@ class AgentService:
             ):
                 messages.append({"role": "system", "content": "网页研究额度已用完，请基于现有搜索结果和正文直接作答。"})
                 turn_state["external_research_closed"] = True
+                turn_state["force_final"] = True
+                yield {"type": "status", "message": "已获取 4 个外部来源，正在基于现有资料收口。"}
 
             if asked:  # 抛完选择题即停，等用户点选（此前已把所有 tool_call 配上结果）
                 answered = True
                 break
-            if not budget_warned and sum(_est_tokens(m.get("content") or "") for m in messages) > STEP_TOKEN_BUDGET:
+            if (
+                not turn_state["force_final"]
+                and not budget_warned
+                and sum(_est_tokens(m.get("content") or "") for m in messages) > STEP_TOKEN_BUDGET
+            ):
                 messages.append({"role": "system", "content": "预算已尽，请基于现有信息直接作答，不要再调用工具。"})
                 budget_warned = True
+                turn_state["force_final"] = True
+                yield {"type": "status", "message": "本轮上下文预算已到，正在基于现有资料收口。"}
 
         # M2：MAX_STEPS 耗尽仍在调工具、始终没产出最终答案 —— 强制一次不带 tools 的收尾作答
         if not answered:

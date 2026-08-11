@@ -50,4 +50,25 @@ describe('Ask 输入历史持久化', () => {
     fireEvent.keyDown(ta, { key: 'ArrowUp' });
     await waitFor(() => expect(ta.value).toBe('旧问题'));
   });
+
+  it('收口状态对用户可见，并在完成时去掉流式残留的孤立尖括号', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        body: sseStream([
+          frame('status', { message: '已获取 4 个外部来源，正在基于现有资料收口。' }),
+          frame('token', { delta: '结论<' }),
+          frame('done', {}),
+        ]),
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+    render(<Ask />);
+    fireEvent.change(screen.getByPlaceholderText(/回车发送/), { target: { value: '查一下' } });
+    fireEvent.submit(document.querySelector('form:last-of-type') as HTMLFormElement);
+    await waitFor(() => expect(screen.getByText(/已获取 4 个外部来源/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('结论')).toBeTruthy());
+    expect(screen.queryByText('结论<')).toBeNull();
+  });
 });
