@@ -6,10 +6,14 @@ import {
   assessPatternQuality,
   cartoonizePixels,
   floodFill,
+  getBoardAssembly,
   makePattern,
   mapPatternToBeads,
   presetOptions,
   recolorCell,
+  suggestAlternatives,
+  simplifyBackgroundPixels,
+  enhanceEdgesPixels,
   rgbHex,
   STARTER_PALETTES,
   type FilterOptions,
@@ -18,7 +22,7 @@ import {
   type Rgb,
 } from '../../lib/perlerPattern';
 import { MARD_STANDARD_PALETTE } from '../../lib/mardPalette';
-import { loadLatestPerlerProject, saveLatestPerlerProject } from '../../lib/perlerProject';
+import { deletePerlerProject, listPerlerProjects, savePerlerProject, type SavedPerlerProject } from '../../lib/perlerProject';
 
 const BOARD_PRESETS = [
   { width: 14, height: 14, label: '14 × 14 · mini' },
@@ -128,6 +132,16 @@ function tilePatternDataUrl(pattern: PatternResult, withNumbers: boolean, startC
   return canvas.toDataURL('image/png');
 }
 
+function makePatternAsync(pixels: Rgb[], width: number, height: number, colorCount: number): Promise<PatternResult> {
+  if (pixels.length < 120_000) return Promise.resolve(makePattern(pixels, width, height, colorCount));
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../../workers/perlerWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (event: MessageEvent<PatternResult>) => { worker.terminate(); resolve(event.data); };
+    worker.onerror = () => { worker.terminate(); reject(new Error('大图计算任务失败')); };
+    worker.postMessage({ pixels, width, height, colorCount });
+  });
+}
+
 function IconUpload() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
@@ -158,6 +172,9 @@ export default function PerlerPattern() {
   const [filters, setFilters] = useState<FilterOptions>({ preset: 'original', ...presetOptions('original') });
   const [cartoonize, setCartoonize] = useState(false);
   const [cartoonStrength, setCartoonStrength] = useState(65);
+  const [backgroundSimplify, setBackgroundSimplify] = useState(false);
+  const [backgroundThreshold, setBackgroundThreshold] = useState(58);
+  const [edgeOutline, setEdgeOutline] = useState(false);
   const [processedPreviewUrl, setProcessedPreviewUrl] = useState('');
   const [numbers, setNumbers] = useState(true);
   const [pattern, setPattern] = useState<PatternResult | null>(null);
@@ -173,6 +190,10 @@ export default function PerlerPattern() {
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState(false);
   const [projectStatus, setProjectStatus] = useState('');
+  const [projectName, setProjectName] = useState('未命名图纸');
+  const [currentProjectId, setCurrentProjectId] = useState('');
+  const [savedProjects, setSavedProjects] = useState<SavedPerlerProject[]>([]);
+  const [assembledTiles, setAssembledTiles] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (canvasRef.current && pattern) drawPattern(canvasRef.current, pattern, numbers);
@@ -210,13 +231,15 @@ export default function PerlerPattern() {
     for (let index = 0; index < data.length; index += 4) {
       pixels.push(applyFilters({ r: data[index], g: data[index + 1], b: data[index + 2] }, filters));
     }
-    return cartoonize ? cartoonizePixels(pixels, source.width, source.height, cartoonStrength) : pixels;
-  }, [cartoonStrength, cartoonize, cropX, cropY, cropZoom, filters, fitMode, image]);
+    const simplified = backgroundSimplify ? simplifyBackgroundPixels(pixels, source.width, source.height, backgroundThreshold) : pixels;
+    const outlined = edgeOutline ? enhanceEdgesPixels(simplified, source.width, source.height, 55) : simplified;
+    return cartoonize ? cartoonizePixels(outlined, source.width, source.height, cartoonStrength) : outlined;
+  }, [backgroundSimplify, backgroundThreshold, cartoonStrength, cartoonize, cropX, cropY, cropZoom, edgeOutline, filters, fitMode, image]);
 
-  const createPattern = useCallback(() => {
+  const createPattern = useCallback(async () => {
     const pixels = processedPixels(gridWidth, gridHeight);
     if (!pixels) return null;
-    const draft = makePattern(pixels, gridWidth, gridHeight, colorCount);
+    const draft = await makePatternAsync(pixels, gridWidth, gridHeight, colorCount);
     if (paletteName === '智能量化' && !customPalette.length) return draft;
     const sourcePalette = customPalette.length ? customPalette : paletteName === 'Mard 标准 221 色' ? MARD_STANDARD_PALETTE : STARTER_PALETTES[paletteName];
     const available = sourcePalette.filter((color) => !stockOnly || color.inStock !== false);
@@ -226,9 +249,12 @@ export default function PerlerPattern() {
   useEffect(() => {
     if (!image) return;
     setProcessing(true);
-    const id = window.setTimeout(() => {
+    let cancelled = false;
+    const id = window.setTimeout(() => { void (async () => {
       try {
-        setPattern(createPattern());
+        const nextPattern = await createPattern();
+        if (cancelled) return;
+        setPattern(nextPattern);
         const previewMax = 640;
         const previewWidth = gridWidth >= gridHeight ? previewMax : Math.max(1, Math.round(previewMax * gridWidth / gridHeight));
         const previewHeight = gridHeight > gridWidth ? previewMax : Math.max(1, Math.round(previewMax * gridHeight / gridWidth));
@@ -254,10 +280,10 @@ export default function PerlerPattern() {
       } catch {
         setError('生成预览失败。请刷新页面后换一张较小的图片重试。');
       } finally {
-        setProcessing(false);
+        if (!cancelled) setProcessing(false);
       }
-    }, 180);
-    return () => window.clearTimeout(id);
+    })(); }, 180);
+    return () => { cancelled = true; window.clearTimeout(id); };
   }, [createPattern, gridHeight, gridWidth, image, processedPixels]);
 
   const selectFile = async (file: File | undefined) => {
@@ -377,23 +403,25 @@ export default function PerlerPattern() {
     popup.document.close();
   };
 
+  const refreshProjects = async () => setSavedProjects(await listPerlerProjects());
+
+  useEffect(() => { void refreshProjects().catch(() => undefined); }, []);
+
   const saveProject = async () => {
     if (!imageDataUrl) return;
     try {
-      await saveLatestPerlerProject({ fileName, imageDataUrl, gridWidth, gridHeight, colorCount, fitMode, cropX, cropY, cropZoom, filters, cartoonize, cartoonStrength, paletteName, customPalette, stockOnly, numbers });
+      const saved = await savePerlerProject({ id: currentProjectId || undefined, projectName: projectName.trim() || '未命名图纸', fileName, imageDataUrl, gridWidth, gridHeight, colorCount, fitMode, cropX, cropY, cropZoom, filters, cartoonize, cartoonStrength, backgroundSimplify, backgroundThreshold, edgeOutline, paletteName, customPalette, stockOnly, numbers });
+      setCurrentProjectId(saved.id);
+      setProjectName(saved.projectName);
+      await refreshProjects();
       setProjectStatus('项目已保存在此浏览器，可随时继续。');
     } catch {
       setProjectStatus('项目保存失败：浏览器存储不可用或空间不足。');
     }
   };
 
-  const restoreProject = async () => {
+  const restoreProject = async (project: SavedPerlerProject) => {
     try {
-      const project = await loadLatestPerlerProject();
-      if (!project) {
-        setProjectStatus('还没有已保存的项目。');
-        return;
-      }
       const restoredImage = await readImage(project.imageDataUrl);
       setImage(restoredImage);
       setImagePreviewUrl(project.imageDataUrl);
@@ -401,12 +429,42 @@ export default function PerlerPattern() {
       setFileName(project.fileName);
       setGridWidth(project.gridWidth); setGridHeight(project.gridHeight); setColorCount(project.colorCount as (typeof COLOR_COUNTS)[number]);
       setFitMode(project.fitMode); setCropX(project.cropX); setCropY(project.cropY); setCropZoom(project.cropZoom);
-      setFilters(project.filters); setCartoonize(project.cartoonize); setCartoonStrength(project.cartoonStrength);
+      setFilters(project.filters); setCartoonize(project.cartoonize); setCartoonStrength(project.cartoonStrength); setBackgroundSimplify(project.backgroundSimplify ?? false); setBackgroundThreshold(project.backgroundThreshold ?? 58); setEdgeOutline(project.edgeOutline ?? false);
       setPaletteName(project.paletteName); setCustomPalette(project.customPalette); setStockOnly(project.stockOnly); setNumbers(project.numbers);
+      setProjectName(project.projectName || '未命名图纸'); setCurrentProjectId(project.id);
       setProjectStatus(`已恢复 ${new Date(project.savedAt).toLocaleString()} 保存的项目。`);
     } catch {
       setProjectStatus('项目恢复失败：保存内容已损坏或浏览器不支持。');
     }
+  };
+
+  const downloadProjectBackup = () => {
+    const current = savedProjects.find((item) => item.id === currentProjectId);
+    if (!current) {
+      setProjectStatus('请先保存当前项目，再导出备份。');
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(current)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = `${current.projectName || 'perler'}-backup.json`; link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const importProjectBackup = (file: File | undefined) => {
+    if (!file) return;
+    void file.text().then(async (text) => {
+      const parsed = JSON.parse(text) as SavedPerlerProject;
+      if (!parsed.imageDataUrl || !parsed.gridWidth || !parsed.gridHeight) throw new Error('备份内容不完整');
+      const saved = await savePerlerProject({ ...parsed, id: undefined, projectName: `${parsed.projectName || '未命名图纸'}（导入）` });
+      await refreshProjects();
+      await restoreProject(saved);
+    }).catch(() => setProjectStatus('项目备份格式无效。'));
+  };
+
+  const removeProject = async (id: string) => {
+    await deletePerlerProject(id);
+    if (id === currentProjectId) setCurrentProjectId('');
+    await refreshProjects();
   };
 
   const startCropDrag = (event: React.PointerEvent<HTMLImageElement>) => {
@@ -474,6 +532,9 @@ export default function PerlerPattern() {
                 <button type="button" onClick={() => setCartoonize(true)} className={`min-h-11 rounded border px-2 text-xs transition-colors ${cartoonize ? 'border-terminal-green bg-terminal-green/10 text-terminal-green' : 'border-terminal-line hover:border-terminal-cyan'}`}>转卡通</button>
               </div>
               {cartoonize && <label className="mt-3 block" htmlFor="cartoon-strength">卡通强度 <span className="text-terminal-cyan">{cartoonStrength}</span><input id="cartoon-strength" className="mt-2 w-full accent-terminal-green" type="range" min="20" max="100" value={cartoonStrength} onChange={(event) => setCartoonStrength(Number(event.target.value))} /></label>}
+              <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-2"><input checked={backgroundSimplify} onChange={(event) => setBackgroundSimplify(event.target.checked)} type="checkbox" className="accent-terminal-green" /> 简化纯色背景为白色</label>
+              <label className="mt-2 flex min-h-11 cursor-pointer items-center gap-2"><input checked={edgeOutline} onChange={(event) => setEdgeOutline(event.target.checked)} type="checkbox" className="accent-terminal-green" /> 强调主体轮廓</label>
+              {backgroundSimplify && <label className="mt-2 block" htmlFor="background-threshold">背景相似度 <span className="text-terminal-cyan">{backgroundThreshold}</span><input id="background-threshold" className="mt-2 w-full accent-terminal-green" type="range" min="20" max="120" value={backgroundThreshold} onChange={(event) => setBackgroundThreshold(Number(event.target.value))} /><span className="mt-1 block text-terminal-gray/60">只处理与四角相连的近似色背景，复杂背景请保留原图。</span></label>}
             </fieldset>
             <fieldset className="rounded border border-terminal-line/70 p-3 text-xs text-terminal-gray">
               <legend className="px-1 text-terminal-cyan">裁切与项目</legend>
@@ -483,7 +544,10 @@ export default function PerlerPattern() {
                 <label htmlFor="crop-y">纵移 <span className="text-terminal-cyan">{Math.round(cropY)}</span><input id="crop-y" className="mt-1 w-full accent-terminal-green" type="range" min="-100" max="100" value={cropY} onChange={(event) => setCropY(Number(event.target.value))} /></label>
                 <label htmlFor="crop-zoom">缩放 <span className="text-terminal-cyan">{cropZoom}%</span><input id="crop-zoom" className="mt-1 w-full accent-terminal-green" type="range" min="100" max="220" value={cropZoom} onChange={(event) => setCropZoom(Number(event.target.value))} /></label>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={!imageDataUrl} onClick={() => void saveProject()} className="min-h-11 rounded border border-terminal-cyan/70 px-2 text-terminal-cyan disabled:opacity-40">保存本项目</button><button type="button" onClick={() => void restoreProject()} className="min-h-11 rounded border border-terminal-line px-2 hover:border-terminal-green">恢复已保存项目</button></div>
+              <label className="mt-3 block" htmlFor="project-name">项目名称<input id="project-name" value={projectName} onChange={(event) => setProjectName(event.target.value)} className="mt-1 h-10 w-full rounded border border-terminal-line bg-terminal-bg px-2 text-terminal-gray" /></label>
+              <div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={!imageDataUrl} onClick={() => void saveProject()} className="min-h-11 rounded border border-terminal-cyan/70 px-2 text-terminal-cyan disabled:opacity-40">保存到项目库</button><button type="button" onClick={downloadProjectBackup} className="min-h-11 rounded border border-terminal-line px-2 hover:border-terminal-green">导出项目备份</button></div>
+              <label className="mt-2 block cursor-pointer rounded border border-terminal-line px-2 py-2 text-terminal-cyan">导入项目备份<input type="file" accept="application/json" className="sr-only" onChange={(event) => importProjectBackup(event.target.files?.[0])} /></label>
+              {savedProjects.length > 0 && <ol className="mt-3 max-h-40 space-y-1 overflow-y-auto">{savedProjects.map((project) => <li key={project.id} className="flex items-center gap-2 rounded border border-terminal-line/60 bg-terminal-bg/50 px-2 py-1.5"><button type="button" onClick={() => void restoreProject(project)} className="min-h-9 min-w-0 flex-1 truncate text-left hover:text-terminal-green">{project.projectName || '未命名图纸'}</button><span className="text-terminal-gray/50">{project.gridWidth}×{project.gridHeight}</span><button type="button" onClick={() => void removeProject(project.id)} className="min-h-9 px-1 text-terminal-pink" aria-label={`删除 ${project.projectName}`}>×</button></li>)}</ol>}
               {projectStatus && <p className="mt-2 text-terminal-gray/60" aria-live="polite">{projectStatus}</p>}
             </fieldset>
             <label className="block text-xs text-terminal-gray" htmlFor="board-size">常用豆板尺寸（格）
@@ -547,7 +611,7 @@ export default function PerlerPattern() {
           </div>
         </section>
 
-        <p className="border-t border-terminal-line/60 pt-5 text-xs text-terminal-gray/60" aria-live="polite">{processing ? '正在更新原图处理与图纸预览…' : image ? `已生成${cartoonize ? '卡通' : '照片'}预览：核对图纸与 Mard 色号后再导出。` : '上传图片后会自动生成预览。'}</p>
+        <p className="border-t border-terminal-line/60 pt-5 text-xs text-terminal-gray/60" aria-live="polite">{processing ? gridWidth * gridHeight >= 120_000 ? '正在后台量化大图，页面仍可继续操作…' : '正在更新原图处理与图纸预览…' : image ? `已生成${cartoonize ? '卡通' : '照片'}预览：核对图纸与 Mard 色号后再导出。` : '上传图片后会自动生成预览。'}</p>
 
         {pattern && (
           <section className="grid gap-6 border-t border-terminal-line/60 pt-6 lg:grid-cols-[minmax(0,1fr)_260px]" aria-labelledby="result-heading">
@@ -570,6 +634,11 @@ export default function PerlerPattern() {
                 <h3 className="text-terminal-cyan">质量提示</h3>
                 <ul className="mt-2 space-y-1 text-terminal-gray/70">{assessPatternQuality(pattern, colorCount, cartoonize).map((issue) => <li key={issue.text} className={issue.tone === 'warning' ? 'text-terminal-yellow' : ''}>- {issue.text}</li>)}</ul>
               </section>
+              <section className="mt-3 rounded border border-terminal-line/60 bg-terminal-panel/20 p-3 text-xs" aria-label="拼板装配图">
+                <div className="flex items-center justify-between gap-2"><h3 className="text-terminal-cyan">拼板装配图</h3><span className="text-terminal-gray/60">按 {printTileSize} 格板拼接</span></div>
+                <div className="mt-3 grid max-w-md gap-1" style={{ gridTemplateColumns: `repeat(${Math.ceil(pattern.width / printTileSize)}, minmax(0, 1fr))` }}>{getBoardAssembly(pattern, printTileSize).map((tile) => <button key={tile.id} type="button" onClick={() => setAssembledTiles((current) => { const next = new Set(current); next.has(tile.id) ? next.delete(tile.id) : next.add(tile.id); return next; })} className={`min-h-10 rounded border text-center ${assembledTiles.has(tile.id) ? 'border-terminal-green bg-terminal-green/15 text-terminal-green' : 'border-terminal-line bg-terminal-bg/50 hover:border-terminal-cyan'}`} title={`第 ${tile.row + 1} 行第 ${tile.column + 1} 块：${tile.width}×${tile.height} 格`}>{tile.id}<span className="block text-[10px] opacity-70">{tile.width}×{tile.height}</span></button>)}</div>
+                <p className="mt-2 text-terminal-gray/60">点击标记已完成的豆板；打印页标题与这里的编号一一对应。</p>
+              </section>
               <div className="mt-4 flex flex-wrap gap-2 border-t border-terminal-line/60 pt-4">
                 <button type="button" onClick={download} className="min-h-11 rounded border border-terminal-green/70 px-4 text-sm text-terminal-green transition-colors hover:bg-terminal-green/10">下载 PNG 图纸</button>
                 <button type="button" onClick={exportCsv} className="min-h-11 rounded border border-terminal-cyan/70 px-4 text-sm text-terminal-cyan transition-colors hover:bg-terminal-cyan/10">导出 CSV 清单</button>
@@ -580,6 +649,7 @@ export default function PerlerPattern() {
             <aside className="min-w-0" aria-label="颜色编号色卡">
               <h2 className="text-sm text-terminal-green"><span className="text-terminal-pink">$ </span>cat ./palette</h2>
               <p className="mt-2 text-xs leading-relaxed text-terminal-gray/60">按编号取豆；数量是该颜色所需的颗数，建议多备 5%。智能量化色用于预览，导入品牌色板后可按真实色号采购。</p>
+              {pattern.palette[selectedColor] && <section className="mt-3 rounded border border-terminal-line/60 bg-terminal-panel/20 p-2 text-xs"><h3 className="text-terminal-cyan">色号替代建议</h3><p className="mt-1 text-terminal-gray/60">若 {pattern.palette[selectedColor].code} 缺货，可优先比较：</p><div className="mt-2 flex flex-wrap gap-1">{suggestAlternatives(pattern.palette[selectedColor], customPalette.length ? customPalette : paletteName === 'Mard 标准 221 色' ? MARD_STANDARD_PALETTE : STARTER_PALETTES[paletteName] ?? [], 3).map((color) => <span key={color.code} className="rounded border border-terminal-line px-1.5 py-1"><span className="mr-1 inline-block h-3 w-3 align-[-1px]" style={{ backgroundColor: rgbCss(color) }} />{color.code}</span>)}</div></section>}
               <ol className="mt-3 grid max-h-[580px] grid-cols-1 gap-1 overflow-y-auto pr-1 text-xs">
                 {pattern.palette.map((color, index) => <li key={color.code}><button type="button" onClick={() => setSelectedColor(index)} className={`flex min-h-11 w-full items-center gap-2 rounded border px-2 text-left text-terminal-gray ${selectedColor === index ? 'border-terminal-green bg-terminal-green/10' : 'border-terminal-line/60 bg-terminal-bg/50'}`}><span className="h-5 w-5 shrink-0 rounded-sm border border-terminal-line" style={{ backgroundColor: rgbCss(color) }} /><span className="w-7 text-terminal-cyan">#{index + 1}</span><span className="min-w-0 flex-1"><span className="block truncate font-mono">{color.code} · {color.name}</span><span className="block truncate text-terminal-gray/55">{rgbHex(color)}</span></span><span className="ml-auto text-terminal-yellow">×{pattern.counts[index]}</span></button></li>)}
               </ol>

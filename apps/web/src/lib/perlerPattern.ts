@@ -61,6 +61,46 @@ export function cartoonizePixels(pixels: Rgb[], width: number, height: number, s
   });
 }
 
+/** Removes border-connected pixels similar to the corner background; best for studio or plain backgrounds. */
+export function simplifyBackgroundPixels(pixels: Rgb[], width: number, height: number, threshold: number): Rgb[] {
+  if (!pixels.length || pixels.length !== width * height) return pixels;
+  const corners = [pixels[0], pixels[width - 1], pixels[pixels.length - width], pixels[pixels.length - 1]];
+  const background = corners.reduce((best, candidate) => corners.reduce((total, other) => total + distance(candidate, other), 0) < corners.reduce((total, other) => total + distance(best, other), 0) ? candidate : best, corners[0]);
+  const limit = Math.max(10, Math.min(180, threshold)) ** 2;
+  const next = pixels.map((pixel) => ({ ...pixel }));
+  const pending: number[] = [];
+  for (let column = 0; column < width; column += 1) { pending.push(column, (height - 1) * width + column); }
+  for (let row = 1; row < height - 1; row += 1) { pending.push(row * width, row * width + width - 1); }
+  const seen = new Set<number>();
+  while (pending.length) {
+    const index = pending.pop();
+    if (index === undefined || seen.has(index) || distance(pixels[index], background) > limit) continue;
+    seen.add(index);
+    next[index] = { r: 255, g: 255, b: 255 };
+    const column = index % width;
+    if (column > 0) pending.push(index - 1);
+    if (column < width - 1) pending.push(index + 1);
+    if (index >= width) pending.push(index - width);
+    if (index < pixels.length - width) pending.push(index + width);
+  }
+  return next;
+}
+
+export function enhanceEdgesPixels(pixels: Rgb[], width: number, height: number, strength: number): Rgb[] {
+  if (!pixels.length || pixels.length !== width * height || strength <= 0) return pixels;
+  const amount = Math.max(0, Math.min(100, strength)) / 100;
+  return pixels.map((pixel, index) => {
+    const column = index % width;
+    const left = pixels[index - (column > 0 ? 1 : 0)];
+    const right = pixels[index + (column < width - 1 ? 1 : 0)];
+    const up = pixels[index - (index >= width ? width : 0)];
+    const down = pixels[index + (index < pixels.length - width ? width : 0)];
+    const edge = Math.min(1, (Math.abs(right.r - left.r) + Math.abs(right.g - left.g) + Math.abs(right.b - left.b) + Math.abs(down.r - up.r) + Math.abs(down.g - up.g) + Math.abs(down.b - up.b)) / 420);
+    const factor = 1 - edge * amount * 0.5;
+    return { r: clamp(pixel.r * factor), g: clamp(pixel.g * factor), b: clamp(pixel.b * factor) };
+  });
+}
+
 export interface PatternCell extends Rgb {
   colorId: number;
 }
@@ -83,6 +123,33 @@ export interface PatternResult {
 export interface PatternQualityIssue {
   tone: 'info' | 'warning';
   text: string;
+}
+
+export interface BoardTile {
+  id: string;
+  row: number;
+  column: number;
+  startRow: number;
+  startColumn: number;
+  width: number;
+  height: number;
+}
+
+export function getBoardAssembly(pattern: Pick<PatternResult, 'width' | 'height'>, tileSize: number): BoardTile[] {
+  const tiles: BoardTile[] = [];
+  for (let startRow = 0, row = 0; startRow < pattern.height; startRow += tileSize, row += 1) {
+    for (let startColumn = 0, column = 0; startColumn < pattern.width; startColumn += tileSize, column += 1) {
+      tiles.push({ id: `${String.fromCharCode(65 + row)}${column + 1}`, row, column, startRow, startColumn, width: Math.min(tileSize, pattern.width - startColumn), height: Math.min(tileSize, pattern.height - startRow) });
+    }
+  }
+  return tiles;
+}
+
+export function suggestAlternatives(color: BeadColor, palette: BeadColor[], limit = 3): BeadColor[] {
+  return palette
+    .filter((candidate) => candidate.code !== color.code)
+    .sort((a, b) => distance(color, a) - distance(color, b))
+    .slice(0, limit);
 }
 
 export function assessPatternQuality(pattern: PatternResult, requestedColors: number, cartoonized: boolean): PatternQualityIssue[] {

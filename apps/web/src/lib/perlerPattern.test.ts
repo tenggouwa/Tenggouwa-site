@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyFilters, assessPatternQuality, cartoonizePixels, floodFill, makePattern, mapPatternToBeads, presetOptions, recolorCell, rgbHex, type BeadColor } from './perlerPattern';
+import { applyFilters, assessPatternQuality, cartoonizePixels, floodFill, getBoardAssembly, makePattern, mapPatternToBeads, presetOptions, recolorCell, rgbHex, simplifyBackgroundPixels, suggestAlternatives, type BeadColor } from './perlerPattern';
 
 describe('perler pattern', () => {
   it('量化后每个格子都引用调色板中的颜色编号', () => {
@@ -58,5 +58,17 @@ describe('perler pattern', () => {
     const filled = floodFill(pattern, 0, 1);
     expect(filled.cells.map((cell) => cell.colorId)).toEqual([1, 1, 1, 1]);
     expect(assessPatternQuality(pattern, 2, false)).not.toHaveLength(0);
+  });
+
+  it('生成拼板装配编号、替代色和边界连通的背景简化', () => {
+    expect(getBoardAssembly({ width: 58, height: 30 }, 29).map((tile) => tile.id)).toEqual(['A1', 'A2', 'B1', 'B2']);
+    const alternatives = suggestAlternatives(
+      { code: 'R', name: '红', brand: '测试', r: 255, g: 0, b: 0 },
+      [{ code: 'P', name: '粉', brand: '测试', r: 250, g: 20, b: 20 }, { code: 'B', name: '蓝', brand: '测试', r: 0, g: 0, b: 255 }],
+    );
+    expect(alternatives[0].code).toBe('P');
+    const simplified = simplifyBackgroundPixels([{ r: 200, g: 200, b: 200 }, { r: 200, g: 200, b: 200 }, { r: 200, g: 200, b: 200 }, { r: 255, g: 0, b: 0 }], 2, 2, 20);
+    expect(simplified[0]).toEqual({ r: 255, g: 255, b: 255 });
+    expect(simplified[3]).toEqual({ r: 255, g: 0, b: 0 });
   });
 });
