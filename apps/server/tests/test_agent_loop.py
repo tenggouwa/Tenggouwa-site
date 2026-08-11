@@ -39,8 +39,33 @@ async def test_external_research_cap_trims_tool_calls_and_forces_answer(monkeypa
     )
     assert [tool["name"] for tool in of_type(events, "tool")] == ["web_search"] * 4
     assert "web_search" not in llm.tool_sets[1] and "web_fetch" not in llm.tool_sets[1]
+    assert of_type(events, "status")[0]["message"].startswith("已获取 4 个")
     assert tokens(events).endswith("基于已找到的来源，这就是结论。")
     assert_paired(repo.rows)
+
+
+async def test_budget_cap_forces_next_step_without_tools(monkeypatch):
+    """预算一到就硬关 tools，不能只用提示词期待模型自己收口。"""
+    import modules.agent.service as svc
+
+    monkeypatch.setattr(svc, "STEP_TOKEN_BUDGET", 0)
+
+    class _LLM:
+        def __init__(self):
+            self.tool_sets: list[list[dict] | None] = []
+
+        async def stream_step(self, _messages, *, tools=None, **_kw):
+            self.tool_sets.append(tools)
+            if tools is not None:
+                yield {"type": "tool_calls", "tool_calls": [tool_call("kb_search", '{"query":"q"}')]}
+            else:
+                yield {"type": "content", "delta": "基于现有资料的结论。"}
+
+    llm = _LLM()
+    events, _ = await run_agent(monkeypatch, [], llm=llm)
+    assert llm.tool_sets[1] is None
+    assert of_type(events, "status")[0]["message"].startswith("本轮上下文预算")
+    assert tokens(events).endswith("基于现有资料的结论。")
 
 
 async def test_plain_answer_no_tools(monkeypatch):

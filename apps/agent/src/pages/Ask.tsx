@@ -71,6 +71,7 @@ interface Turn {
   toolOutput?: Record<string, string>; // tool_call_id → 流式输出（shell_exec 实时终端）
   approval?: ApprovalRequest[]; // agent 想执行需授权的工具，等用户批/拒（C2）
   usage?: Usage;
+  status?: string;
   error?: string;
   done: boolean;
 }
@@ -246,6 +247,7 @@ export default function Ask() {
       setActiveSessionId(next);
     }
     else if (event === 'usage') updateTurn(idx, (t) => ({ ...t, usage: obj }));
+    else if (event === 'status') updateTurn(idx, (t) => ({ ...t, status: obj.message ?? '正在基于现有资料收口。' }));
     else if (event === 'plan') updateTurn(idx, (t) => ({ ...t, plan: obj.plan ?? [] }));
     else if (event === 'approval') updateTurn(idx, (t) => ({ ...t, approval: obj.requests ?? [] }));
     else if (event === 'ask')
@@ -276,7 +278,7 @@ export default function Ask() {
       });
     else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
     else if (event === 'done') {
-      updateTurn(idx, (t) => ({ ...t, done: true }));
+      updateTurn(idx, (t) => ({ ...t, answer: t.answer.replace(/<\s*$/, ''), done: true }));
       if (agentToken) setSessionRevision((v) => v + 1);
     }
     else if (event === 'error') updateTurn(idx, (t) => ({ ...t, error: obj.message ?? '出错了', done: true }));
@@ -710,7 +712,8 @@ export default function Ask() {
                 {!t.done && t.answer !== '' && (
                   <span className="inline-block w-2 h-4 bg-terminal-green/80 align-text-bottom animate-blink" />
                 )}
-                {t.error && <span className="text-terminal-red">[错误] {t.error}</span>}
+              {t.error && <span className="text-terminal-red">[错误] {t.error}</span>}
+              {t.status && <div className="text-xs text-terminal-yellow/80">[收口] {t.status}</div>}
               </div>
               {t.usage && <div className="text-[11px] text-terminal-gray/40">≈ {fmtUsage(t.usage)}</div>}
             </div>
