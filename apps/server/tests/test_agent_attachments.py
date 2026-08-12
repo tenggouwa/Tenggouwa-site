@@ -34,9 +34,11 @@ async def test_image_attachment_uses_vision_model_for_this_request(monkeypatch):
         def __init__(self):
             super().__init__([[{"type": "content", "delta": "已分析图片"}]])
             self.vision_values: list[bool] = []
+            self.tool_values: list[object] = []
 
         async def stream_step(self, messages, *, vision=False, **kwargs):
             self.vision_values.append(vision)
+            self.tool_values.append(kwargs.get("tools"))
             assert isinstance(messages[-1]["content"], list)
             async for event in super().stream_step(messages, **kwargs):
                 yield event
@@ -50,3 +52,4 @@ async def test_image_attachment_uses_vision_model_for_this_request(monkeypatch):
     )
     assert tokens(events) == "已分析图片"
     assert llm.vision_values == [True]
+    assert llm.tool_values == [None]
