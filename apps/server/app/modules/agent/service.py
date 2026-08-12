@@ -377,16 +377,16 @@ class AgentService:
                 break
             content, tool_calls = "", []
             leaked = False  # 防御：见到 ｜ 泄漏 token 后，本轮后续 content 全部丢弃
+            has_images = bool(attachments and any(item.data_url for item in attachments))
             tools = (
                 None
-                if turn_state["direct_kb_ready"] or turn_state["force_final"]
+                if has_images or turn_state["direct_kb_ready"] or turn_state["force_final"]
                 else skills_service.tools(
                     privileged=privileged, loaded=turn_state["loaded"], custom=turn_state["custom"]
                 )
             )
             if tools is not None:
                 tools = _without_exhausted_external_tools(tools, turn_state)
-            has_images = bool(attachments and any(item.data_url for item in attachments))
             async for ev in chat_llm.stream_step(
                 messages, tools=tools, model=None if has_images else model, vision=has_images
             ):
