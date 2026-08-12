@@ -94,6 +94,7 @@ async def run_agent(
     auto_approve=False,
     owner=None,
     llm=None,
+    attachments=None,
 ):
     """跑一次 answer_stream，返回 (events, repo)。mock 掉 LLM / skills / repo，全程不联网。
 
@@ -130,6 +131,7 @@ async def run_agent(
             privileged=privileged,
             auto_approve=auto_approve,
             owner=owner,
+            attachments=attachments,
         )
     ]
     repo.tools_privileged = seen.get("privileged")  # type: ignore[attr-defined]

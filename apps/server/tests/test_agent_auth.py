@@ -81,6 +81,15 @@ def test_public_channel_not_auth_gated():
     assert r.status_code != 401
 
 
+def test_public_channel_rejects_image_without_vision_provider():
+    response = _client().post(
+        "/api/public/agent/chat",
+        json={"attachments": [{"name": "screen.png", "media_type": "image/png", "data": "cG5n"}]},
+    )
+    assert response.status_code == 422
+    assert "vision provider" in response.json()["detail"]
+
+
 def test_unlock_rate_limited(monkeypatch):
     # 解锁端点限流：mock 掉 TOTP 校验（免 DB），换一把小闸，超限返回 429
     import modules.agent.router as arouter

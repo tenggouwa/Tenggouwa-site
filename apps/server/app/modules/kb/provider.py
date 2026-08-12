@@ -73,6 +73,13 @@ class ChatLLM:
         self.base_url = (os.environ.get("KB_LLM_BASE_URL") or "https://api.deepseek.com").rstrip("/")
         self.api_key = os.environ.get("KB_LLM_API_KEY", "")
         self.model = os.environ.get("KB_LLM_MODEL") or "deepseek-chat"
+        self.vision_base_url = (os.environ.get("KB_VISION_BASE_URL") or self.base_url).rstrip("/")
+        self.vision_api_key = os.environ.get("KB_VISION_API_KEY") or self.api_key
+        self.vision_model = os.environ.get("KB_VISION_MODEL", "")
+
+    @property
+    def vision_configured(self) -> bool:
+        return bool(self.vision_model and self.vision_api_key)
 
     async def stream(
         self,
@@ -132,6 +139,7 @@ class ChatLLM:
         max_tokens: int = 4096,
         temperature: float = 0.3,
         model: str | None = None,
+        vision: bool = False,
     ) -> AsyncIterator[dict]:
         """流式跑一轮：实时 yield 正文增量，并把结构化 tool_calls 累积到最后一并 yield。
 
@@ -141,10 +149,13 @@ class ChatLLM:
         model 传入覆盖默认模型（深度思考模式用 deepseek-reasoner）。
         瞬时错误只在「首个事件到达前」重试；已开始流式再断则透传（避免重复输出）。
         """
-        if not self.api_key:
+        api_key = self.vision_api_key if vision else self.api_key
+        base_url = self.vision_base_url if vision else self.base_url
+        selected_model = model or (self.vision_model if vision else self.model)
+        if not api_key:
             raise RuntimeError("KB_LLM_API_KEY 未配置")
         payload: dict = {
-            "model": model or self.model,
+            "model": selected_model,
             "messages": messages,
             "stream": True,
             "stream_options": {"include_usage": True},
@@ -157,7 +168,7 @@ class ChatLLM:
         for attempt in range(_RETRY_MAX):
             yielded = False
             try:
-                async for ev in self._stream_step_once(payload):
+                async for ev in self._stream_step_once(payload, base_url=base_url, api_key=api_key):
                     yielded = True
                     yield ev
                 return
@@ -172,11 +183,13 @@ class ChatLLM:
                 logger.warning("stream_step %d 重试 %d/%d", e.response.status_code, attempt + 1, _RETRY_MAX)
                 await _backoff(attempt)
 
-    async def _stream_step_once(self, payload: dict) -> AsyncIterator[dict]:
+    async def _stream_step_once(
+        self, payload: dict, *, base_url: str | None = None, api_key: str | None = None
+    ) -> AsyncIterator[dict]:
         """单次流式请求（不含重试）。stream_step 的重试包装调用它。"""
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {"Authorization": f"Bearer {api_key or self.api_key}", "Content-Type": "application/json"}
         timeout = httpx.Timeout(120.0, connect=10.0)
-        url = f"{self.base_url}/chat/completions"
+        url = f"{base_url or self.base_url}/chat/completions"
         acc: dict[int, dict] = {}  # index -> {id, type, function:{name, arguments}}
         usage: dict | None = None
         async with (

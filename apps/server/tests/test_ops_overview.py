@@ -38,6 +38,12 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
             cache_miss_tokens=300,
             external_research_calls=4,
             external_research_capped_runs=1,
+            p95_duration_ms=1200,
+            long_running_runs=1,
+            high_prompt_runs=1,
+            failed_runs=0,
+            alert_level="warning",
+            alerts=[],
         )
 
     monkeypatch.setattr(ops.ops_service, "_agent_metrics", agent_metrics)
@@ -75,6 +81,12 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
             "cache_miss_tokens": 300,
             "external_research_calls": 4,
             "external_research_capped_runs": 1,
+            "p95_duration_ms": 1200,
+            "long_running_runs": 1,
+            "high_prompt_runs": 1,
+            "failed_runs": 0,
+            "alert_level": "warning",
+            "alerts": [],
         },
         "live_smoke": {
             "status": "failure",
@@ -91,3 +103,38 @@ async def test_ops_overview_aggregates_safe_metadata(monkeypatch):
             }
         ],
     }
+
+
+async def test_agent_metrics_marks_cost_latency_and_cap_anomalies(monkeypatch):
+    class _Repo:
+        def __init__(self, _session):
+            pass
+
+        async def ops_metrics(self):
+            return {
+                "window_hours": 24,
+                "total_runs": 3,
+                "completed_runs": 3,
+                "awaiting_approval_runs": 0,
+                "avg_duration_ms": 1000,
+                "tool_calls": 6,
+                "prompt_tokens": 101_000,
+                "completion_tokens": 300,
+                "cache_hit_tokens": 0,
+                "cache_miss_tokens": 101_000,
+                "external_research_calls": 4,
+                "external_research_capped_runs": 1,
+                "p95_duration_ms": 61_000,
+                "long_running_runs": 1,
+                "high_prompt_runs": 1,
+                "failed_runs": 0,
+            }
+
+    monkeypatch.setattr(ops, "AgentRepository", _Repo)
+    metrics = await ops.ops_service._agent_metrics(None)
+    assert metrics.alert_level == "critical"
+    assert metrics.alerts == [
+        "1 次输入超过 100k token，建议检查上下文或工具输出。",
+        "1 次运行超过 60 秒，建议检查工具或模型延迟。",
+        "1 次触发网页研究上限，已自动收口。",
+    ]

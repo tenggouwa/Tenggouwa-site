@@ -47,6 +47,12 @@ class OpsAgentMetrics(BaseModel):
     cache_miss_tokens: int
     external_research_calls: int
     external_research_capped_runs: int
+    p95_duration_ms: int
+    long_running_runs: int
+    high_prompt_runs: int
+    failed_runs: int
+    alert_level: str
+    alerts: list[str] = Field(default_factory=list)
 
 
 class OpsOverview(BaseModel):
