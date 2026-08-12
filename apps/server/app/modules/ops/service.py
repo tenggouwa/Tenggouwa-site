@@ -24,7 +24,20 @@ _live_smoke_cache: tuple[float, list[OpsLiveSmoke]] | None = None
 class OpsService:
     @staticmethod
     async def _agent_metrics(session: AsyncSession) -> OpsAgentMetrics:
-        return OpsAgentMetrics(**await AgentRepository(session).ops_metrics())
+        metrics = await AgentRepository(session).ops_metrics()
+        alerts: list[str] = []
+        if metrics["failed_runs"]:
+            alerts.append(f"{metrics['failed_runs']} 次运行失败，请检查 AgentRun 与服务日志。")
+        if metrics["high_prompt_runs"]:
+            alerts.append(f"{metrics['high_prompt_runs']} 次输入超过 100k token，建议检查上下文或工具输出。")
+        if metrics["long_running_runs"]:
+            alerts.append(f"{metrics['long_running_runs']} 次运行超过 60 秒，建议检查工具或模型延迟。")
+        if metrics["external_research_capped_runs"]:
+            alerts.append(f"{metrics['external_research_capped_runs']} 次触发网页研究上限，已自动收口。")
+        level = (
+            "critical" if metrics["failed_runs"] or metrics["high_prompt_runs"] else "warning" if alerts else "healthy"
+        )
+        return OpsAgentMetrics(**metrics, alert_level=level, alerts=alerts)
 
     @staticmethod
     def _live_smoke(run: dict) -> OpsLiveSmoke:

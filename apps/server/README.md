@@ -57,7 +57,7 @@ python main.py
 | 分组 | 变量 |
 | --- | --- |
 | 数据与鉴权 | `POSTGRES_DEFAULT_PASSWORD`、`AUTH_JWT_SECRET`、`ADMIN_*_PASSWORD_HASH` |
-| Knowledge Base | `KB_LLM_*`、`KB_EMBED_*`、`KB_LLM_REASONER_MODEL` |
+| Knowledge Base | `KB_LLM_*`、`KB_EMBED_*`、`KB_LLM_REASONER_MODEL`、`KB_VISION_*`（可选图片分析） |
 | Notes Knowledge Base | `KB_NOTES_DIR`（可选 Markdown/Obsidian 根目录；未设置时 notes source 空跑） |
 | Agent | `AGENT_TOKEN_TTL_MIN`、`AGENT_PI_SANDBOX`、`AGENT_WORKSPACE` |
 | Pi | `PI_AGENT_TOKEN` |
@@ -96,6 +96,12 @@ RUN_LIVE_TESTS=1 KB_LLM_API_KEY=... \
 
 普通 PR CI 不依赖外网和付费模型。修复 Agent 行为问题时要补 ScriptedLLM/golden 回归；只有模型路由
 本身无法确定性覆盖的场景才进入 nightly live suite。
+
+## Agent 附件
+
+Agent 单次最多 3 个附件。PDF 在服务端内存中本地抽取文本（8MB、30 页、24k 字上限），不写入会话或运行记录；
+扫描件需先 OCR。JPG/PNG/WebP（4MB 上限）只在明确配置 `KB_VISION_BASE_URL`、`KB_VISION_MODEL`、
+`KB_VISION_API_KEY` 后才会转给该 OpenAI-compatible vision provider；未配置时会安全拒绝图片，不能假装已分析。
 
 ## OpenAPI → TypeScript
 

@@ -10,10 +10,12 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
+from ..kb.provider import chat_llm
 from ..mcp.manager import mcp_manager
 from ..memory.store import MemoryStore
 from ..terminal.service import terminal_service
 from ..totp.repository import AdminTotpRepository
+from .attachments import AttachmentError, PreparedAttachment, prepare_attachments
 from .auth import current_agent_owner, make_agent_token
 from .custom_skills import CustomSkillStore
 from .proposals import ProposalStore
@@ -82,7 +84,12 @@ async def revoke(
 
 
 def _chat_stream(
-    session: AsyncSession, payload: AgentChatRequest, *, privileged: bool, owner: str | None = None
+    session: AsyncSession,
+    payload: AgentChatRequest,
+    *,
+    privileged: bool,
+    owner: str | None = None,
+    attachments: list[PreparedAttachment] | None = None,
 ) -> StreamingResponse:
     async def gen():
         try:
@@ -97,6 +104,7 @@ def _chat_stream(
                 deep=payload.deep_think,
                 reflect=payload.reflect,
                 auto_model=payload.auto_model,
+                attachments=attachments,
             ):
                 yield _sse(ev["type"], ev)
         except asyncio.CancelledError:
@@ -118,7 +126,13 @@ async def chat(
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     public_agent_limiter.hit(client_ip(request))
-    return _chat_stream(session, payload, privileged=False)  # owner=None：公开会话不归属，也不进「我的会话」
+    try:
+        attachments = prepare_attachments(payload.attachments, vision_enabled=chat_llm.vision_configured)
+    except AttachmentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _chat_stream(
+        session, payload, privileged=False, attachments=attachments
+    )  # owner=None：公开会话不归属，也不进「我的会话」
 
 
 @private_router.post("/chat")
@@ -128,7 +142,11 @@ async def chat_privileged(
     session: AsyncSession = Depends(get_session),
 ) -> StreamingResponse:
     """owner-only 私有通道：可用 write / MCP 高危工具（仍走 C2 审批）；会话归属该 owner。"""
-    return _chat_stream(session, payload, privileged=True, owner=owner)
+    try:
+        attachments = prepare_attachments(payload.attachments, vision_enabled=chat_llm.vision_configured)
+    except AttachmentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _chat_stream(session, payload, privileged=True, owner=owner, attachments=attachments)
 
 
 @private_router.get("/sessions", response_model=ResponseModel[list[AgentSessionInfo]])

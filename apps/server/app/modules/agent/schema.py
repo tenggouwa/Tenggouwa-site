@@ -1,6 +1,14 @@
 from pydantic import BaseModel, Field
 
 
+class AgentAttachment(BaseModel):
+    """Browser-provided attachment. Content is request-only and is never persisted in a session."""
+
+    name: str = Field(..., min_length=1, max_length=120)
+    media_type: str = Field(..., pattern=r"^(application/pdf|image/(jpeg|png|webp))$")
+    data: str = Field(..., min_length=1, max_length=11_200_000)  # base64, max raw size is checked server-side
+
+
 class AgentChatRequest(BaseModel):
     # 正常提问 q 必填；C2 审批续跑时 q 可空、只带 approvals（tool_call_id -> 批准与否）。
     q: str = Field(default="", max_length=2000)
@@ -10,6 +18,7 @@ class AgentChatRequest(BaseModel):
     deep_think: bool = Field(default=False)  # 深度思考：换 deepseek-reasoner，回传思维链 reasoning
     reflect: bool = Field(default=False)  # 反思：答完自评→按需改写（evaluator-optimizer），回传 reflect 过程
     auto_model: bool = Field(default=False)  # 模型路由：判题难易自动选快模型/reasoner，回传 route 事件
+    attachments: list[AgentAttachment] = Field(default_factory=list, max_length=3)
 
 
 class AgentUnlockRequest(BaseModel):

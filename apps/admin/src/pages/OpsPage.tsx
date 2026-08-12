@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Descriptions, Spin, Statistic, Table, Tag } from '@arco-design/web-react';
+import { Alert, Button, Card, Descriptions, Spin, Statistic, Table, Tag } from '@arco-design/web-react';
 import { http } from '../lib/api';
 import type { OpsOverview, OpsScheduler } from '../lib/types';
 
@@ -9,6 +9,12 @@ function fmt(ts: string | null): string {
 
 function StateTag({ ok, children }: { ok: boolean; children: string }) {
   return <Tag color={ok ? 'green' : 'orangered'}>{children}</Tag>;
+}
+
+function AgentHealthTag({ level }: { level: 'healthy' | 'warning' | 'critical' }) {
+  const labels = { healthy: '正常', warning: '需关注', critical: '异常' };
+  const colors = { healthy: 'green', warning: 'orange', critical: 'orangered' } as const;
+  return <Tag color={colors[level]}>{labels[level]}</Tag>;
 }
 
 function SchedulerCard({ title, scheduler }: { title: string; scheduler: OpsScheduler }) {
@@ -120,6 +126,18 @@ export default function OpsPage() {
       </div>
 
       <Card title={`Agent 运行指标（近 ${data.agent_metrics.window_hours} 小时）`}>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-gray-500">运行健康</span>
+          <AgentHealthTag level={data.agent_metrics.alert_level} />
+        </div>
+        {data.agent_metrics.alerts.length > 0 && (
+          <Alert
+            className="mb-4"
+            type={data.agent_metrics.alert_level === 'critical' ? 'error' : 'warning'}
+            title="需要处理"
+            content={<ul className="m-0 pl-4">{data.agent_metrics.alerts.map((alert) => <li key={alert}>{alert}</li>)}</ul>}
+          />
+        )}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Statistic title="运行 / 完成" value={data.agent_metrics.total_runs} suffix={`/ ${data.agent_metrics.completed_runs}`} />
           <Statistic title="平均耗时" value={data.agent_metrics.avg_duration_ms} suffix="ms" />
@@ -129,6 +147,10 @@ export default function OpsPage() {
           <Statistic title="Cache 命中 / Miss" value={data.agent_metrics.cache_hit_tokens} suffix={`/ ${data.agent_metrics.cache_miss_tokens}`} />
           <Statistic title="网页研究调用" value={data.agent_metrics.external_research_calls} />
           <Statistic title="网页研究额度耗尽" value={data.agent_metrics.external_research_capped_runs} />
+          <Statistic title="P95 耗时" value={data.agent_metrics.p95_duration_ms} suffix="ms" />
+          <Statistic title="超 60 秒运行" value={data.agent_metrics.long_running_runs} />
+          <Statistic title="超 100k 输入" value={data.agent_metrics.high_prompt_runs} />
+          <Statistic title="失败运行" value={data.agent_metrics.failed_runs} />
         </div>
       </Card>
 

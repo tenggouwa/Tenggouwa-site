@@ -131,6 +131,12 @@ export interface OpsAgentMetrics {
   cache_miss_tokens: number;
   external_research_calls: number;
   external_research_capped_runs: number;
+  p95_duration_ms: number;
+  long_running_runs: number;
+  high_prompt_runs: number;
+  failed_runs: number;
+  alert_level: 'healthy' | 'warning' | 'critical';
+  alerts: string[];
 }
 
 export interface OpsOverview {

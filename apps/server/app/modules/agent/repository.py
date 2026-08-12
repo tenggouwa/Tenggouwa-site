@@ -122,6 +122,10 @@ class AgentRepository:
                     func.coalesce(func.sum(AgentRunRow.cache_miss_tokens), 0),
                     func.coalesce(func.sum(AgentRunRow.external_research_count), 0),
                     func.count(AgentRunRow.id).filter(AgentRunRow.external_research_capped.is_(True)),
+                    func.percentile_cont(0.95).within_group(AgentRunRow.duration_ms),
+                    func.count(AgentRunRow.id).filter(AgentRunRow.duration_ms >= OPS_LONG_RUN_MS),
+                    func.count(AgentRunRow.id).filter(AgentRunRow.prompt_tokens >= OPS_HIGH_PROMPT_TOKENS),
+                    func.count(AgentRunRow.id).filter(AgentRunRow.status == "failed"),
                 ).where(AgentRunRow.created_at >= since)
             )
         ).one()
@@ -138,6 +142,10 @@ class AgentRepository:
             "cache_miss_tokens": int(row[8] or 0),
             "external_research_calls": int(row[9] or 0),
             "external_research_capped_runs": int(row[10] or 0),
+            "p95_duration_ms": round(float(row[11] or 0)),
+            "long_running_runs": int(row[12] or 0),
+            "high_prompt_runs": int(row[13] or 0),
+            "failed_runs": int(row[14] or 0),
         }
 
     async def transcript(self, sid: str) -> list[dict]:
@@ -347,3 +355,7 @@ class AgentRepository:
         if row is not None:
             row.pending = pending
             await self.session.flush()
+
+
+OPS_LONG_RUN_MS = 60_000
+OPS_HIGH_PROMPT_TOKENS = 100_000

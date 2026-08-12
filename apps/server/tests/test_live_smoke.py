@@ -12,7 +12,7 @@ import os
 
 import httpx
 import pytest
-from agent_harness import assert_no_leak, assert_paired, run_agent_live, tokens
+from agent_harness import assert_no_leak, assert_paired, extract_trajectory, run_agent_live, tokens
 
 pytestmark = pytest.mark.skipif(
     not (os.environ.get("RUN_LIVE_TESTS") and os.environ.get("KB_LLM_API_KEY")),
@@ -81,3 +81,25 @@ async def test_live_multi_tool_completes(monkeypatch):
     events, repo = await _run(monkeypatch, "帮我抓一下 x 上面关于 ai 的最新消息并推送给我")
     ans = _base_invariants(events, repo)
     assert len(ans) > 40, f"答案过短/断在半截: {ans!r}"
+
+
+async def test_live_external_research_never_runs_past_cap(monkeypatch):
+    """真模型即使连续研究，也不能超过 4 次外部调用，且必须正常收口。"""
+
+    async def canned_web(_session, name, _args):
+        if name in {"web_search", "web_fetch"}:
+            return "可用的外部证据：模型需要基于已有资料给出结论。"
+        return "（其他 skill 占位结果）"
+
+    events, repo = await run_agent_live(
+        monkeypatch,
+        "请先用外部网页研究核实 OpenAI 最近的 Agent 安全实践；最多查四条不同来源，然后基于证据给出简短结论。",
+        invoke=canned_web,
+    )
+    ans = _base_invariants(events, repo)
+    trajectory = extract_trajectory(repo.rows)
+    external = [item for item in trajectory if item["name"] in {"web_search", "web_fetch"}]
+    assert len(external) <= 4, f"外部研究越过硬上限：{trajectory}"
+    if len(external) == 4:
+        assert any(event["type"] == "status" for event in events), "触顶后必须向用户说明正在收口"
+    assert not ans.rstrip().endswith("<"), f"答案不应以残缺标记收尾：{ans[-80:]!r}"

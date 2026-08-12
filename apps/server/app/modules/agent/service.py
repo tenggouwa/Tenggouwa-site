@@ -28,6 +28,7 @@ from ..skills.service import LOAD_TOOLS, skills_service
 from ..skills.shell_exec import SHELL_SKILL, stream_exec
 from ..skills.subagent import SUBAGENT_SKILL
 from ..skills.subagent import stream_run as subagent_run
+from .attachments import PreparedAttachment, user_content
 from .custom_skills import CustomSkillStore
 from .repository import AgentRepository
 
@@ -101,6 +102,8 @@ LEAK_TOKEN = "｜"  # ｜ DeepSeek tool-call 特殊 token 分隔符；正常文�
 
 def _est_tokens(text: str) -> int:
     """粗估 token：中英文混排按 ~2 char/token（够 compaction 触发判断用，不求精确）。"""
+    if isinstance(text, list):
+        return sum(_est_tokens(str(part.get("text") or "")) for part in text if isinstance(part, dict))
     return len(text) // 2
 
 
@@ -254,6 +257,7 @@ class AgentService:
         deep: bool = False,
         reflect: bool = False,
         auto_model: bool = False,
+        attachments: list[PreparedAttachment] | None = None,
     ) -> AsyncIterator[dict]:
         repo = AgentRepository(session)
         current_owner.set(owner)  # 让 remember/forget 拿到本轮 owner（skill handler 签名不带 owner，走 ContextVar）
@@ -262,7 +266,7 @@ class AgentService:
         # owner 隔离：只续自己名下的会话；owner 不匹配（公开想读私有 / 跨 owner / 陈旧 id）→ 当作新会话，绝不泄漏历史。
         if existing is not None and existing.owner != owner:
             existing = None
-        sid = existing.id if existing else await repo.create_session(q or "（审批）", owner=owner)
+        sid = existing.id if existing else await repo.create_session(q or "（附件）", owner=owner)
         yield {"type": "session", "session_id": sid}
 
         # 模型路由：未手动开深度思考 + 开了自动选模型 + 是正常提问（非审批续跑）→ 判题难易自动选模型
@@ -348,7 +352,7 @@ class AgentService:
             await repo.set_pending(sid, None)  # 消费完清 pending
             resume_asked = any(_tc_name(tc) == ASK_SKILL for tc in tool_calls)
         else:
-            if not q.strip():
+            if not q.strip() and not attachments:
                 yield {"type": "done"}  # 正常请求但 q 空 → 无可答，直接收尾（不落空 user 轮）
                 await finish_run("noop")
                 return
@@ -358,11 +362,11 @@ class AgentService:
             await repo.touch(sid)  # 顶 updated_at → 「最近会话」列表按最后活跃排序
             window = await repo.load_window(sid)
             seq = window.next_seq
-            await repo.append(sid, seq, "user", q)
+            await repo.append(sid, seq, "user", q or "（已上传附件）")
             seq += 1
             messages = self._seed(window, privileged)
             await self._inject_memories(session, messages, privileged, owner, q)
-            messages.append({"role": "user", "content": q})
+            messages.append({"role": "user", "content": user_content(q, attachments or [])})
 
         # 统一流式循环：每轮都带 tools 流式跑——正文实时显示、tool_calls 从结构化 delta 解析执行。
         # tools 每步重算：渐进披露下 load_tools 会把 MCP schema 加进来（原生工具恒定在前，核心前缀不受影响）
@@ -382,7 +386,10 @@ class AgentService:
             )
             if tools is not None:
                 tools = _without_exhausted_external_tools(tools, turn_state)
-            async for ev in chat_llm.stream_step(messages, tools=tools, model=model):
+            has_images = bool(attachments and any(item.data_url for item in attachments))
+            async for ev in chat_llm.stream_step(
+                messages, tools=tools, model=None if has_images else model, vision=has_images
+            ):
                 if ev["type"] == "reasoning":  # 深度思考的思维链：实时转发给前端单独展示，不进正文/不落库
                     yield {"type": "reasoning", "delta": ev["delta"]}
                 elif ev["type"] == "content":
@@ -489,7 +496,9 @@ class AgentService:
         # M2：MAX_STEPS 耗尽仍在调工具、始终没产出最终答案 —— 强制一次不带 tools 的收尾作答
         if not answered:
             final, leaked = "", False
-            async for ev in chat_llm.stream_step(messages, tools=None):
+            async for ev in chat_llm.stream_step(
+                messages, tools=None, vision=bool(attachments and any(item.data_url for item in attachments))
+            ):
                 if ev["type"] == "content" and not leaked:
                     piece = ev["delta"]
                     if LEAK_TOKEN in piece:

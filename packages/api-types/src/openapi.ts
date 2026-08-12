@@ -1841,6 +1841,18 @@ export interface components {
             /** Online */
             online: boolean;
         };
+        /**
+         * AgentAttachment
+         * @description Browser-provided attachment. Content is request-only and is never persisted in a session.
+         */
+        AgentAttachment: {
+            /** Name */
+            name: string;
+            /** Media Type */
+            media_type: string;
+            /** Data */
+            data: string;
+        };
         /** AgentChatRequest */
         AgentChatRequest: {
             /**
@@ -1874,6 +1886,8 @@ export interface components {
              * @default false
              */
             auto_model: boolean;
+            /** Attachments */
+            attachments?: components["schemas"]["AgentAttachment"][];
         };
         /**
          * AgentCustomSkill
@@ -2594,6 +2608,18 @@ export interface components {
             external_research_calls: number;
             /** External Research Capped Runs */
             external_research_capped_runs: number;
+            /** P95 Duration Ms */
+            p95_duration_ms: number;
+            /** Long Running Runs */
+            long_running_runs: number;
+            /** High Prompt Runs */
+            high_prompt_runs: number;
+            /** Failed Runs */
+            failed_runs: number;
+            /** Alert Level */
+            alert_level: string;
+            /** Alerts */
+            alerts?: string[];
         };
         /** OpsJob */
         OpsJob: {

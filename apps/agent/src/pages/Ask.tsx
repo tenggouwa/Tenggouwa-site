@@ -57,6 +57,36 @@ interface Usage {
   prompt_cache_miss_tokens?: number;
 }
 
+interface PendingAttachment {
+  name: string;
+  media_type: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp';
+  data: string;
+}
+
+const MAX_ATTACHMENTS = 3;
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_PDF_BYTES = 8 * 1024 * 1024;
+
+function fileToAttachment(file: File): Promise<PendingAttachment> {
+  const mediaType = file.type as PendingAttachment['media_type'];
+  if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(mediaType)) {
+    return Promise.reject(new Error('仅支持 PDF、JPG、PNG 或 WebP'));
+  }
+  const max = mediaType === 'application/pdf' ? MAX_PDF_BYTES : MAX_IMAGE_BYTES;
+  if (file.size > max) return Promise.reject(new Error(`${file.name} 超过 ${max / 1024 / 1024}MB 限制`));
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`读取 ${file.name} 失败`));
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      const data = dataUrl.split(',', 2)[1];
+      if (!data) reject(new Error(`读取 ${file.name} 失败`));
+      else resolve({ name: file.name, media_type: mediaType, data });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 interface Turn {
   q: string;
   tools: ToolCall[];
@@ -98,6 +128,8 @@ const PLAN_MARK: Record<PlanStep['status'], string> = { completed: '✓', in_pro
 
 export default function Ask() {
   const [q, setQ] = useState('');
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
   const sessionId = useRef<string | null>(null); // 多轮：服务端首个 event 回传，后续请求带上
@@ -333,10 +365,11 @@ export default function Ask() {
     }
   }
 
-  async function run(query: string) {
+  async function run(query: string, nextAttachments: PendingAttachment[] = []) {
     const idx = turns.length;
-    setTurns((t) => [...t, { q: query, tools: [], plan: [], answer: '', done: false }]);
-    await stream(idx, { q: query });
+    const displayQuestion = query || `分析附件：${nextAttachments.map((attachment) => attachment.name).join('、')}`;
+    setTurns((t) => [...t, { q: displayQuestion, tools: [], plan: [], answer: '', done: false }]);
+    await stream(idx, { q: query, ...(nextAttachments.length > 0 ? { attachments: nextAttachments } : {}) });
   }
 
   // 点开历史会话：拉 transcript 重建成 turns 回填、把 sessionId 指向它，之后照常续聊。
@@ -397,7 +430,7 @@ export default function Ask() {
 
   function trySend() {
     const query = q.trim();
-    if (!query || busy || unlockBusy) return; // 解锁在途别抢跑（否则会以公开身份发出）
+    if ((!query && attachments.length === 0) || busy || unlockBusy) return; // 解锁在途别抢跑（否则会以公开身份发出）
     if (history.current[history.current.length - 1] !== query) {
       history.current.push(query);
       if (history.current.length > HIST_MAX) history.current = history.current.slice(-HIST_MAX);
@@ -410,7 +443,26 @@ export default function Ask() {
     histIdx.current = -1;
     draft.current = '';
     setQ('');
-    void run(query);
+    const nextAttachments = attachments;
+    setAttachments([]);
+    setAttachmentError(null);
+    void run(query, nextAttachments);
+  }
+
+  async function addAttachments(files: FileList | null) {
+    if (!files || busy) return;
+    setAttachmentError(null);
+    const selected = Array.from(files);
+    if (attachments.length + selected.length > MAX_ATTACHMENTS) {
+      setAttachmentError(`单次最多上传 ${MAX_ATTACHMENTS} 个附件`);
+      return;
+    }
+    try {
+      const converted = await Promise.all(selected.map(fileToAttachment));
+      setAttachments((current) => [...current, ...converted]);
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : '附件读取失败');
+    }
   }
 
   function submit(e: React.FormEvent) {
@@ -749,6 +801,24 @@ export default function Ask() {
             }
             className="flex-1 resize-none bg-transparent outline-none leading-6 max-h-40 text-terminal-gray placeholder:text-terminal-gray/40 disabled:opacity-50"
           />
+          <input
+            id="agent-attachment"
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/webp"
+            multiple
+            className="sr-only"
+            onChange={(event) => {
+              void addAttachments(event.target.files);
+              event.currentTarget.value = '';
+            }}
+          />
+          <label
+            htmlFor="agent-attachment"
+            className="cursor-pointer text-xs text-terminal-cyan border border-terminal-cyan/40 rounded px-2 py-0.5 mt-0.5 hover:bg-terminal-cyan/10 transition-colors"
+            title="添加 PDF 或图片附件"
+          >
+            附件
+          </label>
           {busy ? (
             <button
               type="button"
@@ -768,12 +838,35 @@ export default function Ask() {
             </button>
           )}
         </form>
+        {(attachments.length > 0 || attachmentError) && (
+          <div className="px-8 pb-2 text-xs">
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((attachment, index) => (
+                  <span key={`${attachment.name}-${index}`} className="border border-terminal-line/70 rounded px-2 py-1 text-terminal-gray/80">
+                    {attachment.name}
+                    <button
+                      type="button"
+                      onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                      className="ml-2 text-terminal-gray/50 hover:text-terminal-pink"
+                      aria-label={`移除 ${attachment.name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {attachmentError && <p className="mt-1 text-terminal-red">[附件] {attachmentError}</p>}
+          </div>
+        )}
         </div>
       </div>
 
       <p className="text-xs text-terminal-gray/40">
         agent 用 DeepSeek + skills（kb_search / update_plan / web_fetch / ask_user），会记住本轮对话上下文。答案由 AI 生成，可能有误。
         {agentToken && ' 私有模式额外可用 file_list / file_read / file_write / file_edit / shell_exec / git（写操作需审批）。'}
+        {' PDF 会在本轮本地抽取文本；图片分析需服务端配置 vision provider，附件不写入会话记录。'}
       </p>
     </div>
   );
