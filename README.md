@@ -163,6 +163,7 @@ pnpm gen:api-types
 ## 文档导航
 
 - [当前系统架构](docs/architecture.md)
+- [个人网站产品路线图](docs/site-product-roadmap.md)
 - [Agent 当前能力与使用](apps/agent/README.md)
 - [Agent 分阶段实现记录](docs/agent/agent-roadmap.md)
 - [知识库现状与待办](docs/agent/kb-todo.md)
