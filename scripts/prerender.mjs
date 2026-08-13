@@ -46,6 +46,44 @@ const SITE_TITLE = 'tenggouwa · 极客小站';
 const SITE_DESC = 'tenggouwa的极客小站：AI / 系统 / 工具的笔记、灵感与实验。';
 const AUTHOR = 'tenggouwa';
 const PUBLISHER_URL = ORIGIN;
+const GITHUB_URL = 'https://github.com/tenggouwa';
+const CONTACT_EMAIL = 'tenggouwa@gmail.com';
+
+const PROJECTS = [
+  {
+    slug: 'agent-platform',
+    title: 'Agent Platform',
+    summary: '一个可对话、可检索、可审批、可追溯的个人 Agent 实验平台。',
+    problem: '把知识库问答、工具调用与私有执行能力放进同一套公开站点，同时守住访问和执行边界。',
+    approach: '公开通道只开放 readonly 能力；私有通道经 TOTP 解锁。写入和执行默认审批，Pi 节点在 bwrap 沙箱中轮询执行。',
+    result: '支持流式多轮对话、知识库引用、会话恢复、工具审批、MCP 与隔离节点；夜间真模型 smoke 持续验证关键链路。',
+    stack: ['React', 'FastAPI', 'PostgreSQL', 'pgvector', 'SSE', 'bwrap'],
+    href: '/agent/',
+    external: false,
+  },
+  {
+    slug: 'perler-pattern',
+    title: 'Perler Pattern Maker',
+    summary: '把图片转换为可打印、可保存的拼豆图纸，计算留在浏览器本地完成。',
+    problem: '大尺寸图像转图纸会带来密集像素计算和交互卡顿，同时项目文件不应依赖服务端保存。',
+    approach: '使用 Web Worker 处理大网格计算，以 IndexedDB 保存项目；调色、网格、编号和打印在浏览器端完成。',
+    result: '可处理大网格图纸，并提供 Mard 色卡、预览、导出和本地项目恢复，不上传用户图片。',
+    stack: ['React', 'TypeScript', 'Web Worker', 'IndexedDB', 'Canvas'],
+    href: '/lab/perler',
+    external: false,
+  },
+  {
+    slug: 'personal-site-ops',
+    title: 'Personal Site Ops',
+    summary: '将内容站、后台、Agent 与运行节点维护为一个可持续发布的 monorepo。',
+    problem: '个人项目往往在功能增加后失去发布、SEO、质量与运行状态的统一控制。',
+    approach: '使用 pnpm + uv monorepo，PR CI、静态预渲染、Web Vitals、自建分析、Cloudflare Pages/Tunnel 和 Docker Compose 组成发布链路。',
+    result: '公开内容可预渲染并自动发布；后端发布有健康检查；后台集中查看内容、SEO、分析和运行状态。',
+    stack: ['Vite', 'GitHub Actions', 'Cloudflare', 'Docker', 'FastAPI'],
+    href: `${GITHUB_URL}/Tenggouwa-site`,
+    external: true,
+  },
+];
 
 function normalizeBase(b) {
   let s = b;
@@ -232,6 +270,7 @@ function escapeHtml(s = '') {
 const NAV_ITEMS = [
   { to: '/', label: '~', match: (cp) => cp === '/' },
   { to: '/posts/', label: 'posts', match: (cp) => cp.startsWith('/posts') || cp.startsWith('/tags') },
+  { to: '/projects', label: 'projects', match: (cp) => cp.startsWith('/projects') },
   { to: '/inspirations', label: 'inspirations', match: (cp) => cp.startsWith('/inspirations') },
   { to: '/lab', label: 'lab', match: (cp) => cp.startsWith('/lab') },
   // ask = 独立 agent 平台（/agent/），整页跳转；同 casino
@@ -307,6 +346,8 @@ function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, ext
         <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:justify-between gap-1">
           <span>© ${new Date().getFullYear()} ${AUTHOR} · made with caffeine ☕</span>
           <div class="flex items-center gap-3">
+            <a href="${GITHUB_URL}" target="_blank" rel="noreferrer" class="text-terminal-gray/50 hover:text-terminal-green transition-colors">github</a>
+            <a href="mailto:${CONTACT_EMAIL}" class="text-terminal-gray/50 hover:text-terminal-green transition-colors">email</a>
             <a href="${pageUrl('/feed.xml')}" class="text-terminal-gray/50 hover:text-terminal-green transition-colors">RSS</a>
             <span class="text-terminal-cyan">[ uptime: ∞ ]</span>
           </div>
@@ -568,6 +609,21 @@ function itemListLd(posts, { name } = {}) {
   };
 }
 
+function projectItemListLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Projects',
+    numberOfItems: PROJECTS.length,
+    itemListElement: PROJECTS.map((project, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      url: project.external ? project.href : canonical(project.href),
+      name: project.title,
+    })),
+  };
+}
+
 // ---------- 写文件 ----------
 function writeFile(rel, content) {
   const full = path.join(DIST, rel);
@@ -747,6 +803,11 @@ function homeBody(posts) {
         <span class="text-terminal-pink">~$</span> tenggouwa的极客小站 —— 一个写前端、写后端、写脚本、写诗的工程师。
         这里有 AI 大模型 / Linux 系统 / 前端与工具的笔记、灵感与实验。
       </p>
+      <section class="space-y-3">
+        <h2 class="text-terminal-green text-lg"><span class="text-terminal-pink">$ </span>ls ~/work/</h2>
+        <p class="text-sm leading-6 text-terminal-gray/70">从可体验的 Agent、浏览器端工具到持续发布的全栈站点：把问题、取舍和结果留成可审阅的作品。</p>
+        <a href="${pageUrl('/projects')}" class="inline-flex rounded border border-terminal-green/50 px-3 py-3 text-xs text-terminal-green transition-colors hover:bg-terminal-green/10">cd ~/projects →</a>
+      </section>
       <section class="grid md:grid-cols-2 gap-4">
         ${cards}
       </section>
@@ -785,6 +846,7 @@ function buildSitemap(posts, tags, series = []) {
     { loc: canonical('/'), changefreq: 'weekly', priority: '1.0' },
     { loc: canonical('/posts/'), changefreq: 'weekly', priority: '0.9' },
     { loc: canonical('/about'), changefreq: 'monthly', priority: '0.6' },
+    { loc: canonical('/projects'), changefreq: 'monthly', priority: '0.8' },
     { loc: canonical('/faq'), changefreq: 'monthly', priority: '0.5' },
     { loc: canonical('/inspirations'), changefreq: 'weekly', priority: '0.6' },
     { loc: canonical('/casino/'), changefreq: 'monthly', priority: '0.7' },
@@ -818,6 +880,41 @@ function buildSitemap(posts, tags, series = []) {
     )
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${items}\n</urlset>\n`;
+}
+
+function projectsBody() {
+  const cards = PROJECTS.map((project) => {
+    const href = project.external ? project.href : pageUrl(project.href);
+    const target = project.external ? ' target="_blank" rel="noreferrer"' : '';
+    return `<a href="${href}"${target} class="group block rounded-lg border border-terminal-line/70 bg-terminal-panel/40 p-5 sm:p-6 transition-colors hover:border-terminal-green/60 hover:bg-terminal-panel/70">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="text-xs text-terminal-gray/55"><span class="text-terminal-pink">~$</span> cd projects/${escapeHtml(project.slug)}</div>
+          <h2 class="mt-2 text-xl font-semibold text-terminal-green">${escapeHtml(project.title)}</h2>
+        </div>
+        <span class="rounded border border-terminal-line/70 px-2 py-1 text-[10px] text-terminal-gray/65">${project.external ? 'repository' : 'live demo'}</span>
+      </div>
+      <p class="mt-3 text-sm leading-6 text-terminal-gray">${escapeHtml(project.summary)}</p>
+      <dl class="mt-5 grid gap-3 text-xs leading-5 sm:grid-cols-3">
+        <div><dt class="text-terminal-pink">problem</dt><dd class="mt-1 text-terminal-gray/70">${escapeHtml(project.problem)}</dd></div>
+        <div><dt class="text-terminal-cyan">approach</dt><dd class="mt-1 text-terminal-gray/70">${escapeHtml(project.approach)}</dd></div>
+        <div><dt class="text-terminal-green">result</dt><dd class="mt-1 text-terminal-gray/70">${escapeHtml(project.result)}</dd></div>
+      </dl>
+      <div class="mt-5 flex flex-wrap gap-2">${project.stack.map((item) => `<span class="rounded border border-terminal-line/60 px-2 py-0.5 text-[10px] text-terminal-gray/65">${escapeHtml(item)}</span>`).join('')}</div>
+    </a>`;
+  }).join('\n');
+  return `<div class="space-y-8">
+    <header class="space-y-3 border-b border-terminal-line/60 pb-6">
+      <h1 class="text-terminal-green text-2xl"><span class="text-terminal-pink">$ </span>ls ~/projects</h1>
+      <p class="max-w-3xl text-sm leading-7 text-terminal-gray/80">不是技术名词清单。这里记录已经在运行、可体验或可审阅的项目：它们解决的问题、做出的取舍与可验证的结果。</p>
+    </header>
+    <section class="grid gap-4">${cards}</section>
+    <section class="rounded-lg border border-terminal-line/70 bg-terminal-panel/35 p-5 sm:p-6">
+      <div class="mb-2 text-xs text-terminal-gray/55"><span class="text-terminal-pink">~$</span> printf 'work together?\\n'</div>
+      <p class="text-sm leading-7 text-terminal-gray/80">想交流一个项目、技术设计或工具思路？可以从 About 页取得联系；仓库、RSS 与公开 Agent 也都在那里。</p>
+      <a href="${pageUrl('/about')}" class="mt-4 inline-flex rounded border border-terminal-green/50 px-3 py-3 text-xs text-terminal-green transition-colors hover:bg-terminal-green/10">cd ../about →</a>
+    </section>
+  </div>`;
 }
 
 // 已知的生成式 AI / LLM 爬虫。`User-agent: *  Allow: /` 已涵盖它们，这里再
@@ -1104,6 +1201,23 @@ async function main() {
       }),
     );
   }
+
+  writeFile(
+    'projects/index.html',
+    shell({
+      title: 'Projects · tenggouwa',
+      description: 'tenggouwa 的可体验项目与工程案例：Agent、浏览器端工具和个人站运维。',
+      currentPath: '/projects',
+      jsonLd: [
+        breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Projects', path: '/projects' },
+        ]),
+        projectItemListLd(),
+      ],
+      bodyHtml: projectsBody(),
+    }),
+  );
 
   // /lab 列表 + 每个玩具的静态外壳（消掉深链接 404，SPA 挂载后接管）
   writeFile(

@@ -8,6 +8,13 @@ class TrackRequest(BaseModel):
     referrer: str | None = Field(default=None, max_length=500)
 
 
+class TrackEventRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    source: str = Field(..., min_length=1, max_length=16)
+    path: str = Field(..., min_length=1, max_length=500)
+    label: str | None = Field(default=None, max_length=120)
+
+
 class DailyPoint(BaseModel):
     date: date
     pv: int
@@ -52,6 +59,12 @@ class DeviceStats(BaseModel):
 class NameCount(BaseModel):
     name: str
     pv: int
+
+
+class ConversionEventStat(BaseModel):
+    name: str
+    pv: int
+    uv: int
 
 
 DeviceStats.model_rebuild()

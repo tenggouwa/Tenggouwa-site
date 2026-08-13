@@ -3,6 +3,7 @@
 from .models import (
     AdminTotpRow,
     AgentRow,
+    ConversionEventRow,
     InspirationRow,
     KBChunkRow,
     KBDocumentRow,
@@ -23,6 +24,7 @@ __all__ = [
     "PostRow",
     "InspirationRow",
     "PageViewRow",
+    "ConversionEventRow",
     "AdminTotpRow",
     "AgentRow",
     "TerminalSessionRow",

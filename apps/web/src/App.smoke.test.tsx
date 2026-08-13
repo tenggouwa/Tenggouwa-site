@@ -46,4 +46,13 @@ describe('App 冒烟渲染', () => {
     );
     expect(screen.getAllByText(/made with caffeine/i).length).toBeGreaterThan(0);
   });
+
+  it('能渲染 Projects 路由', async () => {
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Agent Platform')).toBeTruthy();
+  });
 });

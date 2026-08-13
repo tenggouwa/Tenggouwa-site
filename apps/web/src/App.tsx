@@ -21,6 +21,7 @@ const Reaction = lazy(() => import('./pages/lab/Reaction'));
 const Rope = lazy(() => import('./pages/lab/Rope'));
 const Wave = lazy(() => import('./pages/lab/Wave'));
 const PerlerPattern = lazy(() => import('./pages/lab/PerlerPattern'));
+const Projects = lazy(() => import('./pages/Projects'));
 const About = lazy(() => import('./pages/About'));
 const Pi = lazy(() => import('./pages/Pi'));
 const Console = lazy(() => import('./pages/Console'));
@@ -131,6 +132,7 @@ export default function App() {
             <Route path="lab/mandelbrot" element={<Mandelbrot />} />
             <Route path="lab/reaction" element={<Reaction />} />
             <Route path="lab/life" element={<Life />} />
+            <Route path="projects" element={<Projects />} />
             <Route path="about" element={<About />} />
             <Route path="pi" element={<Pi />} />
             <Route path="ask" element={<Ask />} />

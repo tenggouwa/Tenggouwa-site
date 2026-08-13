@@ -7,12 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common_schema import ResponseModel
 from .schema import (
+    ConversionEventStat,
     CountryStat,
     DeviceStats,
     OverviewResponse,
     PostHeat,
     TopPage,
     TopReferrer,
+    TrackEventRequest,
     TrackRequest,
 )
 from .service import analytics_service
@@ -34,6 +36,18 @@ async def track(
     ua = request.headers.get("user-agent")
     country = request.headers.get("cf-ipcountry")
     ok = await analytics_service.track(session, payload, ip=ip, ua=ua, country=country)
+    return ResponseModel(data={"recorded": ok})
+
+
+@public_router.post("/event", response_model=ResponseModel[dict])
+async def track_event(
+    payload: TrackEventRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[dict]:
+    """记录匿名转化事件；payload 不含 prompt、附件或任何鉴权数据。"""
+    ip = request.headers.get("cf-connecting-ip") or _client_ip(request)
+    ok = await analytics_service.track_event(session, payload, ip=ip, ua=request.headers.get("user-agent"))
     return ResponseModel(data={"recorded": ok})
 
 
@@ -125,3 +139,12 @@ async def devices(
 ) -> ResponseModel[DeviceStats]:
     data = await analytics_service.devices(session, days)
     return ResponseModel(data=DeviceStats(**data))
+
+
+@admin_router.get("/conversion-events", response_model=ResponseModel[list[ConversionEventStat]])
+async def conversion_events(
+    days: int = 30,
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[list[ConversionEventStat]]:
+    data = await analytics_service.conversion_events(session, days)
+    return ResponseModel(data=[ConversionEventStat(**row) for row in data])

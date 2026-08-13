@@ -5,10 +5,24 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .repository import AnalyticsRepository
-from .schema import TrackRequest
+from .schema import TrackEventRequest, TrackRequest
 from .ua import is_bot, parse_ua
 
 logger = logging.getLogger(__name__)
+
+EVENT_NAMES = frozenset(
+    {
+        "project_open",
+        "contact_cta_click",
+        "github_open",
+        "rss_open",
+        "email_open",
+        "agent_open",
+        "agent_start",
+        "agent_complete",
+    }
+)
+EVENT_SOURCES = frozenset({"web", "agent"})
 
 
 class AnalyticsService:
@@ -42,6 +56,32 @@ class AnalyticsService:
 
     async def overview(self, session: AsyncSession, days: int) -> dict:
         return await AnalyticsRepository(session).overview(days=_clamp_days(days))
+
+    async def track_event(
+        self,
+        session: AsyncSession,
+        payload: TrackEventRequest,
+        *,
+        ip: str | None,
+        ua: str | None,
+    ) -> bool:
+        """写一条白名单转化事件，拒绝正文和任意自定义事件。"""
+        if is_bot(ua) or payload.name not in EVENT_NAMES or payload.source not in EVENT_SOURCES:
+            return False
+        path = _normalize_path(payload.path)
+        if not path:
+            return False
+        await AnalyticsRepository(session).insert_event(
+            name=payload.name,
+            source=payload.source,
+            path=path,
+            label=_normalize_label(payload.label),
+            visitor_hash=self._make_visitor_hash(ip, ua),
+        )
+        return True
+
+    async def conversion_events(self, session: AsyncSession, days: int) -> list[dict]:
+        return await AnalyticsRepository(session).conversion_events(days=_clamp_days(days))
 
     async def top_pages(self, session: AsyncSession, days: int, limit: int) -> list[dict]:
         return await AnalyticsRepository(session).top_pages(
@@ -97,6 +137,13 @@ def _normalize_referrer(ref: str | None) -> str | None:
         return None
     r = ref.strip()
     return (r[:500]) if r else None
+
+
+def _normalize_label(label: str | None) -> str | None:
+    if not label:
+        return None
+    cleaned = " ".join(label.split())
+    return cleaned[:120] or None
 
 
 def _clamp_days(days: int) -> int:

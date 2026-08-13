@@ -9,6 +9,7 @@ import SessionList from '../components/SessionList';
 import MemoryList from '../components/MemoryList';
 import InboxPanel from '../components/InboxPanel';
 import RunList from '../components/RunList';
+import { trackAgentEvent } from '../lib/track';
 
 // agent 对话：公开走 POST /api/public/agent/chat；私有模式（TOTP 解锁）走 /api/agent/chat + Bearer，
 // 额外拿到文件读写等高危工具，write 操作触发 C2 审批卡。SSE 事件 tool/token/plan/ask/approval/done。
@@ -311,6 +312,7 @@ export default function Ask() {
     else if (event === 'token') updateTurn(idx, (t) => ({ ...t, answer: t.answer + (obj.delta ?? '') }));
     else if (event === 'done') {
       updateTurn(idx, (t) => ({ ...t, answer: t.answer.replace(/<\s*$/, ''), done: true }));
+      trackAgentEvent('agent_complete');
       if (agentToken) setSessionRevision((v) => v + 1);
     }
     else if (event === 'error') updateTurn(idx, (t) => ({ ...t, error: obj.message ?? '出错了', done: true }));
@@ -369,6 +371,7 @@ export default function Ask() {
     const idx = turns.length;
     const displayQuestion = query || `分析附件：${nextAttachments.map((attachment) => attachment.name).join('、')}`;
     setTurns((t) => [...t, { q: displayQuestion, tools: [], plan: [], answer: '', done: false }]);
+    trackAgentEvent('agent_start');
     await stream(idx, { q: query, ...(nextAttachments.length > 0 ? { attachments: nextAttachments } : {}) });
   }
 

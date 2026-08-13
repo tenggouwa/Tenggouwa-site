@@ -85,6 +85,12 @@ export interface DeviceStats {
   mobile_ratio: number;
 }
 
+export interface ConversionEventStat {
+  name: string;
+  pv: number;
+  uv: number;
+}
+
 export interface LoginResp {
   requires_totp: boolean;
   token: string | null;

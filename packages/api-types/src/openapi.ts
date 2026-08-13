@@ -486,6 +486,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/public/track/event": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Track Event
+         * @description 记录匿名转化事件；payload 不含 prompt、附件或任何鉴权数据。
+         */
+        post: operations["track_event_api_public_track_event_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/public/track/views": {
         parameters: {
             query?: never;
@@ -1238,6 +1258,23 @@ export interface paths {
         };
         /** Devices */
         get: operations["devices_api_admin_analytics_devices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/analytics/conversion-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conversion Events */
+        get: operations["conversion_events_api_admin_analytics_conversion_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2188,6 +2225,15 @@ export interface components {
             agents: components["schemas"]["AgentLite"][];
             /** Phrase */
             phrase: string;
+        };
+        /** ConversionEventStat */
+        ConversionEventStat: {
+            /** Name */
+            name: string;
+            /** Pv */
+            pv: number;
+            /** Uv */
+            uv: number;
         };
         /** CountryStat */
         CountryStat: {
@@ -3656,6 +3702,21 @@ export interface components {
             /** Data */
             data?: components["schemas"]["Agent"][] | null;
         };
+        /** ResponseModel[list[ConversionEventStat]] */
+        ResponseModel_list_ConversionEventStat__: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            /** Data */
+            data?: components["schemas"]["ConversionEventStat"][] | null;
+        };
         /** ResponseModel[list[CountryStat]] */
         ResponseModel_list_CountryStat__: {
             /**
@@ -4025,6 +4086,17 @@ export interface components {
             token: string;
             /** Expires In */
             expires_in: number;
+        };
+        /** TrackEventRequest */
+        TrackEventRequest: {
+            /** Name */
+            name: string;
+            /** Source */
+            source: string;
+            /** Path */
+            path: string;
+            /** Label */
+            label?: string | null;
         };
         /** TrackRequest */
         TrackRequest: {
@@ -4999,6 +5071,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["TrackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    track_event_api_public_track_event_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackEventRequest"];
             };
         };
         responses: {
@@ -6442,6 +6547,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel_DeviceStats_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conversion_events_api_admin_analytics_conversion_events_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_list_ConversionEventStat__"];
                 };
             };
             /** @description Validation Error */

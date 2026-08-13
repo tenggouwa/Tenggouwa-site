@@ -19,4 +19,6 @@ tenggouwa的极客小站，覆盖 AI 大模型原理、Linux / 系统底层、�
 这个站点是一个 monorepo：前端挂在 GitHub Pages / Cloudflare Pages，后端 FastAPI 部署在自己的服务器上。
 除了文章，站内还有 [前端实验室](/lab)（跑在浏览器里的生成式小玩具）和 [反赌教育模拟器](/casino/)（用假积分跑真实赌场赔率，用数据讲清「长期必输」的数学）。
 
+可从 [GitHub](https://github.com/tenggouwa) 查看公开代码，订阅 [RSS](/feed.xml)，或发邮件到 [tenggouwa@gmail.com](mailto:tenggouwa@gmail.com) 交流项目与技术设计。
+
 更多关于本站与作者、技术栈、如何订阅的问题，见 [FAQ](/faq)。

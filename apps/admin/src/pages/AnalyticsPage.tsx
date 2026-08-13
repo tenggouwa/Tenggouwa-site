@@ -16,6 +16,7 @@ import {
 import { http } from '../lib/api';
 import type {
   AnalyticsOverview,
+  ConversionEventStat,
   CountryStat,
   DeviceStats,
   TopPage,
@@ -36,6 +37,7 @@ interface Bundle {
   topRefs: TopReferrer[];
   countries: CountryStat[];
   devices: DeviceStats;
+  conversionEvents: ConversionEventStat[];
 }
 
 export default function AnalyticsPage() {
@@ -50,8 +52,9 @@ export default function AnalyticsPage() {
       http.get(`/api/admin/analytics/top-referrers?days=${days}&limit=10`) as unknown as Promise<TopReferrer[]>,
       http.get(`/api/admin/analytics/countries?days=${days}&limit=20`) as unknown as Promise<CountryStat[]>,
       http.get(`/api/admin/analytics/devices?days=${days}`) as unknown as Promise<DeviceStats>,
-    ]).then(([overview, topPages, topRefs, countries, devices]) => {
-      setData({ overview, topPages, topRefs, countries, devices });
+      http.get(`/api/admin/analytics/conversion-events?days=${days}`) as unknown as Promise<ConversionEventStat[]>,
+    ]).then(([overview, topPages, topRefs, countries, devices, conversionEvents]) => {
+      setData({ overview, topPages, topRefs, countries, devices, conversionEvents });
     });
   }, [days]);
 
@@ -62,7 +65,7 @@ export default function AnalyticsPage() {
       </div>
     );
   }
-  const { overview, topPages, topRefs, countries, devices } = data;
+  const { overview, topPages, topRefs, countries, devices, conversionEvents } = data;
 
   return (
     <div className="space-y-4">
@@ -160,6 +163,27 @@ export default function AnalyticsPage() {
           />
         </Card>
       </div>
+
+      <Card title={`关键动作（${days} 天）`} extra={<span className="text-xs text-gray-400">仅匿名白名单事件，不存消息或附件</span>}>
+        <Table
+          rowKey="name"
+          size="small"
+          pagination={false}
+          data={conversionEvents}
+          columns={[
+            {
+              title: '事件',
+              dataIndex: 'name',
+              render: (name: string) => <code className="text-xs">{name}</code>,
+            },
+            { title: '次数', dataIndex: 'pv', width: 100, align: 'right' as const },
+            { title: '去重访客', dataIndex: 'uv', width: 120, align: 'right' as const },
+          ]}
+        />
+        {conversionEvents.length === 0 && (
+          <p className="pt-3 text-xs text-gray-400">暂无事件；上线后从 Projects、页脚或 Agent 发起一次动作验证。</p>
+        )}
+      </Card>
 
       {/* 国家 + 设备 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

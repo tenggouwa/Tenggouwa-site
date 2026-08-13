@@ -149,6 +149,26 @@ class PageViewRow(Base):
     )
 
 
+class ConversionEventRow(Base):
+    """匿名转化事件。只存白名单事件名与短标签，不存用户输入或附件。"""
+
+    __tablename__ = "conversion_event"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    path: Mapped[str] = mapped_column(String(500), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    visitor_hash: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (Index("ix_conversion_event_name_ts", "name", "ts"),)
+
+
 class WebVitalsRow(Base):
     """真实用户上报的 Core Web Vitals。每条指标一行，按 p75 在查询时聚合。"""
 
