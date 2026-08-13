@@ -1,3 +1,6 @@
+import { CONTACT_EMAIL, GITHUB_URL, RSS_URL } from '../lib/projects';
+import { trackEvent } from '../lib/track';
+
 export default function About() {
   return (
     <div className="space-y-6 text-terminal-gray leading-relaxed">
@@ -13,18 +16,38 @@ hobbies   : 折腾 · 烹饪 · 摄影 · 读书 · 写小灵感
 contact   : tenggouwa@gmail.com`}
       </pre>
       <p className="text-sm">
-        这个站点是一个 monorepo：前端挂在 GitHub Pages，后端 FastAPI 部署在自己的服务器上。
-        所有代码开源在
-        <a
-          className="text-terminal-green hover:underline ml-1"
-          href="https://github.com/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          github 仓库
-        </a>
-        。
+        这个站点是一个 monorepo：前端挂在 GitHub Pages / Cloudflare Pages，后端 FastAPI 部署在自己的服务器上。
       </p>
+      <div className="rounded-lg border border-terminal-line/70 bg-terminal-panel/40 p-5">
+        <div className="mb-3 text-xs text-terminal-gray/55">
+          <span className="text-terminal-pink">~$</span> ls ~/contact
+        </div>
+        <div className="flex flex-wrap gap-x-5 gap-y-3 text-sm">
+          <a
+            className="text-terminal-green hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-terminal-yellow"
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() => trackEvent('github_open', 'web', 'about')}
+          >
+            github →
+          </a>
+          <a
+            className="text-terminal-cyan hover:text-terminal-green focus-visible:outline focus-visible:outline-2 focus-visible:outline-terminal-yellow"
+            href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('来自 tenggouwa.com 的交流')}`}
+            onClick={() => trackEvent('email_open', 'web', 'about')}
+          >
+            {CONTACT_EMAIL} →
+          </a>
+          <a
+            className="text-terminal-yellow hover:text-terminal-green focus-visible:outline focus-visible:outline-2 focus-visible:outline-terminal-yellow"
+            href={RSS_URL}
+            onClick={() => trackEvent('rss_open', 'web', 'about')}
+          >
+            RSS →
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Typewriter from '../components/Typewriter';
 import { apiGet } from '../lib/api';
 import { SERIES } from '../lib/series';
+import { trackEvent } from '../lib/track';
 import type { PostListPage, PostSummary } from '../lib/types';
 
 const ASCII = String.raw`
@@ -46,8 +47,31 @@ export default function Home() {
         <Typewriter lines={LINES} />
       </div>
 
-      {/* 三大区块：先出现 */}
-      <section className="grid md:grid-cols-3 gap-4">
+      <section className="space-y-3">
+        <h2 className="text-terminal-green text-lg flex items-baseline gap-2">
+          <span className="text-terminal-pink">$</span>
+          <span>ls ~/work/</span>
+        </h2>
+        <p className="text-sm leading-6 text-terminal-gray/70">
+          从可体验的 Agent、浏览器端工具到持续发布的全栈站点：把问题、取舍和结果留成可审阅的作品。
+        </p>
+        <Link
+          to="/projects"
+          onClick={() => trackEvent('project_open', 'web', 'home_featured')}
+          className="inline-flex min-h-11 items-center rounded border border-terminal-green/50 px-3 text-xs text-terminal-green transition-colors hover:bg-terminal-green/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terminal-yellow"
+        >
+          cd ~/projects →
+        </Link>
+      </section>
+
+      {/* 内容与实验入口 */}
+      <section className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <ExternalCard
+          href={`${import.meta.env.BASE_URL}agent/`}
+          title="agent/"
+          desc="公开知识库对话与工具调用体验"
+          accent="text-terminal-yellow"
+        />
         <Card
           to="/posts"
           title="posts/"
@@ -171,5 +195,19 @@ function Card({ to, title, desc, accent }: CardProps) {
       <div className="text-sm text-terminal-gray mt-2">{desc}</div>
       <div className="mt-4 text-xs text-terminal-gray/70">cd → enter</div>
     </Link>
+  );
+}
+
+function ExternalCard({ href, title, desc, accent }: Omit<CardProps, 'to'> & { href: string }) {
+  return (
+    <a
+      href={href}
+      onClick={() => trackEvent('agent_open', 'web', 'home_entry')}
+      className="block border border-terminal-line/70 bg-terminal-panel/40 hover:bg-terminal-panel hover:border-terminal-green/60 transition-colors rounded-lg p-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-terminal-yellow"
+    >
+      <div className={`text-lg font-semibold ${accent}`}>{title}</div>
+      <div className="text-sm text-terminal-gray mt-2">{desc}</div>
+      <div className="mt-4 text-xs text-terminal-gray/70">cd → enter</div>
+    </a>
   );
 }

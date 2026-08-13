@@ -2,7 +2,7 @@
 
 from datetime import UTC, date, datetime, timedelta
 
-from db.models import PageViewRow
+from db.models import ConversionEventRow, PageViewRow
 from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +40,40 @@ class AnalyticsRepository:
             await self.session.scalar(select(func.count()).select_from(PageViewRow).where(PageViewRow.path == path))
             or 0
         )
+
+    async def insert_event(
+        self,
+        *,
+        name: str,
+        source: str,
+        path: str,
+        label: str | None,
+        visitor_hash: str,
+    ) -> None:
+        self.session.add(
+            ConversionEventRow(
+                name=name,
+                source=source,
+                path=path,
+                label=label,
+                visitor_hash=visitor_hash,
+            )
+        )
+        await self.session.flush()
+
+    async def conversion_events(self, days: int) -> list[dict]:
+        stmt = (
+            select(
+                ConversionEventRow.name,
+                func.count().label("pv"),
+                func.count(func.distinct(ConversionEventRow.visitor_hash)).label("uv"),
+            )
+            .where(ConversionEventRow.ts >= _utc_days_ago(days))
+            .group_by(ConversionEventRow.name)
+            .order_by(literal_column("pv").desc(), ConversionEventRow.name)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [{"name": r.name, "pv": r.pv, "uv": r.uv} for r in rows]
 
     async def post_heat(self, limit: int) -> list[dict]:
         """各文章累计 PV，热度降序。仅统计 `/posts/` 路径，供前台列表页画热力条。"""

@@ -99,10 +99,10 @@
 
 ## 6. 当前待办状态
 
-- [ ] P0：确认首批 Projects 案例与每项可公开的结果/链接。
-- [ ] P0：实现 Projects 页面与首页入口。
-- [ ] P0：统一 GitHub、邮箱、RSS、合作 CTA，并修正 About GitHub 占位链接。
-- [ ] P0：增加最小转化事件并在 Admin 验证。
+- [x] P0：确认首批 Projects 案例与每项可公开的结果/链接（2026-08-13：Agent、Perler、Personal Site Ops）。
+- [x] P0：实现 Projects 页面与首页入口（2026-08-13：`/projects`、首页 Projects/Agent 入口与 SSG）。
+- [x] P0：统一 GitHub、邮箱、RSS、合作 CTA，并修正 About GitHub 占位链接（2026-08-13）。
+- [x] P0：增加最小转化事件并在 Admin 验证（2026-08-13：白名单匿名事件、Admin 聚合表）。
 - [ ] P1：实现 Now 页面。
 - [ ] P1：发布两篇工程复盘。
 - [ ] P1：发布 Agent 能力与信任说明。
