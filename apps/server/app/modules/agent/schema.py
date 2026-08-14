@@ -21,6 +21,29 @@ class AgentChatRequest(BaseModel):
     attachments: list[AgentAttachment] = Field(default_factory=list, max_length=3)
 
 
+class AgentTaskCreateRequest(BaseModel):
+    q: str = Field(..., min_length=1, max_length=2000)
+    session_id: str | None = Field(default=None, max_length=32)
+    auto_approve: bool = False
+    deep_think: bool = False
+    reflect: bool = False
+    auto_model: bool = False
+
+
+class AgentTaskItem(BaseModel):
+    id: str
+    session_id: str
+    status: str
+    error: str | None = None
+    created_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+class AgentTaskApprovalRequest(BaseModel):
+    approvals: dict[str, bool] = Field(min_length=1)
+
+
 class AgentUnlockRequest(BaseModel):
     # 私有通道 TOTP 解锁：6 位数字码 → 换长 TTL 的 agent_token。
     totp: str = Field(..., min_length=6, max_length=6)

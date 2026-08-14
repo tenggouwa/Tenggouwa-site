@@ -5,7 +5,7 @@ import logging
 from common.rate_limit import client_ip, public_agent_limiter, unlock_limiter
 from db import get_session
 from dependencies import current_admin
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,12 +30,16 @@ from .schema import (
     AgentRunItem,
     AgentSessionInfo,
     AgentSkillProposal,
+    AgentTaskApprovalRequest,
+    AgentTaskCreateRequest,
+    AgentTaskItem,
     AgentTranscript,
     AgentTranscriptTurn,
     AgentUnlockRequest,
     AgentUnlockResponse,
 )
 from .service import agent_service
+from .tasks import start_task
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +151,106 @@ async def chat_privileged(
     except AttachmentError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _chat_stream(session, payload, privileged=True, owner=owner, attachments=attachments)
+
+
+def _task_item(row) -> AgentTaskItem:
+    return AgentTaskItem(
+        id=row.id,
+        session_id=row.session_id,
+        status=row.status,
+        error=row.error,
+        created_at=row.created_at.isoformat(),
+        started_at=row.started_at.isoformat() if row.started_at else None,
+        completed_at=row.completed_at.isoformat() if row.completed_at else None,
+    )
+
+
+@private_router.post("/tasks", response_model=ResponseModel[AgentTaskItem])
+async def create_task(
+    payload: AgentTaskCreateRequest,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[AgentTaskItem]:
+    """Start an owner task that continues after the creating browser disconnects."""
+    repo = AgentRepository(session)
+    existing = await repo.get_session(payload.session_id) if payload.session_id else None
+    if existing is not None and existing.owner != owner:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    sid = existing.id if existing else await repo.create_session(payload.q, owner=owner)
+    task = await repo.create_task(
+        sid,
+        owner,
+        payload.q,
+        {
+            "auto_approve": payload.auto_approve,
+            "deep_think": payload.deep_think,
+            "reflect": payload.reflect,
+            "auto_model": payload.auto_model,
+        },
+    )
+    await session.commit()  # worker uses an independent DB session and must see the task before this request returns.
+    start_task(task.id)
+    return ResponseModel(data=_task_item(task))
+
+
+@private_router.get("/tasks/{task_id}", response_model=ResponseModel[AgentTaskItem])
+async def get_task(
+    task_id: str,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[AgentTaskItem]:
+    task = await AgentRepository(session).get_task(task_id, owner)
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return ResponseModel(data=_task_item(task))
+
+
+@private_router.post("/tasks/{task_id}/approve", response_model=ResponseModel[AgentTaskItem])
+async def approve_task(
+    task_id: str,
+    payload: AgentTaskApprovalRequest,
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> ResponseModel[AgentTaskItem]:
+    repo = AgentRepository(session)
+    task = await repo.get_task(task_id, owner)
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.status != "waiting_approval":
+        raise HTTPException(status_code=409, detail="任务当前不在等待审批")
+    await repo.resume_task(task_id, payload.approvals)
+    await session.commit()
+    refreshed = await repo.get_task(task_id, owner)
+    assert refreshed is not None
+    start_task(task_id)
+    return ResponseModel(data=_task_item(refreshed))
+
+
+@private_router.get("/tasks/{task_id}/events")
+async def task_events(
+    task_id: str,
+    after: int = Query(default=0, ge=0),
+    owner: str = Depends(current_agent_owner),
+    session: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    repo = AgentRepository(session)
+    task = await repo.get_task(task_id, owner)
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    async def gen():
+        cursor = after
+        while True:
+            for event in await repo.task_events(task_id, cursor):
+                cursor = event.seq
+                yield _sse(event.type, {**event.data, "event_id": event.seq})
+            current = await repo.get_task(task_id, owner)
+            if current is None or current.status in {"completed", "failed", "cancelled", "waiting_approval"}:
+                yield _sse("task_status", {"status": current.status if current else "cancelled", "event_id": cursor})
+                return
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 @private_router.get("/sessions", response_model=ResponseModel[list[AgentSessionInfo]])

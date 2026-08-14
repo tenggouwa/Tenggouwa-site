@@ -97,6 +97,24 @@ export interface AgentRunItem {
 
 export const listAgentRuns = (token: string) => agentApi<AgentRunItem[]>('/runs', token);
 
+export interface AgentTask {
+  id: string;
+  session_id: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export const createAgentTask = (token: string, body: { q: string; session_id?: string; auto_approve?: boolean }) =>
+  agentApi<AgentTask>('/tasks', token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+export const getAgentTask = (token: string, taskId: string) => agentApi<AgentTask>(`/tasks/${taskId}`, token);
+export const approveAgentTask = (token: string, taskId: string, approvals: Record<string, boolean>) =>
+  agentApi<AgentTask>(`/tasks/${taskId}/approve`, token, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approvals }),
+  });
+
 // 长期记忆（记忆面板）：列 / 删。仅私有通道。
 export interface MemoryItem {
   id: number;

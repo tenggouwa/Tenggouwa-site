@@ -8,7 +8,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from db.models import AgentInboxRow, AgentMessageRow, AgentRunRow, AgentSessionRow
+from db.models import AgentInboxRow, AgentMessageRow, AgentRunRow, AgentSessionRow, AgentTaskEventRow, AgentTaskRow
 from sqlalchemy import delete, func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,68 @@ class AgentRepository:
         self.session.add(AgentSessionRow(id=sid, title=title[:200], owner=owner))
         await self.session.flush()
         return sid
+
+    async def create_task(self, sid: str, owner: str, prompt: str, options: dict) -> AgentTaskRow:
+        row = AgentTaskRow(id=uuid4().hex, session_id=sid, owner=owner, prompt=prompt, options=options)
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    async def get_task(self, task_id: str, owner: str) -> AgentTaskRow | None:
+        row = await self.session.get(AgentTaskRow, task_id)
+        return row if row is not None and row.owner == owner else None
+
+    async def get_task_unscoped(self, task_id: str) -> AgentTaskRow | None:
+        return await self.session.get(AgentTaskRow, task_id)
+
+    async def set_task_status(self, task_id: str, status: str, *, error: str | None = None) -> None:
+        row = await self.session.get(AgentTaskRow, task_id)
+        if row is None:
+            return
+        row.status = status
+        row.error = error
+        if status == "running":
+            row.started_at = func.now()
+        if status in {"completed", "failed", "cancelled"}:
+            row.completed_at = func.now()
+        await self.session.flush()
+
+    async def fail_running_tasks(self, error: str) -> None:
+        await self.session.execute(
+            sa_update(AgentTaskRow)
+            .where(AgentTaskRow.status == "running")
+            .values(status="failed", error=error, completed_at=func.now())
+        )
+
+    async def resume_task(self, task_id: str, approvals: dict[str, bool]) -> None:
+        row = await self.session.get(AgentTaskRow, task_id)
+        if row is None:
+            return
+        row.status = "queued"
+        row.error = None
+        row.options = {**row.options, "approvals": approvals}
+        await self.session.flush()
+
+    async def append_task_event(self, task_id: str, seq: int, event: dict) -> None:
+        self.session.add(AgentTaskEventRow(task_id=task_id, seq=seq, type=str(event["type"]), data=event))
+        await self.session.flush()
+
+    async def next_task_event_seq(self, task_id: str) -> int:
+        value = await self.session.scalar(
+            select(func.coalesce(func.max(AgentTaskEventRow.seq), 0)).where(AgentTaskEventRow.task_id == task_id)
+        )
+        return int(value or 0)
+
+    async def task_events(self, task_id: str, after_seq: int = 0) -> list[AgentTaskEventRow]:
+        return list(
+            (
+                await self.session.execute(
+                    select(AgentTaskEventRow)
+                    .where(AgentTaskEventRow.task_id == task_id, AgentTaskEventRow.seq > after_seq)
+                    .order_by(AgentTaskEventRow.seq.asc())
+                )
+            ).scalars()
+        )
 
     async def get_session(self, sid: str) -> AgentSessionRow | None:
         return await self.session.get(AgentSessionRow, sid)

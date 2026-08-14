@@ -1391,6 +1391,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Task
+         * @description Start an owner task that continues after the creating browser disconnects.
+         */
+        post: operations["create_task_api_agent_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Task */
+        get: operations["get_task_api_agent_tasks__task_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/tasks/{task_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Task */
+        post: operations["approve_task_api_agent_tasks__task_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/tasks/{task_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Events */
+        get: operations["task_events_api_agent_tasks__task_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/sessions": {
         parameters: {
             query?: never;
@@ -2107,6 +2178,57 @@ export interface components {
             rationale: string;
             /** Created At */
             created_at: string;
+        };
+        /** AgentTaskApprovalRequest */
+        AgentTaskApprovalRequest: {
+            /** Approvals */
+            approvals: {
+                [key: string]: boolean;
+            };
+        };
+        /** AgentTaskCreateRequest */
+        AgentTaskCreateRequest: {
+            /** Q */
+            q: string;
+            /** Session Id */
+            session_id?: string | null;
+            /**
+             * Auto Approve
+             * @default false
+             */
+            auto_approve: boolean;
+            /**
+             * Deep Think
+             * @default false
+             */
+            deep_think: boolean;
+            /**
+             * Reflect
+             * @default false
+             */
+            reflect: boolean;
+            /**
+             * Auto Model
+             * @default false
+             */
+            auto_model: boolean;
+        };
+        /** AgentTaskItem */
+        AgentTaskItem: {
+            /** Id */
+            id: string;
+            /** Session Id */
+            session_id: string;
+            /** Status */
+            status: string;
+            /** Error */
+            error?: string | null;
+            /** Created At */
+            created_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
         };
         /** AgentTranscript */
         AgentTranscript: {
@@ -3103,6 +3225,20 @@ export interface components {
              */
             message: string;
             data?: components["schemas"]["AgentIssueResponse"] | null;
+        };
+        /** ResponseModel[AgentTaskItem] */
+        ResponseModel_AgentTaskItem_: {
+            /**
+             * Code
+             * @default 0
+             */
+            code: number;
+            /**
+             * Message
+             * @default ok
+             */
+            message: string;
+            data?: components["schemas"]["AgentTaskItem"] | null;
         };
         /** ResponseModel[AgentTranscript] */
         ResponseModel_AgentTranscript_: {
@@ -6773,6 +6909,146 @@ export interface operations {
                 "application/json": components["schemas"]["AgentChatRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_task_api_agent_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTaskCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_AgentTaskItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_api_agent_tasks__task_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_AgentTaskItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_task_api_agent_tasks__task_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTaskApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel_AgentTaskItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_events_api_agent_tasks__task_id__events_get: {
+        parameters: {
+            query?: {
+                after?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

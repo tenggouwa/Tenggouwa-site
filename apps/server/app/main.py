@@ -51,7 +51,9 @@ def create_app() -> FastAPI:
         start_kb_scheduler()
         # Agent 调度器：清理超过 retention 的匿名会话；私有 owner 会话不受影响。
         from modules.agent.scheduler import start_agent_scheduler, stop_agent_scheduler
+        from modules.agent.tasks import fail_interrupted_tasks
 
+        await fail_interrupted_tasks()
         start_agent_scheduler()
         # 临时邮箱 TTL：每天删除过期邮件，避免验证码/正文无限保留。
         from modules.mail.scheduler import start_mail_scheduler, stop_mail_scheduler
