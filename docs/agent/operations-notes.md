@@ -17,3 +17,12 @@
 
 私有 `/agent/` 的 `runs` 面板保存执行摘要：模型、状态、耗时、token 和调用过的工具名。它刻意不保存或返回
 prompt、回答、工具参数、工具输出或自定义 skill 密钥。
+
+## Durable Agent tasks
+
+- 私有 `/agent/tasks` 页面创建的是持久任务，而不是一条与浏览器连接绑定的 chat 请求。任务状态为
+  `queued`、`running`、`waiting_approval`、`completed`、`failed` 或 `cancelled`。
+- 运行事件按序写入 `agent_task_event`；断线或刷新后可通过
+  `GET /api/agent/tasks/{task_id}/events?after=<event_id>` 回放，事件仅该 owner 的 Bearer token 可读。
+- 审批状态不会被 `done` 事件覆盖；调用 `POST /api/agent/tasks/{task_id}/approve` 后才会恢复任务。
+- 进程重启时，尚在运行的任务会标记为 `failed`，而不是自动重放可能带副作用的命令。会话记录和任务事件会保留，供确认结果后人工重试。

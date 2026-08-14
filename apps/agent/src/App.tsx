@@ -6,6 +6,7 @@ const Ask = lazy(() => import('./pages/Ask'));
 const Graph = lazy(() => import('./pages/Graph'));
 const Skills = lazy(() => import('./pages/Skills'));
 const Arch = lazy(() => import('./pages/Arch'));
+const Tasks = lazy(() => import('./pages/Tasks'));
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="graph" element={<Graph />} />
           <Route path="arch" element={<Arch />} />
           <Route path="skills" element={<Skills />} />
+          <Route path="tasks" element={<Tasks />} />
           <Route path="*" element={<Ask />} />
         </Route>
       </Routes>

@@ -5,6 +5,7 @@ const NAV = [
   { to: '/graph', label: 'graph' },
   { to: '/arch', label: 'arch' },
   { to: '/skills', label: 'skills' },
+  { to: '/tasks', label: 'tasks' },
 ];
 
 export default function Layout() {

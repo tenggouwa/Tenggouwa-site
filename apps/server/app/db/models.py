@@ -650,6 +650,48 @@ class AgentRunRow(Base):
     )
 
 
+class AgentTaskRow(Base):
+    """可恢复的 owner-only Agent 任务；浏览器连接不是任务生命周期。"""
+
+    __tablename__ = "agent_task"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("agent_session.id", ondelete="CASCADE"), nullable=False
+    )
+    owner: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="queued")
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    options: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    run_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("agent_run.id", ondelete="SET NULL"), nullable=True
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_agent_task_owner_created", "owner", "created_at"),
+        Index("ix_agent_task_status", "status"),
+    )
+
+
+class AgentTaskEventRow(Base):
+    """任务事件 append-only；SSE 重连按 seq 回放，内容只对所属 owner 可见。"""
+
+    __tablename__ = "agent_task_event"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(32), ForeignKey("agent_task.id", ondelete="CASCADE"), nullable=False)
+    seq: Mapped[int] = mapped_column(nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (Index("uq_agent_task_event_seq", "task_id", "seq", unique=True),)
+
+
 class AgentCustomSkillRow(Base):
     """owner 在页面上自定义的 skill，agent 私有通道可直接调。两种执行体（kind）：
 
