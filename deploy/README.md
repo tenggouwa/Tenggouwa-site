@@ -49,8 +49,16 @@ cloudflared ── Docker network ──> app:10095 ──> postgres:5432
                                       └── agent_ws volume
 ```
 
-宿主机只把 PostgreSQL 绑定到 `127.0.0.1:5432`，app 端口不发布；公网 API 由 Cloudflare Tunnel
-转发到 `app:10095`。cloudflared 固定 HTTP/2 transport，避免当前网络下 QUIC 长连接不稳。
+宿主机把 PostgreSQL 绑定到 `127.0.0.1:5432`，app 只绑定到 `127.0.0.1:10095`。默认公网 API
+由 Cloudflare Tunnel 转发到 `app:10095`。cloudflared 固定 HTTP/2 transport，避免当前网络下 QUIC
+长连接不稳。
+
+### Tunnel 出站不稳定时：Nginx 直连回源
+
+当 `cloudflared` 无法持续保持已注册连接时，不要通过前端 CORS 补丁掩盖 502/530。启用
+`deploy/nginx/tenggouwa.conf`，将 Cloudflare Origin Certificate 放到 `/etc/nginx/ssl/`，并保留
+`api.tenggouwa.com` 的橙云代理。然后把 DNS 中的 Tunnel 记录换为指向 ECS 公网 IPv4 的代理 A
+记录。Nginx 反代回环的 `app:10095`，支持 HTTP API、SSE 与 Agent WebSocket；不公开 Docker 端口。
 
 ### 一次性准备
 

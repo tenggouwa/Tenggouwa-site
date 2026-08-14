@@ -82,10 +82,12 @@ services:
       AGENT_WORKSPACE: /srv/agent-workspace
     volumes:
       - agent_ws:/srv/agent-workspace
+    # 仅向宿主机回环暴露，供 nginx 直连回源；不会开放 ECS 公网端口。
+    ports:
+      - "127.0.0.1:10095:10095"
     depends_on:
       postgres:
         condition: service_healthy
-    # 端口不发布到宿主机：cloudflared 在同一个 docker 网络里通过 app:10095 转发
     # 健康检查：打 /health/check。镜像是 slim 无 curl，用自带 python。
     # start_period 给迁移 + gunicorn 启动留足时间，期间失败不计入 retries。
     healthcheck:
