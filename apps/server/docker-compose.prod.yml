@@ -103,7 +103,7 @@ services:
 
   cloudflared:
     # 注意：不要用 :latest——国内 docker hub 镜像的 latest 是远古版本（2020.7.0）
-    image: cloudflare/cloudflared:2025.5.0
+    image: cloudflare/cloudflared:2026.8.2
     container_name: tenggouwa-cloudflared
     restart: unless-stopped
     # cloudflared 之前没有内存上限：38 天不重启后缓慢涨内存，把 1.6G 机器拖进 OOM
