@@ -70,6 +70,13 @@ export default function Layout() {
                 {item.label}
               </NavLink>
             ))}
+            <a
+              href={`${import.meta.env.BASE_URL}learn/`}
+              className="transition-colors text-terminal-cyan hover:text-terminal-green"
+              title="推理系统交互课程：从部署到引擎优化"
+            >
+              learn
+            </a>
             {/* ask / casino 是独立 SPA（不同 basename），用整页跳转而非 router Link。
                 ${BASE_URL}<app>/ 在子路径(/Tenggouwa-site/<app>/)与根域(/<app>/)都成立。 */}
             <a

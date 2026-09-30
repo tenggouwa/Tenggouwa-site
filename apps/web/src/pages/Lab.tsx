@@ -114,6 +114,20 @@ export default function Lab() {
         </p>
       </div>
 
+      <section className="border border-terminal-line bg-terminal-panel/40 rounded-lg overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-terminal-line/60 px-4 py-2 text-xs text-terminal-gray/70">
+          <span className="h-2 w-2 rounded-full bg-[#ff5f57]" />
+          <span className="h-2 w-2 rounded-full bg-[#febc2e]" />
+          <span className="h-2 w-2 rounded-full bg-[#28c840]" />
+          <span className="ml-2">~/learn/llm-inference</span>
+        </div>
+        <a href={`${import.meta.env.BASE_URL}learn/`} className="block p-5 hover:text-terminal-green">
+          <h2 className="text-lg text-terminal-green"><span className="text-terminal-pink">$ </span>cat 推理系统学习手册</h2>
+          <p className="mt-3 text-sm text-terminal-gray">从部署调参到模型、引擎与定制优化。6 个阶段、18 课正文，配有交互实验、自测和可下载代码。</p>
+          <p className="mt-3 text-xs text-terminal-cyan">进入课程 →</p>
+        </a>
+      </section>
+
       <section className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {TOYS.map((toy) => (
           <Link

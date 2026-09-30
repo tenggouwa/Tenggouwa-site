@@ -43,6 +43,7 @@ Tunnel 暴露 API。Agent 的高危文件、shell 和 git 操作在树莓派的 
 | `apps/web` | 公开网站 | `/` |
 | `apps/admin` | 管理后台 | `/admin/` |
 | `apps/agent` | 独立 Agent UI | `/agent/` |
+| `apps/learn` | 推理系统交互课程（18 课） | `/learn/` |
 | `apps/casino` | 概率与赌场游戏实验 | `/casino/` |
 | `apps/server` | FastAPI API、Agent/KB/终端网关 | `api.tenggouwa.com` |
 | `apps/pi-agent` | Pi 遥测、探针、产物与沙箱执行 daemon | Raspberry Pi systemd |
@@ -75,6 +76,7 @@ pnpm install
 pnpm dev:web       # Vite 默认端口 5173
 pnpm dev:admin     # 5174
 pnpm dev:agent     # 5176
+pnpm dev:learn     # 5178（交互教材）
 
 # 后端：先启动本地 PostgreSQL；首次运行会创建 venv、同步依赖
 docker compose -f apps/server/docker-compose.yml up -d postgres
@@ -132,7 +134,7 @@ pnpm build:cf
 pnpm deploy:server
 ```
 
-`build-pages.sh` 一次构建 web/admin/agent/casino，并生成文章静态 HTML、sitemap、robots、feed、
+`build-pages.sh` 一次构建 web/admin/agent/casino/learn，并生成文章静态 HTML、sitemap、robots、feed、
 Casino SEO 页面和 OG 图片。`main` 的相关改动由 `deploy-pages.yml` 自动发布；后端仍需手动部署。
 
 完整步骤见 [deploy/README.md](deploy/README.md) 和

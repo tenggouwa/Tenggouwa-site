@@ -21,7 +21,9 @@
     "deploy:server": "bash scripts/deploy-server.sh",
     "lint": "pnpm -r --parallel lint",
     "gen:api-types": "bash scripts/gen-api-types.sh",
-    "prepare": "lefthook install || true"
+    "prepare": "lefthook install || true",
+    "dev:learn": "pnpm --filter @tenggouwa/learn dev",
+    "build:learn": "pnpm --filter @tenggouwa/learn build"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

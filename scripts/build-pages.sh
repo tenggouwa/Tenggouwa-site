@@ -88,6 +88,14 @@ VITE_BASE="$AGENT_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/
 mkdir -p "$DIST/agent"
 cp -R apps/agent/dist/. "$DIST/agent/"
 
+echo "==> 构建 apps/learn（单文件交互教材）"
+pnpm --filter @tenggouwa/learn build
+mkdir -p "$DIST/learn"
+cp -R apps/learn/dist/. "$DIST/learn/"
+if [ -n "$PRERENDER_NOINDEX" ]; then
+  python3 -c "from pathlib import Path; p = Path('$DIST/learn/index.html'); p.write_text(p.read_text().replace('<head>', '<head><meta name=\"robots\" content=\"noindex\">', 1))"
+fi
+
 echo "==> 预渲染博客静态页 + sitemap / robots / feed (origin=$SITE_ORIGIN)"
 # prerender 从 API 拉数据（DB 是唯一真相），未显式传则回落到 https://api.tenggouwa.com
 PRERENDER_API="${VITE_API_BASE:-https://api.tenggouwa.com}"
@@ -140,6 +148,7 @@ if [ "$TARGET" = "root" ]; then
 /admin/* /admin/index.html 200
 /casino/* /casino/index.html 200
 /agent/* /agent/index.html 200
+/learn/* /learn/index.html 200
 /* /index.html 200
 EOF
 fi

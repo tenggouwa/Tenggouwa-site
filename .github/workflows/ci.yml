@@ -54,13 +54,23 @@ jobs:
               pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json .github/workflows/ci.yml; then
             echo "filter=...[$base]" >> "$GITHUB_OUTPUT"
             echo "scope = changed packages since base"
+            if git diff --quiet "$base" HEAD -- apps/learn; then
+              echo "course=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "course=true" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "filter=./apps/*" >> "$GITHUB_OUTPUT"
             echo "scope = all apps (global file changed)"
+            echo "course=true" >> "$GITHUB_OUTPUT"
           fi
 
       # 前端毫无改动时 pnpm 直接 no-op 秒过
-      - name: Test changed (vitest)
+      - name: Install course browser
+        if: steps.scope.outputs.course == 'true'
+        run: pnpm --filter @tenggouwa/learn exec playwright install --with-deps chromium
+
+      - name: Test changed (vitest and course regression)
         run: pnpm --filter "${{ steps.scope.outputs.filter }}" -r --if-present run test
 
       - name: Build changed (tsc --noEmit && vite build)
