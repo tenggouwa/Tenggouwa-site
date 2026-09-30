@@ -5,6 +5,7 @@ Tenggouwa-site 是一个 monorepo：
 - `apps/web` —— 个人网站，挂 Pages 根路径。技术栈：Vite + React 19 + TS + React Router 7 + Arco Design + Tailwind。
 - `apps/admin` —— 管理后台，挂 `/admin/` 子路径。技术栈同上。
 - `apps/agent` —— Agent 对话 / 图谱 / skills 前端，挂 `/agent/` 子路径。
+- `apps/learn` —— 推理系统交互教材，挂 `/learn/`；独立阅读样式、HashRouter、单文件构建。
 - `apps/casino` —— 概率游戏实验，挂 `/casino/` 子路径；使用 Three.js / React Three Fiber。
 - `apps/server` —— FastAPI 后端（SQLAlchemy async + PostgreSQL/pgvector + Agent/KB/MCP），Docker Compose 部署到阿里云（`ssh openclaw`）。
 - `apps/mac-agent` —— 本机 Python daemon，配合 `/console` 拉远程 PTY，鉴权走 Bearer token + 后端 agent 网关。

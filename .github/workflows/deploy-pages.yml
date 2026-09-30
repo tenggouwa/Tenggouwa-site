@@ -8,6 +8,7 @@ on:
       - 'apps/admin/**'
       - 'apps/casino/**'
       - 'apps/agent/**'
+      - 'apps/learn/**'
       - 'content/posts/**'
       - 'scripts/build-pages.sh'
       - 'scripts/prerender.mjs'
