@@ -345,7 +345,8 @@ function shell({ title, description, currentPath, ogImage, jsonLd, bodyHtml, ext
       <footer class="border-t border-terminal-line/60 text-xs text-terminal-gray/70">
         <div class="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:justify-between gap-1">
           <span>© ${new Date().getFullYear()} ${AUTHOR} · made with caffeine ☕</span>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer" class="text-terminal-gray/50 hover:text-terminal-green transition-colors">浙ICP备2026084474号-1</a>
             <a href="${GITHUB_URL}" target="_blank" rel="noreferrer" class="text-terminal-gray/50 hover:text-terminal-green transition-colors">github</a>
             <a href="mailto:${CONTACT_EMAIL}" class="text-terminal-gray/50 hover:text-terminal-green transition-colors">email</a>
             <a href="${pageUrl('/feed.xml')}" class="text-terminal-gray/50 hover:text-terminal-green transition-colors">RSS</a>
