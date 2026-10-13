@@ -33,6 +33,7 @@ import {
   X,
 } from 'lucide-react';
 import { glossary, LabKind, lessons, sources, stages } from '../../data/course';
+import { GuidedLesson } from '../../components/GuidedLesson';
 import { Lab, labTitles } from '../../components/Lab';
 import {
   blankEntry,
@@ -645,6 +646,7 @@ function LessonPage({ progress, update, visit }: LearningProps) {
   const [selected, setSelected] = useState<number | null>(null),
     [submitted, setSubmitted] = useState(false);
   const [tab, setTab] = useState('讲解与实验');
+  const [readingOpen, setReadingOpen] = useState(false);
   const tabs = ['讲解与实验', '自测与验收', '本课笔记'];
   function moveTab(e: KeyboardEvent<HTMLButtonElement>, current: number) {
     const position =
@@ -697,7 +699,7 @@ function LessonPage({ progress, update, visit }: LearningProps) {
         <div className="reader-meta">
           <span>
             <Clock3 size={15} />
-            阅读与自测约 {lesson.minutes} 分钟
+            先走 3 步入门 · 完整学习约 {lesson.minutes} 分钟
           </span>
           <span>实验另留 1–4 小时；引擎项目可跨多天</span>
           <Status id={lesson.id} progress={progress} />
@@ -741,79 +743,109 @@ function LessonPage({ progress, update, visit }: LearningProps) {
           <div id="lesson-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
             {tab === '讲解与实验' && (
               <>
-                <details className="reading-outline" key={lesson.id}>
-                  <summary>本课阅读导航 · {headings.length} 节</summary>
-                  <ol>
-                    {headings.map((heading, i) => (
-                      <li key={heading}>
-                        <button
-                          onClick={() => {
-                            const target = document.getElementById(
-                              `section-${lesson.id}-${i}`,
-                            );
-                            target?.focus({ preventScroll: true });
-                            target?.scrollIntoView({
-                              behavior: 'smooth',
-                              block: 'start',
-                            });
-                          }}
-                        >
-                          {heading}
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-                <article className="prose">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      h3: ({ children }) => (
-                        <h3
-                          id={`section-${lesson.id}-${headings.indexOf(String(children))}`}
-                          tabIndex={-1}
-                        >
-                          {children}
-                        </h3>
-                      ),
-                    }}
-                  >
-                    {lesson.body}
-                  </ReactMarkdown>
-                  {lesson.code && (
-                    <>
-                      <h3>动手起点</h3>
-                      <pre>
-                        <code>{lesson.code}</code>
-                      </pre>
-                    </>
-                  )}
-                </article>
-                {lesson.lab && <Lab kind={lesson.lab} />}
-                <section className="practice">
-                  <div className="small-heading">
-                    <FlaskConical size={18} />
-                    <h2>动手练习</h2>
-                  </div>
-                  <ol>
-                    {lesson.experiment.map((e) => (
-                      <li key={e}>{e}</li>
-                    ))}
-                  </ol>
-                  {lesson.download && (
-                    <button
-                      className="button secondary"
-                      onClick={() => downloadLab(lesson.download!)}
+                <GuidedLesson
+                  key={lesson.id}
+                  lesson={lesson}
+                  onPractice={() => setTab('自测与验收')}
+                  onReview={() => {
+                    setReadingOpen(true);
+                    requestAnimationFrame(() => {
+                      const target = document.getElementById(
+                        `section-${lesson.id}-${headings.indexOf(lesson.quiz.section)}`,
+                      );
+                      target?.focus({ preventScroll: true });
+                      target?.scrollIntoView({ block: 'start' });
+                    });
+                  }}
+                />
+                <details
+                  className="deep-reading"
+                  open={readingOpen}
+                  onToggle={(e) => setReadingOpen(e.currentTarget.open)}
+                >
+                  <summary>深入阅读 · 完整原理与代码（按需展开）</summary>
+                  <details className="reading-outline" key={lesson.id}>
+                    <summary>本课阅读导航 · {headings.length} 节</summary>
+                    <ol>
+                      {headings.map((heading, i) => (
+                        <li key={heading}>
+                          <button
+                            onClick={() => {
+                              const target = document.getElementById(
+                                `section-${lesson.id}-${i}`,
+                              );
+                              target?.focus({ preventScroll: true });
+                              target?.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start',
+                              });
+                            }}
+                          >
+                            {heading}
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                  <article className="prose">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h3: ({ children }) => (
+                          <h3
+                            id={`section-${lesson.id}-${headings.indexOf(String(children))}`}
+                            tabIndex={-1}
+                          >
+                            {children}
+                          </h3>
+                        ),
+                      }}
                     >
-                      <Download size={16} />
-                      下载 {lesson.download}
-                    </button>
-                  )}
-                  <p className="muted">
-                    Python 实验在终端运行；网页不会执行本机或远程命令。CPU
-                    实验可先做，CUDA 实验需要兼容的 NVIDIA 环境。
-                  </p>
-                </section>
+                      {lesson.body}
+                    </ReactMarkdown>
+                    {lesson.code && (
+                      <>
+                        <h3>动手起点</h3>
+                        <pre>
+                          <code>{lesson.code}</code>
+                        </pre>
+                      </>
+                    )}
+                  </article>
+                </details>
+                {lesson.lab && (
+                  <details className="deep-reading">
+                    <summary>动手实验 · 调参数，观察变化</summary>
+                    <Lab kind={lesson.lab} />
+                  </details>
+                )}
+                <details className="deep-reading practice-fold">
+                  <summary>课后实践 · 终端练习与实验下载</summary>
+                  <section className="practice">
+                    <div className="small-heading">
+                      <FlaskConical size={18} />
+                      <h2>动手练习</h2>
+                    </div>
+                    <ol>
+                      {lesson.experiment.map((e) => (
+                        <li key={e}>{e}</li>
+                      ))}
+                    </ol>
+                    {lesson.download && (
+                      <button
+                        className="button secondary"
+                        onClick={() => downloadLab(lesson.download!)}
+                      >
+                        <Download size={16} />
+                        下载 {lesson.download}
+                      </button>
+                    )}
+                    <p className="muted">
+                      Python 实验在终端运行；网页不会执行本机或远程命令。CPU
+                      实验可先做，CUDA 实验需要兼容的 NVIDIA 环境。
+                    </p>
+                  </section>
+                </details>
                 <div className="reading-end">
                   <label className="check">
                     <input
@@ -887,6 +919,7 @@ function LessonPage({ progress, update, visit }: LearningProps) {
                         className="text-button"
                         onClick={() => {
                           setTab('讲解与实验');
+                          setReadingOpen(true);
                           requestAnimationFrame(() => {
                             const target = document.getElementById(
                               `section-${lesson.id}-${headings.indexOf(lesson.quiz.section)}`,

@@ -17,6 +17,10 @@ test('reading navigation scrolls to the section without changing the lesson rout
   page,
 }) => {
   await page.goto('/#/lesson/patch');
+  await page
+    .locator('.deep-reading > summary')
+    .filter({ hasText: '深入阅读' })
+    .click();
   await page.locator('.reading-outline summary').click();
   await page
     .getByRole('button', { name: '把测试写成能抓到错误的条件', exact: true })
@@ -24,6 +28,7 @@ test('reading navigation scrolls to the section without changing the lesson rout
   await expect(page).toHaveURL(/#\/lesson\/patch$/);
   await expect(page.locator('#section-patch-3')).toBeFocused();
   await expect(page.locator('.prose')).toContainText('504');
+  await page.locator('.practice-fold > summary').click();
   const event = page.waitForEvent('download');
   await page
     .getByRole('button', { name: '下载 prefill_budget.py', exact: true })
@@ -37,6 +42,10 @@ test('long chapter tables and code remain within mobile page width', async ({
   await page.setViewportSize({ width: 375, height: 812 });
   for (const id of ['tensor', 'metrics', 'patch', 'capstone']) {
     await page.goto(`/#/lesson/${id}`);
+    await page
+      .locator('.deep-reading > summary')
+      .filter({ hasText: '深入阅读' })
+      .click();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,
