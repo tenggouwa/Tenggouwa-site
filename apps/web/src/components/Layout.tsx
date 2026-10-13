@@ -134,7 +134,15 @@ export default function Layout() {
       <footer className="border-t border-terminal-line/60 text-xs text-terminal-gray/70">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:justify-between gap-1">
           <span>© {new Date().getFullYear()} tenggouwa · made with caffeine ☕</span>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href="https://beian.miit.gov.cn/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-terminal-gray/50 hover:text-terminal-green transition-colors"
+            >
+              浙ICP备2026084474号-1
+            </a>
             <a
               href={GITHUB_URL}
               target="_blank"
