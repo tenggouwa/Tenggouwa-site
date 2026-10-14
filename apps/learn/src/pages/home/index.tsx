@@ -699,7 +699,7 @@ function LessonPage({ progress, update, visit }: LearningProps) {
         <div className="reader-meta">
           <span>
             <Clock3 size={15} />
-            先走 3 步入门 · 完整学习约 {lesson.minutes} 分钟
+            从比方开始，逐步理解 · 完整学习约 {lesson.minutes} 分钟
           </span>
           <span>实验另留 1–4 小时；引擎项目可跨多天</span>
           <Status id={lesson.id} progress={progress} />

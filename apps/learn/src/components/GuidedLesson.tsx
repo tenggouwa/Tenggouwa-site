@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import type { Lesson } from '../data/course';
 import { ConceptVisual } from './ConceptVisual';
 import { guides } from '../data/guides';
+import { teachingPaths, quizStep } from '../data/teaching';
+import { TeachingReader } from './TeachingReader';
 
 export function GuidedLesson({
   lesson,
@@ -13,12 +15,14 @@ export function GuidedLesson({
   onPractice: () => void;
 }) {
   const guide = guides[lesson.id];
+  const path = teachingPaths[lesson.id];
+  const [introIndex, setIntroIndex] = useState(-1);
   const [step, setStep] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [answer, setAnswer] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
-  const names = ['操作看变化', '推演一个例子', '试着判断'];
+  const names = ['逐步理解', '动手观察', '换例推演', '检查理解'];
   function move(next: number) {
     setStep(next);
     requestAnimationFrame(() => heading.current?.focus());
@@ -26,8 +30,8 @@ export function GuidedLesson({
   return (
     <section className="guided-lesson" aria-label="分步学习">
       <div className="guided-top">
-        <span className="eyebrow">先学一个核心概念</span>
-        <span>{step + 1} / 3 步</span>
+        <span className="eyebrow">一次理解一小步</span>
+        <span>{step + 1} / 4 环节</span>
       </div>
       <nav className="guided-steps" aria-label="学习步骤">
         {names.map((name, i) => (
@@ -42,14 +46,23 @@ export function GuidedLesson({
         ))}
       </nav>
       <h2 ref={heading} tabIndex={-1}>
-        {step === 0
+        {step <= 1
           ? guide.question
-          : step === 1
+          : step === 2
             ? guide.prediction
             : lesson.quiz.question}
       </h2>
       {step === 0 && (
+        <TeachingReader
+          path={path}
+          index={introIndex}
+          onSelect={setIntroIndex}
+          onDone={() => move(1)}
+        />
+      )}
+      {step === 1 && (
         <>
+          <p className="visual-task">{path.tryThis}</p>
           <ConceptVisual id={lesson.id} />
           <details className="visual-explanation">
             <summary>需要一句解释？</summary>
@@ -58,9 +71,11 @@ export function GuidedLesson({
           </details>
         </>
       )}
-      {step === 1 && (
+      {step === 2 && (
         <>
-          <p className="guided-hint">先预测，再看结果。</p>
+          <p className="guided-hint">
+            沿用刚才学过的方法，换一组条件。先预测，再看结果。
+          </p>
           <div className="guided-comparison">
             <div>
               <span>已知条件</span>
@@ -87,7 +102,7 @@ export function GuidedLesson({
           )}
         </>
       )}
-      {step === 2 && (
+      {step === 3 && (
         <>
           <fieldset className="guided-options">
             <legend className="sr-only">本步判断题</legend>
@@ -121,35 +136,47 @@ export function GuidedLesson({
                   : '看看是哪一步想偏了'}
               </strong>
               <p>{lesson.quiz.explanation}</p>
+              <button
+                className="button secondary"
+                onClick={() => {
+                  setIntroIndex(quizStep[lesson.id]);
+                  move(0);
+                }}
+              >
+                回到这道题的推导
+              </button>
               <button className="text-button" onClick={onReview}>
                 回到对应原理
               </button>
             </div>
           )}
           <p className="guided-hint">
-            这是热身，不会自动勾选课程完成。实验与正式自测可以稍后做。
+            这是热身，不会自动勾选课程完成。完成实验后再填写正式验收。
           </p>
         </>
       )}
 
-      <div className="guided-controls">
-        <button
-          className="button secondary"
-          disabled={step === 0}
-          onClick={() => move(step - 1)}
-        >
-          上一步
-        </button>
-        {step < 2 ? (
-          <button className="button primary" onClick={() => move(step + 1)}>
-            {step === 0 ? '用例子想一遍 →' : '试着判断 →'}
+      {step > 0 && (
+        <div className="guided-controls">
+          <button
+            className="button secondary"
+            disabled={step === 0}
+            onClick={() => move(step - 1)}
+          >
+            上一步
           </button>
-        ) : (
-          <button className="button primary" onClick={onPractice}>
-            去自测与验收 →
-          </button>
-        )}
-      </div>
+          {step < 3 ? (
+            <button className="button primary" onClick={() => move(step + 1)}>
+              {step === 1 ? '用例子想一遍 →' : '试着判断 →'}
+            </button>
+          ) : (
+            <button className="button primary" onClick={onPractice}>
+              去自测与验收 →
+            </button>
+          )}
+        </div>
+      )}
+      {step === 3 && <p className="teaching-next">接下来：{path.next}</p>}
     </section>
   );
 }

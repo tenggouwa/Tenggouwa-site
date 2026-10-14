@@ -20,9 +20,9 @@ pnpm build:learn
 
 ## 课程与实验
 
-每课默认按“操作概念图 → 预测例子 → 判断理解”走三步，再进入正式自测与验收。18 课各有可操作的概念图（矩阵、缓存块、时间线、显存边界、分片与预算等）；完整原理、实验和课后实践按需展开。入门判断不自动标记阅读或验收完成。
+每课默认从生活比方进入，按“逐步理解 → 动手观察 → 换例推演 → 检查理解”推进，再进入正式自测与验收。逐步理解一次只显示一个知识点，计算逐行展开，每步附小判断与纠错；数学不熟时可在原处展开运算补充。18 课各有可操作的概念图（矩阵、缓存块、时间线、显存边界、分片与预算等）；完整原理、实验和课后实践按需展开。入门判断不自动标记阅读或验收完成。
 
-概念图在 `src/components/ConceptVisual.tsx`，三步引导在 `src/components/GuidedLesson.tsx`，短例子在 `src/data/guides.ts`。无 GPU 时先完成阅读和 CPU 实验，GPU/引擎验收保留待完成。浏览器图表是教学模拟，不是硬件 benchmark。
+概念图在 `src/components/ConceptVisual.tsx`，分步引导在 `src/components/GuidedLesson.tsx`，短例子在 `src/data/guides.ts`。18 课的比方、概念、逐步计算、题目和课间衔接由 `src/data/teaching/` 按阶段维护，`TeachingReader.tsx` 负责单步阅读。内容审校约定见 [教学设计与覆盖检查](docs/teaching-review.md)。无 GPU 时先完成阅读和 CPU 实验，GPU/引擎验收保留待完成。浏览器图表是教学模拟，不是硬件 benchmark。
 
 在本目录运行：
 
