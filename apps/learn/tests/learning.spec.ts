@@ -264,6 +264,17 @@ test('single HTML works offline without any external resources', async ({
   ).toBeVisible();
   await page.getByRole('link', { name: '开始第一课', exact: true }).click();
   await expect(page.locator('.prose')).toContainText('一个 token');
+  await expect(page.locator('.teaching-analogy')).toBeVisible();
+  await page
+    .getByRole('button', { name: '开始拆开理解 →', exact: true })
+    .click();
+  await expect(page.locator('.teaching-reader h3')).toHaveText(
+    '模型与引擎分别负责什么？',
+  );
+  await page
+    .getByRole('button', { name: '下一行怎么算？', exact: true })
+    .click();
+  await expect(page.locator('.worked-example li')).toHaveCount(2);
   await page.getByRole('tab', { name: '本课笔记' }).click();
   await page.getByLabel('本课学习笔记').fill('离线学习');
   await page.reload();

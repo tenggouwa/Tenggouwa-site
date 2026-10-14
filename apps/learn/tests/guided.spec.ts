@@ -20,6 +20,9 @@ test('every guide reveals examples, explains wrong answers and preserves referen
     await page.goto(`/#/lesson/${lesson.id}`);
     await expect(page.locator('.guided-lesson')).toBeVisible();
     await expect(page.locator('.prose')).not.toBeVisible();
+    await expect(page.locator('.teaching-reader')).toBeVisible();
+    await expect(page.locator('.concept-visual')).toHaveCount(0);
+    await page.locator('.guided-steps button').nth(1).click();
     await expect(page.locator('.concept-visual')).toBeVisible();
     expect(
       await page
@@ -74,6 +77,7 @@ test('guided controls work on mobile and keyboard without overflow', async ({
 }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/#/lesson/gpu-memory');
+  await page.locator('.guided-steps button').nth(1).click();
   const control = page.getByRole('button', {
     name: '打开边界 mask',
     exact: true,
@@ -107,6 +111,7 @@ test('visual experiments update quantities and boundary cases', async ({
   const range = page.locator('.concept-visual input[type="range"]');
   for (const id of ['kv-cache', 'paged-kv']) {
     await page.goto(`/#/lesson/${id}`);
+    await page.locator('.guided-steps button').nth(1).click();
     await range.fill('16');
     await expect(page.locator('.visual-blocks > div')).toHaveCount(1);
     await range.fill('17');
@@ -117,12 +122,14 @@ test('visual experiments update quantities and boundary cases', async ({
     );
   }
   await page.goto('/#/lesson/tensor');
+  await page.locator('.guided-steps button').nth(1).click();
   await range.fill('8');
   await expect(page.locator('.visual-result')).toContainText('96 FLOPs');
   await expect(
     page.locator('.visual-equation > div').nth(1).locator('.filled'),
   ).toHaveCount(6);
   await page.goto('/#/lesson/softmax');
+  await page.locator('.guided-steps button').nth(1).click();
   await expect(page.locator('.visual-result')).toContainText('0.213');
   await page
     .getByRole('button', { name: '把补齐值从 0 改为 −∞', exact: true })
@@ -130,16 +137,19 @@ test('visual experiments update quantities and boundary cases', async ({
   await expect(page.locator('.visual-result')).toContainText('1.000');
   await expect(page.locator('.visual-bar-row').nth(2)).toContainText('0 %');
   await page.goto('/#/lesson/attention');
+  await page.locator('.guided-steps button').nth(1).click();
   await range.fill('0');
   await page.getByRole('button', { name: '屏蔽未来位置', exact: true }).click();
   await expect(page.locator('.visual-bar-row').nth(0)).toContainText('50 %');
   await expect(page.locator('.visual-bar-row').nth(2)).toContainText('0 %');
   await page.goto('/#/lesson/parallel');
+  await page.locator('.guided-steps button').nth(1).click();
   await expect(page.locator('.visual-merge')).toContainText('对应元素相加');
   await page.locator('.concept-visual button').click();
   await expect(page.locator('.visual-merge')).toContainText('拼接输出列');
   await expect(page.locator('.visual-result')).toContainText('[5,11]');
   await page.goto('/#/lesson/patch');
+  await page.locator('.guided-steps button').nth(1).click();
   await range.fill('0');
   await expect(page.locator('.visual-result')).toContainText(
     '8 + 504 + 0 = 512',
@@ -156,6 +166,7 @@ test('all concept visuals fit narrow screens at both control extremes', async ({
   await page.setViewportSize({ width: 375, height: 812 });
   for (const lesson of lessons) {
     await page.goto(`/#/lesson/${lesson.id}`);
+    await page.locator('.guided-steps button').nth(1).click();
     const input = page.locator('.concept-visual input');
     if (await input.count()) {
       for (const edge of ['min', 'max']) {
