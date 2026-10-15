@@ -164,7 +164,7 @@ export default function MailPortal() {
           <form onSubmit={login} className="space-y-5">
             <p className="text-sm text-terminal-gray/70">输入访问密码，查看共享收件箱。</p>
             <label className="block text-sm">访问密码
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required maxLength={72} className="mt-2 w-full rounded border border-terminal-line bg-terminal-bg px-3 py-3 outline-none focus:border-terminal-green" />
+              <input type="password" disabled={busy} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required maxLength={72} className="mt-2 w-full rounded border border-terminal-line bg-terminal-bg px-3 py-3 outline-none focus:border-terminal-green" />
             </label>
             <button type="submit" disabled={busy || !password} className={`${button} w-full text-terminal-green`}>登录</button>
           </form>
