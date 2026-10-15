@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes, useLocation } from 'react-router-dom';
 import { ConfigProvider } from '@arco-design/web-react';
 import Layout from './components/Layout';
 import Home from './pages/Home';
@@ -24,6 +24,7 @@ const PerlerPattern = lazy(() => import('./pages/lab/PerlerPattern'));
 const Projects = lazy(() => import('./pages/Projects'));
 const About = lazy(() => import('./pages/About'));
 const Pi = lazy(() => import('./pages/Pi'));
+const MailPortal = lazy(() => import('./pages/MailPortal'));
 const Console = lazy(() => import('./pages/Console'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Search = lazy(() => import('./pages/Search'));
@@ -50,6 +51,7 @@ const KONAMI = [
 ];
 
 export default function App() {
+  const isMail = /^\/mail\/?$/.test(useLocation().pathname);
   const [booted, setBooted] = useState(
     () => typeof window !== 'undefined' && window.sessionStorage.getItem('booted') === '1',
   );
@@ -95,7 +97,7 @@ export default function App() {
 
   return (
     <ConfigProvider>
-      {!booted && <BootScreen onDone={finishBoot} />}
+      {!booted && !isMail && <BootScreen onDone={finishBoot} />}
       {matrix && (
         <div className="fixed inset-0 z-[200] bg-black">
           <Suspense fallback={null}>
@@ -113,6 +115,7 @@ export default function App() {
       <Suspense fallback={<BootFallback />}>
         <Routes>
           {/* 全屏路由（不套 Layout，没有 header/footer）*/}
+          <Route path="mail" element={<MailPortal />} />
           <Route path="console" element={<Console />} />
 
           <Route element={<Layout />}>

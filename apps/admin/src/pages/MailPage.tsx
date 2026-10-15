@@ -84,6 +84,7 @@ export default function MailPage() {
     try {
       const data = (await http.get(
         `/api/admin/mail/${encodeURIComponent(box)}/latest-code?wait=25&since=${encodeURIComponent(since)}`,
+        { timeout: 35_000 },
       )) as unknown as MailLatestCode;
       if (data.code) {
         setLatest(data);

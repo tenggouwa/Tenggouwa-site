@@ -60,7 +60,11 @@ class MailRepository:
         """取某收件箱最近一封含验证码的邮件。"""
         stmt = (
             select(MailMessageRow)
-            .where(MailMessageRow.mailbox == mailbox, MailMessageRow.code.isnot(None))
+            .where(
+                MailMessageRow.mailbox == mailbox,
+                MailMessageRow.code.isnot(None),
+                MailMessageRow.expires_at > func.clock_timestamp(),
+            )
             .order_by(MailMessageRow.received_at.desc())
             .limit(1)
         )
@@ -73,7 +77,7 @@ class MailRepository:
         """列某收件箱的邮件，最近在前。"""
         stmt = (
             select(MailMessageRow)
-            .where(MailMessageRow.mailbox == mailbox)
+            .where(MailMessageRow.mailbox == mailbox, MailMessageRow.expires_at > func.clock_timestamp())
             .order_by(MailMessageRow.received_at.desc())
             .limit(limit)
             .offset(offset)
@@ -90,6 +94,7 @@ class MailRepository:
                 func.count(MailMessageRow.code).label("with_code"),
                 func.max(MailMessageRow.received_at).label("latest_at"),
             )
+            .where(MailMessageRow.expires_at > func.clock_timestamp())
             .group_by(MailMessageRow.mailbox)
             .order_by(func.max(MailMessageRow.received_at).desc())
         )
