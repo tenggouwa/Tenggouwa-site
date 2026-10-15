@@ -42,6 +42,8 @@ class RouterLoggingMiddleware(BaseHTTPMiddleware):
                 RouteTraceContextFilter.set_context_value(key, request.headers.get(value, "-"))
 
             response = await call_next(request)
+            if request.url.path.startswith("/api/mail"):
+                response.headers["Cache-Control"] = "no-store"
             return response
         finally:
             try:
@@ -74,6 +76,8 @@ class RouterLoggingMiddleware(BaseHTTPMiddleware):
 
     async def _get_request_params(self, request: Request) -> dict:
         """获取并截断请求参数，限制单值长度避免日志膨胀。"""
+        if request.url.path.startswith("/api/mail"):
+            return {}
         params: dict = {}
 
         for key, value in request.query_params.items():

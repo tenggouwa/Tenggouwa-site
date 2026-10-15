@@ -62,6 +62,18 @@ VITE_BASE="$WEB_BASE" \
   pnpm --filter @tenggouwa/web build
 cp -R apps/web/dist/. "$DIST/"
 
+# 独立接码入口复用 web bundle，直接访问 /mail/ 返回 200，静态壳禁止索引。
+mkdir -p "$DIST/mail"
+python3 - "$DIST" <<'PYMAIL'
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+html = (root / 'index.html').read_text()
+html = html.replace('<head>', '<head><meta name="robots" content="noindex,nofollow">', 1)
+html = html.replace('<title>tenggouwa · 极客小站</title>', '<title>接码收件箱</title>')
+(root / 'mail/index.html').write_text(html)
+PYMAIL
+
 echo "==> 构建 apps/admin (base=$ADMIN_BASE, api=${VITE_API_BASE:-<empty>})"
 VITE_BASE="$ADMIN_BASE" VITE_API_BASE="$VITE_API_BASE" pnpm --filter @tenggouwa/admin build
 mkdir -p "$DIST/admin"

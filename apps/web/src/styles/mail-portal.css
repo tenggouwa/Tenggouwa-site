@@ -1,0 +1,20 @@
+@layer components {
+  .mail-portal :where(section, div, input, button, thead, tr) {
+    border-style: solid;
+    border-width: 0;
+  }
+
+  .mail-portal :where(button, input) {
+    font: inherit;
+    color: inherit;
+  }
+
+  :where(.mail-portal) button {
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  .mail-portal table {
+    border-collapse: collapse;
+  }
+}

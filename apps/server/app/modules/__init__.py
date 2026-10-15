@@ -18,6 +18,7 @@ from .inspirations.router import admin_router as inspiration_admin_router
 from .inspirations.router import public_router as inspiration_public_router
 from .kb.router import admin_router as kb_admin_router
 from .kb.router import public_router as kb_public_router
+from .mail.portal import router as mail_portal_router
 from .mail.router import admin_router as mail_admin_router
 from .mail.router import ingest_router as mail_ingest_router
 from .ops.router import admin_router as ops_admin_router
@@ -59,6 +60,7 @@ router.include_router(terminal_agent_router)
 router.include_router(pi_agent_router)
 # CF Email Worker 收信回调（HTTPS POST，HMAC 签名）
 router.include_router(mail_ingest_router)
+router.include_router(mail_portal_router)
 
 # 管理接口（admin 后台用，需 JWT）
 router.include_router(auth_router)
