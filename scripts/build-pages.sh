@@ -157,6 +157,8 @@ touch "$DIST/.nojekyll"
 # 仅 canonical 根域产物写 Pages 的 rewrite 规则；子应用必须优先回到自己的入口。
 if [ "$TARGET" = "root" ]; then
   cat > "$DIST/_redirects" <<EOF
+/mail /mail/ 301
+/mail/* /mail/index.html 200
 /admin/* /admin/index.html 200
 /casino/* /casino/index.html 200
 /agent/* /agent/index.html 200
