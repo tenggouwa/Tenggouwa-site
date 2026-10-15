@@ -18,13 +18,15 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it('password login reveals shared inboxes and logout clears mail', async () => {
   fetchMock.mockResolvedValueOnce(denied()).mockResolvedValueOnce(ok(true)).mockResolvedValueOnce(ok(inboxes)).mockResolvedValueOnce(ok(messages)).mockResolvedValueOnce(ok(true));
   render(<MailPortal />);
-  await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+  expect((screen.getByLabelText('访问密码') as HTMLInputElement).disabled).toBe(true);
+  await waitFor(() => expect((screen.getByLabelText('访问密码') as HTMLInputElement).disabled).toBe(false));
   fireEvent.change(screen.getByLabelText('访问密码'), { target: { value: 'test-secret' } });
   fireEvent.click(screen.getByRole('button', { name: '登录' }));
   fireEvent.click(await screen.findByRole('button', { name: /demo@tenggouwa.com/ }));
   await screen.findByText('Example code');
   expect(fetchMock.mock.calls[1][1].body).toBe(JSON.stringify({ password: 'test-secret' }));
   expect(fetchMock.mock.calls[1][1].headers['X-Mail-Portal']).toBe('1');
+  expect(fetchMock.mock.calls[1][1].headers['Content-Type']).toBe('application/json');
   fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
   await screen.findByLabelText('访问密码');
   expect(screen.queryByText('Example code')).toBeNull();
