@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 // 从 markdown 渲染后的 DOM 抓 h2/h3 生成两套 TOC：
-// - 桌面 xl+：右侧 sticky 一栏
+// - 宽屏 2xl+：右侧独立一栏，给居中的正文留足空间
 // - 移动 / 平板：右下浮动按钮 + 终端面板抽屉
 
 interface Heading {
@@ -85,7 +85,7 @@ export default function TableOfContents({ containerSelector }: Props) {
     <>
       {/* === 桌面：右侧 sticky === */}
       <aside
-        className="hidden xl:block fixed top-24 right-6 w-56 max-h-[calc(100vh-8rem)] overflow-y-auto font-mono text-xs"
+        className="hidden 2xl:block fixed top-24 right-6 w-56 max-h-[calc(100vh-8rem)] overflow-y-auto font-mono text-xs"
         aria-label="目录"
       >
         <div className="text-terminal-green mb-2 flex items-center gap-1.5">
@@ -116,7 +116,7 @@ export default function TableOfContents({ containerSelector }: Props) {
       </aside>
 
       {/* === 移动 / 平板：右下浮动按钮 + 抽屉 === */}
-      <div className="xl:hidden">
+      <div className="2xl:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
